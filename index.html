@@ -42,14 +42,14 @@
 
 <header>
   <h1>📊 추세 강도 모니터</h1>
-  <p>20일 롤링 Volume Profile VWAP · 1년 백분위 정규화 (-100 ~ +100) · <span id="updated"></span></p>
+  <p>VWAP(Volume Weighted Average Price) 기간 구조 · 200일 = 100 기준 · <span id="updated"></span></p>
 </header>
 
 <div class="asset-grid" id="asset-grid"></div>
 
 <div class="section">
-  <h2>추세 강도 추이</h2>
-  <div class="chart-wrap"><canvas id="chart-score"></canvas></div>
+  <h2>VWAP 기간 구조 (200일 → 10일)</h2>
+  <div class="chart-wrap"><canvas id="chart-structure"></canvas></div>
 </div>
 
 <div class="section">
@@ -75,17 +75,20 @@ function scoreColor(s){
 function gaugeW(s){return s==null?50:Math.round((s+100)/2)}
 function round2(v){return Math.round(v*100)/100}
 
-let scoreChart, priceChart;
+// x축 레이블: 200d 왼쪽, 10d 오른쪽
+const STRUCT_LABELS = ['200d','190d','180d','170d','160d','150d','140d','130d','120d','110d',
+                       '100d','90d','80d','70d','60d','50d','40d','30d','20d','10d'];
+
+let structChart, priceChart;
 let activeSet = new Set(['TLT']);
 
 fetch('trend_data.json').then(r=>r.json()).then(data=>{
   const names = ['TLT','GLD','IBIT','SPY','QQQ','삼성전자','SK하이닉스','리노공업'].filter(n=>data[n]);
-  const labels = data[names[0]].records.map(r=>r.date);
+  const priceLabels = data[names[0]].records.map(r=>r.date);
 
   document.getElementById('updated').textContent =
     (data[names[0]].records.slice(-1)[0]?.date||'')+' 기준';
 
-  // 각 자산 현재 수익률 계산 (첫 price 기준)
   function calcReturn(name){
     const recs = data[name].records;
     const base = recs.find(r=>r.price)?.price||1;
@@ -93,20 +96,23 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     return round2((last/base-1)*100);
   }
 
+  function getScore(name){
+    const recs = data[name].records;
+    return recs.slice(-1)[0]?.score ?? null;
+  }
+
   const grid = document.getElementById('asset-grid');
 
   function renderCards(){
     grid.innerHTML='';
     names.forEach(name=>{
-      const asset  = data[name];
-      const rec    = asset.records.slice(-1)[0]||{};
-      const score  = rec.score;
-      const ret    = calcReturn(name);
-      const color  = asset.color;
-      const isActive = activeSet.has(name);
-      const gw     = gaugeW(score);
-      const retColor = ret >= 0 ? '#34d399' : '#f87171';
-      const retStr = (ret >= 0 ? '+' : '') + ret + '%';
+      const asset   = data[name];
+      const score   = getScore(name);
+      const ret     = calcReturn(name);
+      const color   = asset.color;
+      const isActive= activeSet.has(name);
+      const gw      = gaugeW(score);
+      const retColor= ret>=0?'#34d399':'#f87171';
 
       const btn = document.createElement('div');
       btn.className='asset-btn'+(isActive?' active':'');
@@ -115,7 +121,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
         <div class="indicator"></div>
         <div class="name">${name}</div>
         <div class="score" style="color:${isActive?color:scoreColor(score)}">${score!=null?(score>0?'+':'')+score:'–'}</div>
-        <div class="ret" style="color:${retColor}">${retStr}</div>
+        <div class="ret" style="color:${retColor}">${(ret>=0?'+':'')+ret}%</div>
         <div class="gauge"><div class="gauge-fill" style="width:${gw}%;background:${color}"></div></div>
       `;
       btn.addEventListener('click',()=>{
@@ -128,143 +134,164 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     });
   }
 
-  function makeDatasets(type){
+  // VWAP 구조 데이터셋 (200d→10d, 인덱스 0~19)
+  function makeStructDatasets(){
     return names.map(name=>{
-      const asset  = data[name];
-      const recs   = asset.records;
       const isActive = activeSet.has(name);
-      let vals;
-      if(type==='score'){
-        vals = recs.map(r=>r.score);
-      } else {
-        const base = recs.find(r=>r.price)?.price||1;
-        vals = recs.map(r=>r.price?round2(r.price/base*100):null);
-      }
+      const struct   = data[name].vwap_structure || [];
+      // vwap_structure: [10d, 20d, ..., 200d] → 역순으로 [200d, ..., 10d]
+      const reversed = [...struct].reverse();
       return {
-        label: name, data: vals,
-        borderColor: asset.color,
+        label: name,
+        data:  reversed.map(s=>s.norm),
+        borderColor: data[name].color,
         borderWidth: isActive?2:0,
-        pointRadius: 0, tension: 0.3, fill: false,
+        pointRadius: isActive?3:0,
+        pointBackgroundColor: data[name].color,
+        tension: 0.3,
+        fill: false,
         hidden: !isActive,
       };
     });
   }
 
-  const lastIdx = labels.length - 1;
+  // 가격 추이 데이터셋
+  function makePriceDatasets(){
+    return names.map(name=>{
+      const recs     = data[name].records;
+      const isActive = activeSet.has(name);
+      const base     = recs.find(r=>r.price)?.price||1;
+      return {
+        label: name,
+        data:  recs.map(r=>r.price?round2(r.price/base*100):null),
+        borderColor: data[name].color,
+        borderWidth: isActive?2:0,
+        pointRadius: 0,
+        tension: 0.3,
+        fill: false,
+        hidden: !isActive,
+      };
+    });
+  }
 
-  // 가격 차트용 라인 끝 annotation 생성
-  function makePriceAnnotations(){
+  // 구조 차트 오른쪽 끝(10d) annotation
+  function makeStructAnnotations(){
     const annotations = {
       base:{type:'line',yMin:100,yMax:100,borderColor:'#475569',borderWidth:1.5},
     };
-    // 활성 자산 정렬: y값 기준 내림차순 (라벨 겹침 방지)
     const active = names.filter(n=>activeSet.has(n)).map(name=>{
-      const recs = data[name].records;
-      const base = recs.find(r=>r.price)?.price||1;
-      const last = recs.slice(-1)[0];
-      const val  = last?.price ? round2(last.price/base*100) : null;
-      return {name, val};
+      const struct  = data[name].vwap_structure||[];
+      const val10d  = struct[0]?.norm; // 10d
+      return {name, val:val10d};
     }).filter(d=>d.val!=null).sort((a,b)=>b.val-a.val);
 
-    active.forEach(({name, val})=>{
-      const ret = round2(val-100);
-      annotations['lbl_'+name] = {
-        type:'label',
-        xValue: lastIdx,
-        yValue: val,
-        content: name+' '+(ret>=0?'+':'')+ret+'%',
+    active.forEach(({name,val})=>{
+      const diff = round2(val-100);
+      annotations['lbl_'+name]={
+        type:'label', xValue:19, yValue:val,
+        content: name+' '+(diff>=0?'+':'')+diff+'%',
         color: data[name].color,
-        font:{size:10, weight:'bold'},
+        font:{size:10,weight:'bold'},
         backgroundColor:'rgba(15,17,23,0.85)',
         padding:{x:4,y:2},
-        position:{x:'start', y:'center'},
-        xAdjust: 4,
+        position:{x:'start',y:'center'},
+        xAdjust:4,
       };
     });
     return annotations;
   }
 
-  // 추세 강도 차트용 라인 끝 annotation
-  function makeScoreAnnotations(){
+  // 가격 차트 annotation
+  function makePriceAnnotations(){
     const annotations = {
-      zero:{type:'line',yMin:0,yMax:0,borderColor:'#475569',borderWidth:1.5},
+      base:{type:'line',yMin:100,yMax:100,borderColor:'#475569',borderWidth:1.5},
     };
+    const lastIdx = priceLabels.length-1;
     const active = names.filter(n=>activeSet.has(n)).map(name=>{
       const recs = data[name].records;
-      const val  = recs.slice(-1)[0]?.score;
+      const base = recs.find(r=>r.price)?.price||1;
+      const last = recs.slice(-1)[0];
+      const val  = last?.price?round2(last.price/base*100):null;
       return {name, val};
     }).filter(d=>d.val!=null).sort((a,b)=>b.val-a.val);
 
-    active.forEach(({name, val})=>{
-      annotations['lbl_'+name] = {
-        type:'label',
-        xValue: lastIdx,
-        yValue: val,
-        content: name+' '+(val>=0?'+':'')+val,
+    active.forEach(({name,val})=>{
+      const ret = round2(val-100);
+      annotations['lbl_'+name]={
+        type:'label', xValue:lastIdx, yValue:val,
+        content: name+' '+(ret>=0?'+':'')+ret+'%',
         color: data[name].color,
-        font:{size:10, weight:'bold'},
+        font:{size:10,weight:'bold'},
         backgroundColor:'rgba(15,17,23,0.85)',
         padding:{x:4,y:2},
-        position:{x:'start', y:'center'},
-        xAdjust: 4,
+        position:{x:'start',y:'center'},
+        xAdjust:4,
       };
     });
     return annotations;
   }
 
   function updateCharts(){
-    const scoreDS = makeDatasets('score');
-    const priceDS = makeDatasets('price');
-    scoreChart.data.datasets.forEach((d,i)=>{ d.borderWidth=scoreDS[i].borderWidth; d.hidden=scoreDS[i].hidden; });
-    priceChart.data.datasets.forEach((d,i)=>{ d.borderWidth=priceDS[i].borderWidth; d.hidden=priceDS[i].hidden; });
-    scoreChart.options.plugins.annotation.annotations = makeScoreAnnotations();
-    priceChart.options.plugins.annotation.annotations = makePriceAnnotations();
-    scoreChart.update('none');
+    structChart.data.datasets.forEach((d,i)=>{
+      const ds = makeStructDatasets();
+      d.borderWidth=ds[i].borderWidth; d.hidden=ds[i].hidden;
+      d.pointRadius=ds[i].pointRadius;
+    });
+    priceChart.data.datasets.forEach((d,i)=>{
+      const ds = makePriceDatasets();
+      d.borderWidth=ds[i].borderWidth; d.hidden=ds[i].hidden;
+    });
+    structChart.options.plugins.annotation.annotations = makeStructAnnotations();
+    priceChart.options.plugins.annotation.annotations  = makePriceAnnotations();
+    structChart.update('none');
     priceChart.update('none');
   }
 
   renderCards();
 
-  // ── 추세 강도 차트 ──
-  scoreChart = new Chart(document.getElementById('chart-score'),{
+  // ── VWAP 기간 구조 차트 ──
+  structChart = new Chart(document.getElementById('chart-structure'),{
     type:'line',
-    data:{labels, datasets: makeDatasets('score')},
+    data:{labels:STRUCT_LABELS, datasets:makeStructDatasets()},
     options:{
       responsive:true, maintainAspectRatio:true,
       animation:{duration:300},
       interaction:{mode:'index',intersect:false},
-      layout:{padding:{right:70}},
+      layout:{padding:{right:80}},
       plugins:{
         legend:{display:false},
-        annotation:{annotations: makeScoreAnnotations()}
+        annotation:{annotations:makeStructAnnotations()},
+        tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(2)}`}}
       },
       scales:{
-        x:{ticks:{color:TICK,maxTicksLimit:10,font:{size:10}},grid:{color:GRID}},
-        y:{min:-100,max:100,ticks:{color:TICK,font:{size:10},callback:v=>v>0?'+'+v:v},grid:{color:GRID}},
+        x:{ticks:{color:TICK,font:{size:10}},grid:{color:GRID}},
+        y:{ticks:{color:TICK,font:{size:10},callback:v=>v.toFixed(0)},grid:{color:GRID}},
       }
     }
   });
 
-  // ── 가격 차트 ──
+  // ── 가격 추이 차트 ──
   priceChart = new Chart(document.getElementById('chart-price'),{
     type:'line',
-    data:{labels, datasets: makeDatasets('price')},
+    data:{labels:priceLabels, datasets:makePriceDatasets()},
     options:{
       responsive:true, maintainAspectRatio:true,
       animation:{duration:300},
       interaction:{mode:'index',intersect:false},
-      layout:{padding:{right:70}},
+      layout:{padding:{right:80}},
       plugins:{
         legend:{display:false},
-        annotation:{annotations: makePriceAnnotations()}
+        annotation:{annotations:makePriceAnnotations()}
       },
       scales:{
         x:{ticks:{color:TICK,maxTicksLimit:10,font:{size:10}},grid:{color:GRID}},
-        y:{min:100,max:200,ticks:{color:TICK,font:{size:10},callback:v=>v.toFixed(0)},grid:{color:GRID},
+        y:{min:100,max:200,
+           ticks:{color:TICK,font:{size:10},callback:v=>v.toFixed(0)},
+           grid:{color:GRID},
            afterDataLimits(scale){
              if(activeSet.size===0){scale.min=100;scale.max=200;return;}
              const pad=10;
-             scale.min=Math.max(0, Math.floor(scale.min-pad));
+             scale.min=Math.max(0,Math.floor(scale.min-pad));
              scale.max=Math.ceil(scale.max+pad);
            }
         },
