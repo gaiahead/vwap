@@ -173,7 +173,12 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
             count:10,
             callback:v=>v.toFixed(2)
           },
-          grid:{color:GRID}
+          grid:{color:GRID},
+          afterDataLimits(scale){
+            if(activeSet.size===0){
+              scale.min=100; scale.max=150;
+            }
+          }
         },
       }
     }
