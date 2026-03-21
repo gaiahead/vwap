@@ -1,208 +1,209 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>추세 강도 모니터</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Apple SD Gothic Neo', 'Pretendard', sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Apple SD Gothic Neo','Pretendard',sans-serif;background:#0f1117;color:#e2e8f0;min-height:100vh}
+    header{padding:24px 28px 14px;border-bottom:1px solid #1e2535}
+    header h1{font-size:1.2rem;font-weight:700;color:#f8fafc}
+    header p{font-size:0.74rem;color:#475569;margin-top:4px}
 
-    header { padding: 28px 32px 16px; border-bottom: 1px solid #1e2535; }
-    header h1 { font-size: 1.3rem; font-weight: 700; color: #f8fafc; }
-    header p  { font-size: 0.78rem; color: #475569; margin-top: 5px; }
-
-    /* 강도 카드 */
-    .score-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; padding: 24px 32px; }
-    .score-card { background: #161b27; border: 1px solid #1e2535; border-radius: 14px; padding: 18px 20px; position: relative; overflow: hidden; }
-    .score-card .bar-bg { position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: #1e2535; }
-    .score-card .bar-fg { position: absolute; bottom: 0; height: 3px; transition: width .4s; }
-    .score-card .ticker { font-size: 1rem; font-weight: 700; color: #cbd5e1; letter-spacing: .02em; }
-    .score-card .score  { font-size: 2rem; font-weight: 800; line-height: 1; }
-    .score-card .sub    { font-size: 0.72rem; color: #475569; margin-top: 5px; }
-    .score-card .gauge  { margin-top: 12px; height: 6px; background: #1e2535; border-radius: 3px; overflow: hidden; }
-    .score-card .gauge-fill { height: 100%; border-radius: 3px; transition: width .4s; }
+    /* 자산 선택 카드 */
+    .asset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;padding:20px 28px}
+    .asset-btn{
+      background:#161b27;border:1.5px solid #1e2535;border-radius:12px;
+      padding:14px 16px;cursor:pointer;transition:all .2s;user-select:none;
+      text-align:left;position:relative;overflow:hidden
+    }
+    .asset-btn.active{border-color:var(--c);background:#1a2030}
+    .asset-btn:hover{background:#1a2030}
+    .asset-btn .name{font-size:0.95rem;font-weight:700;color:#94a3b8;transition:color .2s}
+    .asset-btn.active .name{color:var(--c)}
+    .asset-btn .score{font-size:1.6rem;font-weight:800;line-height:1.1;margin-top:6px}
+    .asset-btn .sub{font-size:0.68rem;color:#475569;margin-top:4px}
+    .asset-btn .gauge{margin-top:10px;height:4px;background:#1e2535;border-radius:2px;overflow:hidden}
+    .asset-btn .gauge-fill{height:100%;border-radius:2px;transition:width .3s}
+    .asset-btn .indicator{position:absolute;top:0;left:0;right:0;height:2px;background:var(--c);opacity:0;transition:opacity .2s}
+    .asset-btn.active .indicator{opacity:1}
 
     /* 차트 섹션 */
-    .section { padding: 0 32px 32px; }
-    .section h2 { font-size: 0.75rem; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 14px; }
-    .chart-wrap { background: #161b27; border: 1px solid #1e2535; border-radius: 14px; padding: 20px; margin-bottom: 20px; }
-    .chart-wrap canvas { max-height: 340px; }
+    .section{padding:0 28px 24px}
+    .section h2{font-size:0.72rem;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px}
+    .chart-wrap{background:#161b27;border:1px solid #1e2535;border-radius:14px;padding:18px;margin-bottom:18px}
+    .chart-wrap canvas{max-height:300px}
 
-    /* 색상 유틸 */
-    .strong-up   { color: #34d399; }
-    .weak-up     { color: #86efac; }
-    .neutral     { color: #94a3b8; }
-    .weak-down   { color: #fca5a5; }
-    .strong-down { color: #f87171; }
-
-    footer { padding: 18px 32px; border-top: 1px solid #1e2535; font-size: 0.7rem; color: #374151; }
-    #updated { color: #475569; }
+    footer{padding:16px 28px;border-top:1px solid #1e2535;font-size:0.68rem;color:#374151}
   </style>
 </head>
 <body>
 
 <header>
   <h1>📊 추세 강도 모니터</h1>
-  <p>2주 롤링 Volume Profile VWAP 변화율 기반 · 1년 백분위 정규화 (-100 ~ +100) · <span id="updated"></span></p>
+  <p>2주 롤링 Volume Profile VWAP 변화율 · 1년 백분위 정규화 (-100 ~ +100) · <span id="updated"></span></p>
 </header>
 
-<div class="score-grid" id="score-grid"></div>
+<div class="asset-grid" id="asset-grid"></div>
 
 <div class="section">
-  <h2>추세 강도 추이 (2025년~)</h2>
+  <h2>추세 강도 추이</h2>
   <div class="chart-wrap"><canvas id="chart-score"></canvas></div>
 </div>
 
 <div class="section">
-  <h2>자산 가격 추이</h2>
+  <h2>가격 추이 (첫 주 = 100 정규화)</h2>
   <div class="chart-wrap"><canvas id="chart-price"></canvas></div>
 </div>
 
 <footer>
-  데이터: Yahoo Finance · GLD / TLT / BTC-USD / SPY / QQQ · 주 1회 업데이트 · 과거 성과는 미래를 보장하지 않습니다.
+  데이터: Yahoo Finance · 주 1회 업데이트 · 과거 성과는 미래를 보장하지 않습니다.
 </footer>
 
 <script>
-function scoreColor(s) {
-  if (s === null || s === undefined) return '#475569';
-  if (s >=  70) return '#34d399';
-  if (s >=  30) return '#86efac';
-  if (s >  -30) return '#94a3b8';
-  if (s >  -70) return '#fca5a5';
-  return '#f87171';
-}
-function scoreClass(s) {
-  if (s === null || s === undefined) return 'neutral';
-  if (s >=  70) return 'strong-up';
-  if (s >=  30) return 'weak-up';
-  if (s >  -30) return 'neutral';
-  if (s >  -70) return 'weak-down';
-  return 'strong-down';
-}
-function scoreLabel(s) {
-  if (s === null || s === undefined) return '–';
-  if (s >=  70) return '강한 상승';
-  if (s >=  30) return '약한 상승';
-  if (s >  -30) return '횡보';
-  if (s >  -70) return '약한 하락';
-  return '강한 하락';
-}
+const GRID = '#1e2535', TICK = '#475569';
 
-// 게이지: -100~+100 → 0~100% 너비 (중앙=50%)
-function gaugeWidth(s) {
-  if (s === null) return 50;
-  return Math.round((s + 100) / 2);
+function scoreColor(s){
+  if(s==null)return'#475569';
+  if(s>=70)return'#34d399';
+  if(s>=30)return'#86efac';
+  if(s>-30)return'#94a3b8';
+  if(s>-70)return'#fca5a5';
+  return'#f87171';
 }
+function scoreLabel(s){
+  if(s==null)return'–';
+  if(s>=70)return'강한 상승';
+  if(s>=30)return'약한 상승';
+  if(s>-30)return'횡보';
+  if(s>-70)return'약한 하락';
+  return'강한 하락';
+}
+function gaugeW(s){return s==null?50:Math.round((s+100)/2)}
+function round2(v){return Math.round(v*100)/100}
 
-fetch('trend_data.json').then(r => r.json()).then(data => {
+// 차트 공통 설정
+const baseOpts = (extraY={})=>({
+  responsive:true, maintainAspectRatio:true,
+  animation:{duration:300},
+  interaction:{mode:'index',intersect:false},
+  plugins:{legend:{display:false}},
+  scales:{
+    x:{ticks:{color:TICK,maxTicksLimit:10,font:{size:10}},grid:{color:GRID}},
+    y:{ticks:{color:TICK,font:{size:10},...extraY.ticks},grid:{color:GRID},...extraY},
+  }
+});
+
+let scoreChart, priceChart;
+let activeSet = new Set(['TLT']); // 기본값: TLT만 활성
+
+fetch('trend_data.json').then(r=>r.json()).then(data=>{
   const names = Object.keys(data);
+  const labels = data[names[0]].records.map(r=>r.date);
 
   // 최신 날짜
-  const latest = data[names[0]].records.slice(-1)[0];
-  document.getElementById('updated').textContent = latest ? latest.date + ' 기준' : '';
+  document.getElementById('updated').textContent =
+    (data[names[0]].records.slice(-1)[0]?.date||'')+' 기준';
 
-  // ── 강도 카드 ──
-  const grid = document.getElementById('score-grid');
-  names.forEach(name => {
-    const asset = data[name];
-    const rec   = asset.records.slice(-1)[0] || {};
-    const score = rec.score;
-    const chg   = rec.chg;
-    const color = asset.color;
-    const gw    = gaugeWidth(score);
+  // ── 자산 카드 렌더 ──
+  const grid = document.getElementById('asset-grid');
 
-    const card = document.createElement('div');
-    card.className = 'score-card';
-    card.innerHTML = `
-      <div class="ticker">${name}</div>
-      <div class="score ${scoreClass(score)}" style="color:${scoreColor(score)}">${score !== null ? (score > 0 ? '+' : '') + score : '–'}</div>
-      <div class="sub">${scoreLabel(score)} · 주간변화 ${chg !== null ? (chg > 0 ? '+' : '') + chg + '%' : '–'}</div>
-      <div class="gauge"><div class="gauge-fill" style="width:${gw}%;background:${scoreColor(score)}"></div></div>
-      <div class="bar-bg"></div>
-      <div class="bar-fg" style="background:${color};left:${Math.min(gw,50)}%;width:${Math.abs(gw-50)}%"></div>
-    `;
-    grid.appendChild(card);
-  });
+  function renderCards(){
+    grid.innerHTML='';
+    names.forEach(name=>{
+      const asset = data[name];
+      const rec   = asset.records.slice(-1)[0]||{};
+      const score = rec.score;
+      const chg   = rec.chg;
+      const color = asset.color;
+      const isActive = activeSet.has(name);
+      const gw = gaugeW(score);
 
-  const gridColor = '#1e2535';
-  const tickColor = '#475569';
-  const baseScales = {
-    x: { ticks: { color: tickColor, maxTicksLimit: 12, font:{size:10} }, grid: { color: gridColor } },
-    y: { ticks: { color: tickColor, font:{size:10} }, grid: { color: gridColor } },
-  };
+      const btn = document.createElement('div');
+      btn.className='asset-btn'+(isActive?' active':'');
+      btn.style.setProperty('--c', color);
+      btn.innerHTML=`
+        <div class="indicator"></div>
+        <div class="name">${name}</div>
+        <div class="score" style="color:${isActive?color:scoreColor(score)}">${score!=null?(score>0?'+':'')+score:'–'}</div>
+        <div class="sub">${scoreLabel(score)} · ${chg!=null?(chg>0?'+':'')+chg+'%':'–'}</div>
+        <div class="gauge"><div class="gauge-fill" style="width:${gw}%;background:${color}"></div></div>
+      `;
+      btn.addEventListener('click',()=>{
+        if(activeSet.has(name)) activeSet.delete(name);
+        else activeSet.add(name);
+        renderCards();
+        updateCharts();
+      });
+      grid.appendChild(btn);
+    });
+  }
 
-  // 공통 라벨 (첫 번째 자산 기준)
-  const labels = data[names[0]].records.map(r => r.date);
+  // ── 차트 데이터셋 생성 ──
+  function makeDatasets(type){
+    return names.map(name=>{
+      const asset = data[name];
+      const recs  = asset.records;
+      const isActive = activeSet.has(name);
 
-  // ── 추세 강도 차트 ──
-  const scoreDatasets = names.map(name => ({
-    label: name,
-    data:  data[name].records.map(r => r.score),
-    borderColor: data[name].color,
-    borderWidth: 2,
-    pointRadius: 0,
-    tension: 0.3,
-    fill: false,
-  }));
+      let vals;
+      if(type==='score'){
+        vals = recs.map(r=>r.score);
+      } else {
+        const base = recs.find(r=>r.price)?.price||1;
+        vals = recs.map(r=>r.price?round2(r.price/base*100):null);
+      }
+      return {
+        label: name,
+        data:  vals,
+        borderColor: asset.color,
+        borderWidth: isActive?2:0,
+        pointRadius: 0,
+        tension: 0.3,
+        fill: false,
+        hidden: !isActive,
+      };
+    });
+  }
 
-  new Chart(document.getElementById('chart-score'), {
-    type: 'line',
-    data: { labels, datasets: scoreDatasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { labels: { color: '#94a3b8', boxWidth: 12, font:{size:11} } },
-        annotation: {
-          annotations: {
-            zero: { type:'line', yMin:0, yMax:0, borderColor:'#334155', borderWidth:1, borderDash:[4,4] },
-            pos70: { type:'line', yMin:70, yMax:70, borderColor:'#1a3a2a', borderWidth:1, borderDash:[2,4] },
-            neg70: { type:'line', yMin:-70, yMax:-70, borderColor:'#3a1a1a', borderWidth:1, borderDash:[2,4] },
-          }
-        }
-      },
-      scales: {
-        ...baseScales,
-        y: { ...baseScales.y, min:-100, max:100, ticks:{...baseScales.y.ticks, callback: v => v > 0 ? '+'+v : v } },
-      },
+  function updateCharts(){
+    const scoreDS = makeDatasets('score');
+    const priceDS = makeDatasets('price');
+
+    scoreChart.data.datasets.forEach((ds,i)=>{
+      ds.borderWidth = scoreDS[i].borderWidth;
+      ds.hidden      = scoreDS[i].hidden;
+    });
+    priceChart.data.datasets.forEach((ds,i)=>{
+      ds.borderWidth = priceDS[i].borderWidth;
+      ds.hidden      = priceDS[i].hidden;
+    });
+    scoreChart.update('none');
+    priceChart.update('none');
+  }
+
+  // ── 초기 렌더 ──
+  renderCards();
+
+  scoreChart = new Chart(document.getElementById('chart-score'),{
+    type:'line',
+    data:{labels, datasets: makeDatasets('score')},
+    options:{
+      ...baseOpts({min:-100,max:100,ticks:{callback:v=>v>0?'+'+v:v}}),
+      plugins:{
+        legend:{display:false},
+      }
     }
   });
 
-  // ── 가격 차트 (정규화: 각 자산 첫 값=100) ──
-  const priceDatasets = names.map(name => {
-    const recs = data[name].records;
-    const base = recs.find(r => r.price)?.price || 1;
-    return {
-      label: name,
-      data:  recs.map(r => r.price ? round2(r.price / base * 100) : null),
-      borderColor: data[name].color,
-      borderWidth: 1.5,
-      pointRadius: 0,
-      tension: 0.2,
-      fill: false,
-    };
-  });
-
-  function round2(v) { return Math.round(v * 100) / 100; }
-
-  new Chart(document.getElementById('chart-price'), {
-    type: 'line',
-    data: { labels, datasets: priceDatasets },
-    options: {
-      responsive: true,
-      maintainAspectRatio: true,
-      interaction: { mode: 'index', intersect: false },
-      plugins: {
-        legend: { labels: { color: '#94a3b8', boxWidth: 12, font:{size:11} } },
-        tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(1)}` } }
-      },
-      scales: {
-        ...baseScales,
-        y: { ...baseScales.y, ticks: { ...baseScales.y.ticks, callback: v => v.toFixed(0) } },
-      },
+  priceChart = new Chart(document.getElementById('chart-price'),{
+    type:'line',
+    data:{labels, datasets: makeDatasets('price')},
+    options:{
+      ...baseOpts({ticks:{callback:v=>v.toFixed(0)}}),
+      plugins:{legend:{display:false}}
     }
   });
 });
