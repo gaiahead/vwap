@@ -189,7 +189,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       maintainAspectRatio:false,
       animation:{duration:300},
       interaction:{mode:'index',intersect:false},
-      layout:{padding:{right:100}},
+      layout:{padding:0},
       plugins:{
         legend:{display:false},
         annotation:{annotations:makeAnnotations()},
