@@ -176,7 +176,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
           grid:{color:GRID},
           afterDataLimits(scale){
             if(activeSet.size===0){
-              scale.min=100; scale.max=150;
+              scale.min=100; scale.max=200;
             }
           }
         },
