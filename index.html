@@ -12,11 +12,9 @@
     header{padding:20px 28px 14px;border-bottom:1px solid #1e2535}
     header h1{font-size:1.2rem;font-weight:700;color:#f8fafc}
     header p{font-size:0.74rem;color:#475569;margin-top:4px}
-
     .chart-section{padding:20px 28px 0}
     .chart-wrap{background:#161b27;border:1px solid #1e2535;border-radius:14px;padding:18px;margin-bottom:20px}
     .chart-wrap canvas{max-height:340px}
-
     .asset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:8px;padding:0 28px 24px}
     .asset-btn{
       background:#161b27;border:1.5px solid #1e2535;border-radius:10px;
@@ -47,7 +45,6 @@
 
 <script>
 const GRID='#1e2535', TICK='#475569';
-function round2(v){return Math.round(v*100)/100}
 
 const STRUCT_LABELS = ['200d','190d','180d','170d','160d','150d','140d','130d','120d','110d',
                        '100d','90d','80d','70d','60d','50d','40d','30d','20d','10d'];
@@ -55,28 +52,57 @@ const STRUCT_LABELS = ['200d','190d','180d','170d','160d','150d','140d','130d','
 let structChart;
 let activeSet = new Set(['TLT']);
 
+// 10d값 순위 기반 동적 색상 계산
+// t=0~1, 1=최고(진한초록), 0.5=중간(회색), 0=최저(진한빨강)
+function rankColor(t) {
+  if (t >= 0.5) {
+    // 회색 → 초록
+    const s = (t - 0.5) * 2; // 0~1
+    const r = Math.round(107 + (34  - 107) * s);
+    const g = Math.round(114 + (197 - 114) * s);
+    const b = Math.round(128 + (94  - 128) * s);
+    return `rgb(${r},${g},${b})`;
+  } else {
+    // 빨강 → 회색
+    const s = t * 2; // 0~1
+    const r = Math.round(239 + (107 - 239) * s);
+    const g = Math.round(68  + (114 - 68)  * s);
+    const b = Math.round(68  + (128 - 68)  * s);
+    return `rgb(${r},${g},${b})`;
+  }
+}
+
+function calcColors(names, data) {
+  const vals = names.map(n => data[n]?.vwap_structure?.[0]?.norm ?? 0);
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
+  const range = max - min || 1;
+  const colors = {};
+  names.forEach((n, i) => {
+    colors[n] = rankColor((vals[i] - min) / range);
+  });
+  return colors;
+}
+
 fetch('trend_data.json').then(r=>r.json()).then(data=>{
   const names = ['TLT','GLD','IBIT','SPY','QQQ','삼성전자','SK하이닉스','리노공업'].filter(n=>data[n]);
 
-  // 헤더 업데이트 시각
   document.getElementById('updated').textContent =
     (data._meta?.updated_at || '') + ' 기준';
 
-  // 10d 정규화값
   function get10d(name){
-    const s = data[name].vwap_structure || [];
-    return s[0]?.norm ?? null; // s[0] = 10d
+    return data[name]?.vwap_structure?.[0]?.norm ?? null;
   }
 
   const grid = document.getElementById('asset-grid');
 
   function renderCards(){
+    const colors = calcColors(names, data);
     grid.innerHTML='';
     names.forEach(name=>{
-      const color    = data[name].color;
+      const color    = colors[name];
       const isActive = activeSet.has(name);
       const v10      = get10d(name);
-      const valColor = v10==null?'#475569': v10>=100?'#34d399':'#f87171';
 
       const btn = document.createElement('div');
       btn.className='asset-btn'+(isActive?' active':'');
@@ -84,7 +110,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       btn.innerHTML=`
         <div class="indicator"></div>
         <div class="name">${name}</div>
-        <div class="val" style="color:${isActive?color:valColor}">${v10!=null?v10.toFixed(2):'–'}</div>
+        <div class="val" style="color:${color}">${v10!=null?v10.toFixed(2):'–'}</div>
       `;
       btn.addEventListener('click',()=>{
         if(activeSet.has(name)) activeSet.delete(name);
@@ -97,16 +123,19 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
   }
 
   function makeDatasets(){
+    const colors = calcColors(names, data);
     return names.map(name=>{
       const isActive = activeSet.has(name);
       const reversed = [...(data[name].vwap_structure||[])].reverse();
+      const color    = colors[name];
       return {
         label: name,
         data:  reversed.map(s=>s.norm),
-        borderColor: data[name].color,
+        borderColor: color,
         borderWidth: isActive?2:0,
         pointRadius: isActive?3:0,
-        pointBackgroundColor: data[name].color,
+        pointHoverRadius: isActive?3:0,
+        pointBackgroundColor: color,
         tension: 0.3,
         fill: false,
         hidden: !isActive,
@@ -115,19 +144,19 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
   }
 
   function makeAnnotations(){
+    const colors = calcColors(names, data);
     const annotations = {
       base:{type:'line',yMin:100,yMax:100,borderColor:'#475569',borderWidth:1.5},
     };
     const active = names.filter(n=>activeSet.has(n)).map(name=>{
-      const s = data[name].vwap_structure||[];
-      return {name, val: s[0]?.norm}; // 10d
+      return {name, val: get10d(name)};
     }).filter(d=>d.val!=null).sort((a,b)=>b.val-a.val);
 
     active.forEach(({name,val})=>{
       annotations['lbl_'+name]={
         type:'label', xValue:19, yValue:val,
         content: name+' '+val.toFixed(2),
-        color: data[name].color,
+        color: colors[name],
         font:{size:10,weight:'bold'},
         backgroundColor:'rgba(15,17,23,0.85)',
         padding:{x:4,y:2},
@@ -139,14 +168,16 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
   }
 
   function updateChart(){
-    const ds=makeDatasets();
+    const ds = makeDatasets();
     structChart.data.datasets.forEach((d,i)=>{
-      d.borderWidth=ds[i].borderWidth;
-      d.hidden=ds[i].hidden;
-      d.pointRadius=ds[i].pointRadius;
-      d.pointHoverRadius=ds[i].pointRadius;
+      d.borderColor         = ds[i].borderColor;
+      d.borderWidth         = ds[i].borderWidth;
+      d.hidden              = ds[i].hidden;
+      d.pointRadius         = ds[i].pointRadius;
+      d.pointHoverRadius    = ds[i].pointHoverRadius;
+      d.pointBackgroundColor= ds[i].pointBackgroundColor;
     });
-    structChart.options.plugins.annotation.annotations=makeAnnotations();
+    structChart.options.plugins.annotation.annotations = makeAnnotations();
     structChart.update('none');
   }
 
@@ -168,17 +199,10 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       scales:{
         x:{ticks:{color:TICK,font:{size:10}},grid:{color:GRID}},
         y:{
-          ticks:{
-            color:TICK,
-            font:{size:10},
-            count:10,
-            callback:v=>v.toFixed(2)
-          },
+          ticks:{color:TICK,font:{size:10},count:11,callback:v=>v.toFixed(2)},
           grid:{color:GRID},
           afterDataLimits(scale){
-            if(activeSet.size===0){
-              scale.min=100; scale.max=200;
-            }
+            if(activeSet.size===0){scale.min=100;scale.max=200;}
           }
         },
       }
