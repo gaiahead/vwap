@@ -150,31 +150,35 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     });
   }
 
+  const lastIdx = labels.length - 1;
+
   // 가격 차트용 라인 끝 annotation 생성
   function makePriceAnnotations(){
     const annotations = {
       base:{type:'line',yMin:100,yMax:100,borderColor:'#475569',borderWidth:1.5},
     };
-    names.forEach(name=>{
-      if(!activeSet.has(name)) return;
-      const recs  = data[name].records;
-      const base  = recs.find(r=>r.price)?.price||1;
-      const last  = recs.slice(-1)[0];
-      if(!last?.price) return;
-      const val   = round2(last.price/base*100);
-      const ret   = round2(val-100);
-      const label = (ret>=0?'+':'')+ret+'%';
+    // 활성 자산 정렬: y값 기준 내림차순 (라벨 겹침 방지)
+    const active = names.filter(n=>activeSet.has(n)).map(name=>{
+      const recs = data[name].records;
+      const base = recs.find(r=>r.price)?.price||1;
+      const last = recs.slice(-1)[0];
+      const val  = last?.price ? round2(last.price/base*100) : null;
+      return {name, val};
+    }).filter(d=>d.val!=null).sort((a,b)=>b.val-a.val);
+
+    active.forEach(({name, val})=>{
+      const ret = round2(val-100);
       annotations['lbl_'+name] = {
         type:'label',
-        xValue: labels[labels.length-1],
+        xValue: lastIdx,
         yValue: val,
-        content: [name, label],
+        content: name+' '+(ret>=0?'+':'')+ret+'%',
         color: data[name].color,
         font:{size:10, weight:'bold'},
         backgroundColor:'rgba(15,17,23,0.85)',
-        padding:{x:5,y:3},
-        position:'start',
-        xAdjust: -4,
+        padding:{x:4,y:2},
+        position:{x:'start', y:'center'},
+        xAdjust: 4,
       };
     });
     return annotations;
@@ -185,23 +189,24 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     const annotations = {
       zero:{type:'line',yMin:0,yMax:0,borderColor:'#475569',borderWidth:1.5},
     };
-    names.forEach(name=>{
-      if(!activeSet.has(name)) return;
+    const active = names.filter(n=>activeSet.has(n)).map(name=>{
       const recs = data[name].records;
-      const last = recs.slice(-1)[0];
-      if(last?.score==null) return;
-      const val  = last.score;
+      const val  = recs.slice(-1)[0]?.score;
+      return {name, val};
+    }).filter(d=>d.val!=null).sort((a,b)=>b.val-a.val);
+
+    active.forEach(({name, val})=>{
       annotations['lbl_'+name] = {
         type:'label',
-        xValue: labels[labels.length-1],
+        xValue: lastIdx,
         yValue: val,
-        content: [name, (val>=0?'+':'')+val],
+        content: name+' '+(val>=0?'+':'')+val,
         color: data[name].color,
         font:{size:10, weight:'bold'},
         backgroundColor:'rgba(15,17,23,0.85)',
-        padding:{x:5,y:3},
-        position:'start',
-        xAdjust: -4,
+        padding:{x:4,y:2},
+        position:{x:'start', y:'center'},
+        xAdjust: 4,
       };
     });
     return annotations;
