@@ -179,8 +179,6 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
             zero:{
               type:'line', yMin:0, yMax:0,
               borderColor:'#475569', borderWidth:1.5,
-              label:{content:'0', display:true, position:'start',
-                     color:'#64748b', font:{size:10}, backgroundColor:'transparent', padding:2}
             },
           }
         }
@@ -207,8 +205,6 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
             base:{
               type:'line', yMin:100, yMax:100,
               borderColor:'#475569', borderWidth:1.5,
-              label:{content:'100', display:true, position:'start',
-                     color:'#64748b', font:{size:10}, backgroundColor:'transparent', padding:2}
             },
           }
         }
