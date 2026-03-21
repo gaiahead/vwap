@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>자산 추세 강도 모니터</title>
+  <title>추세 강도 모니터</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -18,8 +18,7 @@
     .score-card { background: #161b27; border: 1px solid #1e2535; border-radius: 14px; padding: 18px 20px; position: relative; overflow: hidden; }
     .score-card .bar-bg { position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: #1e2535; }
     .score-card .bar-fg { position: absolute; bottom: 0; height: 3px; transition: width .4s; }
-    .score-card .ticker { font-size: 0.7rem; color: #475569; text-transform: uppercase; letter-spacing: .08em; }
-    .score-card .name   { font-size: 0.92rem; font-weight: 600; color: #cbd5e1; margin: 3px 0 10px; }
+    .score-card .ticker { font-size: 1rem; font-weight: 700; color: #cbd5e1; letter-spacing: .02em; }
     .score-card .score  { font-size: 2rem; font-weight: 800; line-height: 1; }
     .score-card .sub    { font-size: 0.72rem; color: #475569; margin-top: 5px; }
     .score-card .gauge  { margin-top: 12px; height: 6px; background: #1e2535; border-radius: 3px; overflow: hidden; }
@@ -45,7 +44,7 @@
 <body>
 
 <header>
-  <h1>📊 자산 추세 강도 모니터</h1>
+  <h1>📊 추세 강도 모니터</h1>
   <p>2주 롤링 Volume Profile VWAP 변화율 기반 · 1년 백분위 정규화 (-100 ~ +100) · <span id="updated"></span></p>
 </header>
 
@@ -117,8 +116,7 @@ fetch('trend_data.json').then(r => r.json()).then(data => {
     const card = document.createElement('div');
     card.className = 'score-card';
     card.innerHTML = `
-      <div class="ticker">${asset.ticker}</div>
-      <div class="name">${name}</div>
+      <div class="ticker">${name}</div>
       <div class="score ${scoreClass(score)}" style="color:${scoreColor(score)}">${score !== null ? (score > 0 ? '+' : '') + score : '–'}</div>
       <div class="sub">${scoreLabel(score)} · 주간변화 ${chg !== null ? (chg > 0 ? '+' : '') + chg + '%' : '–'}</div>
       <div class="gauge"><div class="gauge-fill" style="width:${gw}%;background:${scoreColor(score)}"></div></div>
