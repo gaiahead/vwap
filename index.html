@@ -168,15 +168,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
   }
 
   function updateChart(){
-    const ds = makeDatasets();
-    structChart.data.datasets.forEach((d,i)=>{
-      d.borderColor         = ds[i].borderColor;
-      d.borderWidth         = ds[i].borderWidth;
-      d.hidden              = ds[i].hidden;
-      d.pointRadius         = ds[i].pointRadius;
-      d.pointHoverRadius    = ds[i].pointHoverRadius;
-      d.pointBackgroundColor= ds[i].pointBackgroundColor;
-    });
+    structChart.data.datasets = makeDatasets();
     structChart.options.plugins.annotation.annotations = makeAnnotations();
     structChart.update('none');
   }
