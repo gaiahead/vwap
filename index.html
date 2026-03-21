@@ -9,48 +9,45 @@
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:'Apple SD Gothic Neo','Pretendard',sans-serif;background:#0f1117;color:#e2e8f0;min-height:100vh}
-    header{padding:24px 28px 14px;border-bottom:1px solid #1e2535}
+    header{padding:20px 28px 12px;border-bottom:1px solid #1e2535}
     header h1{font-size:1.2rem;font-weight:700;color:#f8fafc}
     header p{font-size:0.74rem;color:#475569;margin-top:4px}
 
-    .asset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;padding:20px 28px}
+    .section{padding:20px 28px 0}
+    .section h2{font-size:0.72rem;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px}
+    .chart-wrap{background:#161b27;border:1px solid #1e2535;border-radius:14px;padding:18px;margin-bottom:20px}
+    .chart-wrap canvas{max-height:320px}
+
+    .asset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;padding:0 28px 24px}
     .asset-btn{
-      background:#161b27;border:1.5px solid #1e2535;border-radius:12px;
-      padding:14px 16px;cursor:pointer;transition:all .2s;user-select:none;
+      background:#161b27;border:1.5px solid #1e2535;border-radius:10px;
+      padding:10px 12px;cursor:pointer;transition:all .2s;user-select:none;
       text-align:left;position:relative;overflow:hidden
     }
     .asset-btn.active{border-color:var(--c);background:#1a2030}
     .asset-btn:hover{background:#1a2030}
-    .asset-btn .name{font-size:0.95rem;font-weight:700;color:#94a3b8;transition:color .2s}
+    .asset-btn .name{font-size:0.82rem;font-weight:700;color:#94a3b8;transition:color .2s}
     .asset-btn.active .name{color:var(--c)}
-    .asset-btn .score{font-size:1.6rem;font-weight:800;line-height:1.1;margin-top:6px}
-    .asset-btn .ret{font-size:0.72rem;color:#475569;margin-top:5px}
-    .asset-btn .gauge{margin-top:10px;height:4px;background:#1e2535;border-radius:2px;overflow:hidden}
-    .asset-btn .gauge-fill{height:100%;border-radius:2px;transition:width .3s}
+    .asset-btn .val20{font-size:1.3rem;font-weight:800;line-height:1.1;margin-top:4px}
     .asset-btn .indicator{position:absolute;top:0;left:0;right:0;height:2px;background:var(--c);opacity:0;transition:opacity .2s}
     .asset-btn.active .indicator{opacity:1}
 
-    .section{padding:0 28px 24px}
-    .section h2{font-size:0.72rem;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px}
-    .chart-wrap{background:#161b27;border:1px solid #1e2535;border-radius:14px;padding:18px;margin-bottom:18px}
-    .chart-wrap canvas{max-height:300px}
-
-    footer{padding:16px 28px;border-top:1px solid #1e2535;font-size:0.68rem;color:#374151}
+    footer{padding:14px 28px;border-top:1px solid #1e2535;font-size:0.68rem;color:#374151}
   </style>
 </head>
 <body>
 
 <header>
   <h1>📊 추세 강도 모니터</h1>
-  <p>VWAP(Volume Weighted Average Price) · 200일 = 100 기준 · <span id="updated"></span></p>
+  <p>VWAP(Volume Weighted Average Price) · <span id="updated"></span></p>
 </header>
 
-<div class="asset-grid" id="asset-grid"></div>
-
 <div class="section">
-  <h2>VWAP 추이 (200일 → 10일)</h2>
+  <h2>VWAP 추이</h2>
   <div class="chart-wrap"><canvas id="chart-structure"></canvas></div>
 </div>
+
+<div class="asset-grid" id="asset-grid"></div>
 
 <footer>
   데이터: Yahoo Finance · 주 1회 업데이트 · 과거 성과는 미래를 보장하지 않습니다.
@@ -58,19 +55,8 @@
 
 <script>
 const GRID='#1e2535', TICK='#475569';
-
-function scoreColor(s){
-  if(s==null)return'#475569';
-  if(s>=70)return'#34d399';
-  if(s>=30)return'#86efac';
-  if(s>-30)return'#94a3b8';
-  if(s>-70)return'#fca5a5';
-  return'#f87171';
-}
-function gaugeW(s){return s==null?50:Math.round((s+100)/2)}
 function round2(v){return Math.round(v*100)/100}
 
-// x축 레이블: 200d 왼쪽, 10d 오른쪽
 const STRUCT_LABELS = ['200d','190d','180d','170d','160d','150d','140d','130d','120d','110d',
                        '100d','90d','80d','70d','60d','50d','40d','30d','20d','10d'];
 
@@ -79,19 +65,17 @@ let activeSet = new Set(['TLT']);
 
 fetch('trend_data.json').then(r=>r.json()).then(data=>{
   const names = ['TLT','GLD','IBIT','SPY','QQQ','삼성전자','SK하이닉스','리노공업'].filter(n=>data[n]);
-  document.getElementById('updated').textContent =
-    (data[names[0]].records.slice(-1)[0]?.date||'')+' 기준';
 
-  function calcReturn(name){
-    const recs = data[name].records;
-    const base = recs.find(r=>r.price)?.price||1;
-    const last = recs.slice(-1)[0]?.price||base;
-    return round2((last/base-1)*100);
-  }
+  // 최신 날짜
+  const latestDate = data[names[0]].records.slice(-1)[0]?.date || '';
+  document.getElementById('updated').textContent = latestDate + ' 기준';
 
-  function getScore(name){
-    const recs = data[name].records;
-    return recs.slice(-1)[0]?.score ?? null;
+  // 20d VWAP 정규화 값 (vwap_structure[1] = 20d, index from start=10d)
+  function get20d(name){
+    const s = data[name].vwap_structure || [];
+    // s[0]=10d, s[1]=20d
+    const v = s[1]?.norm;
+    return v != null ? round2(v - 100) : null;
   }
 
   const grid = document.getElementById('asset-grid');
@@ -99,13 +83,10 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
   function renderCards(){
     grid.innerHTML='';
     names.forEach(name=>{
-      const asset   = data[name];
-      const score   = getScore(name);
-      const ret     = calcReturn(name);
-      const color   = asset.color;
+      const color   = data[name].color;
       const isActive= activeSet.has(name);
-      const gw      = gaugeW(score);
-      const retColor= ret>=0?'#34d399':'#f87171';
+      const v20     = get20d(name);
+      const valColor= v20==null?'#475569': v20>=0?'#34d399':'#f87171';
 
       const btn = document.createElement('div');
       btn.className='asset-btn'+(isActive?' active':'');
@@ -113,9 +94,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       btn.innerHTML=`
         <div class="indicator"></div>
         <div class="name">${name}</div>
-        <div class="score" style="color:${isActive?color:scoreColor(score)}">${score!=null?(score>0?'+':'')+score:'–'}</div>
-        <div class="ret" style="color:${retColor}">${(ret>=0?'+':'')+ret}%</div>
-        <div class="gauge"><div class="gauge-fill" style="width:${gw}%;background:${color}"></div></div>
+        <div class="val20" style="color:${isActive?color:valColor}">${v20!=null?(v20>=0?'+':'')+v20+'%':'–'}</div>
       `;
       btn.addEventListener('click',()=>{
         if(activeSet.has(name)) activeSet.delete(name);
@@ -127,13 +106,10 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     });
   }
 
-  // VWAP 구조 데이터셋 (200d→10d, 인덱스 0~19)
   function makeStructDatasets(){
     return names.map(name=>{
       const isActive = activeSet.has(name);
-      const struct   = data[name].vwap_structure || [];
-      // vwap_structure: [10d, 20d, ..., 200d] → 역순으로 [200d, ..., 10d]
-      const reversed = [...struct].reverse();
+      const reversed = [...(data[name].vwap_structure||[])].reverse();
       return {
         label: name,
         data:  reversed.map(s=>s.norm),
@@ -148,15 +124,13 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     });
   }
 
-  // 구조 차트 오른쪽 끝(10d) annotation
   function makeStructAnnotations(){
     const annotations = {
       base:{type:'line',yMin:100,yMax:100,borderColor:'#475569',borderWidth:1.5},
     };
     const active = names.filter(n=>activeSet.has(n)).map(name=>{
-      const struct  = data[name].vwap_structure||[];
-      const val10d  = struct[0]?.norm; // 10d
-      return {name, val:val10d};
+      const s = data[name].vwap_structure||[];
+      return {name, val: s[0]?.norm}; // 10d
     }).filter(d=>d.val!=null).sort((a,b)=>b.val-a.val);
 
     active.forEach(({name,val})=>{
@@ -177,17 +151,17 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
 
   function updateCharts(){
     structChart.data.datasets.forEach((d,i)=>{
-      const ds = makeStructDatasets();
-      d.borderWidth=ds[i].borderWidth; d.hidden=ds[i].hidden;
+      const ds=makeStructDatasets();
+      d.borderWidth=ds[i].borderWidth;
+      d.hidden=ds[i].hidden;
       d.pointRadius=ds[i].pointRadius;
     });
-    structChart.options.plugins.annotation.annotations = makeStructAnnotations();
+    structChart.options.plugins.annotation.annotations=makeStructAnnotations();
     structChart.update('none');
   }
 
   renderCards();
 
-  // ── VWAP 기간 구조 차트 ──
   structChart = new Chart(document.getElementById('chart-structure'),{
     type:'line',
     data:{labels:STRUCT_LABELS, datasets:makeStructDatasets()},
@@ -207,7 +181,6 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       }
     }
   });
-
 });
 </script>
 </body>
