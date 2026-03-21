@@ -139,11 +139,12 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
   }
 
   function updateChart(){
+    const ds=makeDatasets();
     structChart.data.datasets.forEach((d,i)=>{
-      const ds=makeDatasets();
       d.borderWidth=ds[i].borderWidth;
       d.hidden=ds[i].hidden;
       d.pointRadius=ds[i].pointRadius;
+      d.pointHoverRadius=ds[i].pointRadius;
     });
     structChart.options.plugins.annotation.annotations=makeAnnotations();
     structChart.update('none');
