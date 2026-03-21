@@ -7,14 +7,30 @@ from scipy.stats import norm
 from datetime import date
 
 ASSETS = [
-    ("TLT",       "TLT",       "#60a5fa"),
-    ("GLD",       "GLD",       "#fbbf24"),
-    ("IBIT",      "IBIT",      "#f97316"),
-    ("SPY",       "SPY",       "#34d399"),
-    ("QQQ",       "QQQ",       "#a78bfa"),
-    ("삼성전자",   "005930.KS", "#38bdf8"),
-    ("SK하이닉스", "000660.KS", "#fb7185"),
-    ("리노공업",   "058470.KS", "#4ade80"),
+    # 그룹 1
+    ("TLT",             "TLT",       "g1"),
+    ("GLD",             "GLD",       "g1"),
+    ("IBIT",            "IBIT",      "g1"),
+    # 그룹 2
+    ("SPY",             "SPY",       "g2"),
+    ("QQQ",             "QQQ",       "g2"),
+    # 그룹 3
+    ("SOL 미국테크TOP10", "481190.KS", "g3"),
+    ("엔비디아",          "NVDA",      "g3"),
+    ("알파벳",            "GOOGL",     "g3"),
+    ("애플",              "AAPL",      "g3"),
+    ("마이크로소프트",     "MSFT",      "g3"),
+    ("아마존",            "AMZN",      "g3"),
+    ("메타",              "META",      "g3"),
+    ("브로드컴",          "AVGO",      "g3"),
+    ("테슬라",            "TSLA",      "g3"),
+    ("넷플릭스",          "NFLX",      "g3"),
+    ("팔란티어",          "PLTR",      "g3"),
+    # 그룹 4
+    ("KODEX 200",        "069500.KS", "g4"),
+    ("삼성전자",          "005930.KS", "g4"),
+    ("SK하이닉스",        "000660.KS", "g4"),
+    ("리노공업",          "058470.KS", "g4"),
 ]
 
 WINDOWS = list(range(10, 201, 10))  # 10~200, 10일 간격
@@ -81,7 +97,7 @@ result = {"_meta": {"updated_at": run_time}}
 cutoff = date(2025, 1, 6)
 exclude = {'2025-12-31', '2025-12-30', '2025-12-29'}
 
-for name, ticker, color in ASSETS:
+for name, ticker, group in ASSETS:
     print(f"  {name} ({ticker})...")
     raw = yf.download(ticker, start="2023-01-01",
                       end=datetime.now(KST).strftime("%Y-%m-%d"),
@@ -132,7 +148,7 @@ for name, ticker, color in ASSETS:
 
     result[name] = {
         "ticker": ticker,
-        "color":  color,
+        "group":  group,
         "records": records,
         "vwap_structure": vwap_structure,
         "latest_price": round(float(df["close"].iloc[-1]), 2),

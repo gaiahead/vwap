@@ -12,20 +12,29 @@
     header{padding:20px 28px 14px;border-bottom:1px solid #1e2535}
     header h1{font-size:1.2rem;font-weight:700;color:#f8fafc}
     header p{font-size:0.74rem;color:#475569;margin-top:4px}
+
     .chart-section{padding:20px 28px 0}
-    .chart-wrap{background:#161b27;border:1px solid #1e2535;border-radius:14px;padding:18px;margin-bottom:20px}
-    .chart-wrap canvas{max-height:340px}
-    .asset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:8px;padding:0 28px 24px}
+    .chart-wrap{
+      background:#161b27;border:1px solid #1e2535;border-radius:14px;
+      padding:18px;margin-bottom:20px;
+      position:relative;width:100%;
+    }
+
+    /* 종목 그룹 */
+    .groups{padding:0 28px 24px;display:flex;flex-direction:column;gap:8px}
+    .group{display:flex;flex-wrap:wrap;gap:8px}
+
     .asset-btn{
       background:#161b27;border:1.5px solid #1e2535;border-radius:10px;
       padding:10px 12px;cursor:pointer;transition:all .2s;user-select:none;
-      text-align:left;position:relative;overflow:hidden
+      text-align:left;position:relative;overflow:hidden;
+      flex:0 0 auto;min-width:90px;
     }
     .asset-btn.active{border-color:var(--c);background:#1a2030}
     .asset-btn:hover{background:#1a2030}
-    .asset-btn .name{font-size:0.82rem;font-weight:700;color:#94a3b8;transition:color .2s}
+    .asset-btn .name{font-size:0.78rem;font-weight:700;color:#94a3b8;transition:color .2s;white-space:nowrap}
     .asset-btn.active .name{color:var(--c)}
-    .asset-btn .val{font-size:1.25rem;font-weight:800;line-height:1.1;margin-top:5px}
+    .asset-btn .val{font-size:1.2rem;font-weight:800;line-height:1.1;margin-top:4px}
     .asset-btn .indicator{position:absolute;top:0;left:0;right:0;height:2px;background:var(--c);opacity:0;transition:opacity .2s}
     .asset-btn.active .indicator{opacity:1}
   </style>
@@ -41,7 +50,7 @@
   <div class="chart-wrap"><canvas id="chart-structure"></canvas></div>
 </div>
 
-<div class="asset-grid" id="asset-grid"></div>
+<div class="groups" id="groups"></div>
 
 <script>
 const GRID='#1e2535', TICK='#475569';
@@ -49,82 +58,78 @@ const GRID='#1e2535', TICK='#475569';
 const STRUCT_LABELS = ['200d','190d','180d','170d','160d','150d','140d','130d','120d','110d',
                        '100d','90d','80d','70d','60d','50d','40d','30d','20d','10d'];
 
+const GROUP_ORDER = ['g1','g2','g3','g4'];
+
 let structChart;
 let activeSet = new Set(['TLT']);
 
-// 10d값 순위 기반 동적 색상 계산
-// t=0~1, 1=최고(진한초록), 0.5=중간(회색), 0=최저(진한빨강)
-function rankColor(t) {
-  if (t >= 0.5) {
-    // 회색 → 초록
-    const s = (t - 0.5) * 2; // 0~1
-    const r = Math.round(107 + (34  - 107) * s);
-    const g = Math.round(114 + (197 - 114) * s);
-    const b = Math.round(128 + (94  - 128) * s);
-    return `rgb(${r},${g},${b})`;
+function rankColor(t){
+  if(t>=0.5){
+    const s=(t-0.5)*2;
+    return `rgb(${Math.round(107+(34-107)*s)},${Math.round(114+(197-114)*s)},${Math.round(128+(94-128)*s)})`;
   } else {
-    // 빨강 → 회색
-    const s = t * 2; // 0~1
-    const r = Math.round(239 + (107 - 239) * s);
-    const g = Math.round(68  + (114 - 68)  * s);
-    const b = Math.round(68  + (128 - 68)  * s);
-    return `rgb(${r},${g},${b})`;
+    const s=t*2;
+    return `rgb(${Math.round(239+(107-239)*s)},${Math.round(68+(114-68)*s)},${Math.round(68+(128-68)*s)})`;
   }
 }
 
-function calcColors(names, data) {
-  const vals = names.map(n => data[n]?.vwap_structure?.[0]?.norm ?? 0);
-  const min = Math.min(...vals);
-  const max = Math.max(...vals);
-  const range = max - min || 1;
-  const colors = {};
-  names.forEach((n, i) => {
-    colors[n] = rankColor((vals[i] - min) / range);
-  });
+function calcColors(names, data){
+  const vals = names.map(n=>data[n]?.vwap_structure?.[0]?.norm??0);
+  const min=Math.min(...vals), max=Math.max(...vals), range=max-min||1;
+  const colors={};
+  names.forEach((n,i)=>{ colors[n]=rankColor((vals[i]-min)/range); });
   return colors;
 }
 
 fetch('trend_data.json').then(r=>r.json()).then(data=>{
-  const names = ['TLT','GLD','IBIT','SPY','QQQ','삼성전자','SK하이닉스','리노공업'].filter(n=>data[n]);
+  // 그룹별 순서 유지
+  const allNames = Object.keys(data).filter(k=>k!=='_meta');
+  const namesByGroup = {};
+  GROUP_ORDER.forEach(g=>{ namesByGroup[g]=[]; });
+  allNames.forEach(n=>{ const g=data[n].group; if(namesByGroup[g]) namesByGroup[g].push(n); });
 
   document.getElementById('updated').textContent =
-    (data._meta?.updated_at || '') + ' 기준';
+    (data._meta?.updated_at||'')+' 기준';
 
-  function get10d(name){
-    return data[name]?.vwap_structure?.[0]?.norm ?? null;
-  }
+  function get10d(name){ return data[name]?.vwap_structure?.[0]?.norm??null; }
 
-  const grid = document.getElementById('asset-grid');
+  const groupsEl = document.getElementById('groups');
 
   function renderCards(){
-    const colors = calcColors(names, data);
-    grid.innerHTML='';
-    names.forEach(name=>{
-      const color    = colors[name];
-      const isActive = activeSet.has(name);
-      const v10      = get10d(name);
-
-      const btn = document.createElement('div');
-      btn.className='asset-btn'+(isActive?' active':'');
-      btn.style.setProperty('--c', color);
-      btn.innerHTML=`
-        <div class="indicator"></div>
-        <div class="name">${name}</div>
-        <div class="val" style="color:${color}">${v10!=null?v10.toFixed(2):'–'}</div>
-      `;
-      btn.addEventListener('click',()=>{
-        if(activeSet.has(name)) activeSet.delete(name);
-        else activeSet.add(name);
-        renderCards();
-        updateChart();
+    const colors = calcColors(allNames, data);
+    groupsEl.innerHTML='';
+    GROUP_ORDER.forEach(g=>{
+      const names = namesByGroup[g];
+      if(!names?.length) return;
+      const div = document.createElement('div');
+      div.className='group';
+      names.forEach(name=>{
+        const color    = colors[name];
+        const isActive = activeSet.has(name);
+        const v10      = get10d(name);
+        const btn = document.createElement('div');
+        btn.className='asset-btn'+(isActive?' active':'');
+        btn.style.setProperty('--c',color);
+        btn.innerHTML=`
+          <div class="indicator"></div>
+          <div class="name">${name}</div>
+          <div class="val" style="color:${color}">${v10!=null?v10.toFixed(2):'–'}</div>
+        `;
+        btn.addEventListener('click',()=>{
+          if(activeSet.has(name)) activeSet.delete(name);
+          else activeSet.add(name);
+          renderCards();
+          updateChart();
+        });
+        div.appendChild(btn);
       });
-      grid.appendChild(btn);
+      groupsEl.appendChild(div);
     });
   }
 
   function makeDatasets(){
-    const colors = calcColors(names, data);
-    return names.map(name=>{
+    const colors = calcColors(allNames, data);
+    return allNames.map(name=>{
       const isActive = activeSet.has(name);
       const reversed = [...(data[name].vwap_structure||[])].reverse();
       const color    = colors[name];
@@ -134,7 +139,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
         borderColor: color,
         borderWidth: isActive?2:0,
         pointRadius: isActive?3:0,
-        pointHoverRadius: isActive?3:0,
+        pointHoverRadius: isActive?4:0,
         pointBackgroundColor: color,
         tension: 0.3,
         fill: false,
@@ -144,13 +149,14 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
   }
 
   function makeAnnotations(){
-    const colors = calcColors(names, data);
+    const colors = calcColors(allNames, data);
     const annotations = {
       base:{type:'line',yMin:100,yMax:100,borderColor:'#475569',borderWidth:1.5},
     };
-    const active = names.filter(n=>activeSet.has(n)).map(name=>{
-      return {name, val: get10d(name)};
-    }).filter(d=>d.val!=null).sort((a,b)=>b.val-a.val);
+    const active = allNames.filter(n=>activeSet.has(n))
+      .map(n=>({name:n, val:get10d(n)}))
+      .filter(d=>d.val!=null)
+      .sort((a,b)=>b.val-a.val);
 
     active.forEach(({name,val})=>{
       annotations['lbl_'+name]={
@@ -179,10 +185,11 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     type:'line',
     data:{labels:STRUCT_LABELS, datasets:makeDatasets()},
     options:{
-      responsive:true, maintainAspectRatio:true,
+      responsive:true,
+      maintainAspectRatio:false,
       animation:{duration:300},
       interaction:{mode:'index',intersect:false},
-      layout:{padding:{right:90}},
+      layout:{padding:{right:100}},
       plugins:{
         legend:{display:false},
         annotation:{annotations:makeAnnotations()},
@@ -200,6 +207,16 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       }
     }
   });
+
+  // 리사이즈 시 차트 높이 반응형
+  function resizeChart(){
+    const wrap = document.querySelector('.chart-wrap');
+    const h = Math.max(300, Math.min(420, window.innerHeight * 0.45));
+    wrap.style.height = h + 'px';
+    structChart.resize();
+  }
+  resizeChart();
+  window.addEventListener('resize', resizeChart);
 });
 </script>
 </body>
