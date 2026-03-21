@@ -100,7 +100,8 @@ let scoreChart, priceChart;
 let activeSet = new Set(['TLT']); // 기본값: TLT만 활성
 
 fetch('trend_data.json').then(r=>r.json()).then(data=>{
-  const names = Object.keys(data);
+  const names = ['TLT','GLD','IBIT','SPY','QQQ','삼성전자','SK하이닉스','리노공업']
+    .filter(n=>data[n]);
   const labels = data[names[0]].records.map(r=>r.date);
 
   // 최신 날짜
