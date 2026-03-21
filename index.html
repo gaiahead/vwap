@@ -3,174 +3,208 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GLD 2주 VWAP 추세추종 백테스트</title>
+  <title>자산 추세 강도 모니터</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Pretendard', 'Apple SD Gothic Neo', sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
-    header { padding: 28px 32px 20px; border-bottom: 1px solid #1e2535; }
-    header h1 { font-size: 1.4rem; font-weight: 700; color: #f8fafc; }
-    header p  { font-size: 0.82rem; color: #64748b; margin-top: 4px; }
-    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; padding: 24px 32px; }
-    .card { background: #161b27; border: 1px solid #1e2535; border-radius: 12px; padding: 16px 20px; }
-    .card .label { font-size: 0.72rem; color: #64748b; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
-    .card .value { font-size: 1.5rem; font-weight: 700; }
-    .card .value.up   { color: #34d399; }
-    .card .value.down { color: #f87171; }
-    .card .value.neu  { color: #94a3b8; }
+    body { font-family: 'Apple SD Gothic Neo', 'Pretendard', sans-serif; background: #0f1117; color: #e2e8f0; min-height: 100vh; }
+
+    header { padding: 28px 32px 16px; border-bottom: 1px solid #1e2535; }
+    header h1 { font-size: 1.3rem; font-weight: 700; color: #f8fafc; }
+    header p  { font-size: 0.78rem; color: #475569; margin-top: 5px; }
+
+    /* 강도 카드 */
+    .score-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; padding: 24px 32px; }
+    .score-card { background: #161b27; border: 1px solid #1e2535; border-radius: 14px; padding: 18px 20px; position: relative; overflow: hidden; }
+    .score-card .bar-bg { position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: #1e2535; }
+    .score-card .bar-fg { position: absolute; bottom: 0; height: 3px; transition: width .4s; }
+    .score-card .ticker { font-size: 0.7rem; color: #475569; text-transform: uppercase; letter-spacing: .08em; }
+    .score-card .name   { font-size: 0.92rem; font-weight: 600; color: #cbd5e1; margin: 3px 0 10px; }
+    .score-card .score  { font-size: 2rem; font-weight: 800; line-height: 1; }
+    .score-card .sub    { font-size: 0.72rem; color: #475569; margin-top: 5px; }
+    .score-card .gauge  { margin-top: 12px; height: 6px; background: #1e2535; border-radius: 3px; overflow: hidden; }
+    .score-card .gauge-fill { height: 100%; border-radius: 3px; transition: width .4s; }
+
+    /* 차트 섹션 */
     .section { padding: 0 32px 32px; }
-    .section h2 { font-size: 0.78rem; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 14px; }
-    .chart-wrap { background: #161b27; border: 1px solid #1e2535; border-radius: 14px; padding: 20px; margin-bottom: 24px; position: relative; }
-    .chart-wrap canvas { max-height: 320px; }
-    table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-    thead tr { background: #1a2030; }
-    th { padding: 8px 12px; text-align: left; color: #64748b; font-weight: 500; }
-    tbody tr { border-top: 1px solid #1e2535; }
-    tbody tr:hover { background: #1a2030; }
-    td { padding: 8px 12px; }
-    .badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: 0.72rem; font-weight: 600; }
-    .badge.UP   { background: #064e3b; color: #34d399; }
-    .badge.DOWN { background: #450a0a; color: #f87171; }
-    .badge.BUY  { background: #064e3b; color: #34d399; }
-    .badge.SELL { background: #450a0a; color: #f87171; }
-    footer { padding: 20px 32px; border-top: 1px solid #1e2535; font-size: 0.72rem; color: #374151; }
+    .section h2 { font-size: 0.75rem; font-weight: 600; color: #475569; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 14px; }
+    .chart-wrap { background: #161b27; border: 1px solid #1e2535; border-radius: 14px; padding: 20px; margin-bottom: 20px; }
+    .chart-wrap canvas { max-height: 340px; }
+
+    /* 색상 유틸 */
+    .strong-up   { color: #34d399; }
+    .weak-up     { color: #86efac; }
+    .neutral     { color: #94a3b8; }
+    .weak-down   { color: #fca5a5; }
+    .strong-down { color: #f87171; }
+
+    footer { padding: 18px 32px; border-top: 1px solid #1e2535; font-size: 0.7rem; color: #374151; }
+    #updated { color: #475569; }
   </style>
 </head>
 <body>
+
 <header>
-  <h1>GLD · 2주 롤링 Volume Profile VWAP 추세추종</h1>
-  <p id="meta-desc">데이터 로딩 중...</p>
+  <h1>📊 자산 추세 강도 모니터</h1>
+  <p>2주 롤링 Volume Profile VWAP 변화율 기반 · 1년 백분위 정규화 (-100 ~ +100) · <span id="updated"></span></p>
 </header>
 
-<div class="cards" id="cards"></div>
+<div class="score-grid" id="score-grid"></div>
 
 <div class="section">
-  <h2>포트폴리오 가치</h2>
-  <div class="chart-wrap"><canvas id="chart-portfolio"></canvas></div>
+  <h2>추세 강도 추이 (2025년~)</h2>
+  <div class="chart-wrap"><canvas id="chart-score"></canvas></div>
 </div>
 
 <div class="section">
-  <h2>GLD 가격 + 2주 VWAP</h2>
+  <h2>자산 가격 추이</h2>
   <div class="chart-wrap"><canvas id="chart-price"></canvas></div>
 </div>
 
-<div class="section">
-  <h2>금 비중 변화</h2>
-  <div class="chart-wrap" style="max-height:180px"><canvas id="chart-alloc"></canvas></div>
-</div>
-
-<div class="section">
-  <h2>리밸런싱 기록 (총 <span id="trade-count">-</span>회)</h2>
-  <div class="chart-wrap" style="padding:0; overflow:hidden;">
-    <table>
-      <thead><tr>
-        <th>날짜</th><th>추세</th><th>VWAP (현재)</th><th>VWAP (1주 전)</th><th>액션</th><th>비중</th>
-      </tr></thead>
-      <tbody id="trade-tbody"></tbody>
-    </table>
-  </div>
-</div>
-
 <footer>
-  데이터: Yahoo Finance / GLD (SPDR Gold Shares) · 백테스트는 과거 성과이며 미래를 보장하지 않습니다.
+  데이터: Yahoo Finance · GLD / TLT / BTC-USD / SPY / QQQ · 주 1회 업데이트 · 과거 성과는 미래를 보장하지 않습니다.
 </footer>
 
 <script>
-const thin = (arr, step) => arr.filter((_, i) => i % step === 0 || i === arr.length - 1);
+function scoreColor(s) {
+  if (s === null || s === undefined) return '#475569';
+  if (s >=  70) return '#34d399';
+  if (s >=  30) return '#86efac';
+  if (s >  -30) return '#94a3b8';
+  if (s >  -70) return '#fca5a5';
+  return '#f87171';
+}
+function scoreClass(s) {
+  if (s === null || s === undefined) return 'neutral';
+  if (s >=  70) return 'strong-up';
+  if (s >=  30) return 'weak-up';
+  if (s >  -30) return 'neutral';
+  if (s >  -70) return 'weak-down';
+  return 'strong-down';
+}
+function scoreLabel(s) {
+  if (s === null || s === undefined) return '–';
+  if (s >=  70) return '강한 상승';
+  if (s >=  30) return '약한 상승';
+  if (s >  -30) return '횡보';
+  if (s >  -70) return '약한 하락';
+  return '강한 하락';
+}
 
-fetch('data.json').then(r => r.json()).then(data => {
-  const { meta, summary, daily, trades } = data;
+// 게이지: -100~+100 → 0~100% 너비 (중앙=50%)
+function gaugeWidth(s) {
+  if (s === null) return 50;
+  return Math.round((s + 100) / 2);
+}
 
-  // meta
-  document.getElementById('meta-desc').textContent =
-    `${meta.ticker} · ${meta.start} ~ ${meta.end} · 초기자금 ${(meta.initial_capital/1e6).toFixed(0)}백만원 · 2주 VWAP (${meta.buckets}버킷) · 주당 ${meta.shift_pct}% 리밸런싱`;
+fetch('trend_data.json').then(r => r.json()).then(data => {
+  const names = Object.keys(data);
 
-  // cards
-  const sRet = summary.strategy_return;
-  const bRet = summary.buyhold_return;
-  const diff = (sRet - bRet).toFixed(2);
-  document.getElementById('cards').innerHTML = `
-    <div class="card"><div class="label">전략 수익률</div><div class="value ${sRet>=0?'up':'down'}">${sRet>=0?'+':''}${sRet}%</div></div>
-    <div class="card"><div class="label">Buy &amp; Hold</div><div class="value ${bRet>=0?'up':'down'}">${bRet>=0?'+':''}${bRet}%</div></div>
-    <div class="card"><div class="label">초과 수익</div><div class="value ${diff>=0?'up':'down'}">${diff>=0?'+':''}${diff}%p</div></div>
-    <div class="card"><div class="label">전략 최종금액</div><div class="value neu">${(summary.strategy_final/1e4).toFixed(0)}만원</div></div>
-    <div class="card"><div class="label">B&amp;H 최종금액</div><div class="value neu">${(summary.buyhold_final/1e4).toFixed(0)}만원</div></div>
-    <div class="card"><div class="label">총 리밸런싱</div><div class="value neu">${summary.total_trades}회</div></div>
-    <div class="card"><div class="label">현재 금 비중</div><div class="value neu">${summary.final_allocation}%</div></div>
-  `;
+  // 최신 날짜
+  const latest = data[names[0]].records.slice(-1)[0];
+  document.getElementById('updated').textContent = latest ? latest.date + ' 기준' : '';
 
-  // trade table
-  document.getElementById('trade-count').textContent = trades.length;
-  document.getElementById('trade-tbody').innerHTML = [...trades].reverse().map(t => `
-    <tr>
-      <td>${t.date}</td>
-      <td><span class="badge ${t.trend}">${t.trend === 'UP' ? '↑ 상승' : '↓ 하락'}</span></td>
-      <td>$${t.vwap_2w}</td>
-      <td>$${t.vwap_prev}</td>
-      <td><span class="badge ${t.action}">${t.action === 'BUY' ? '매수' : '매도'}</span></td>
-      <td>${t.allocation}%</td>
-    </tr>`).join('');
+  // ── 강도 카드 ──
+  const grid = document.getElementById('score-grid');
+  names.forEach(name => {
+    const asset = data[name];
+    const rec   = asset.records.slice(-1)[0] || {};
+    const score = rec.score;
+    const chg   = rec.chg;
+    const color = asset.color;
+    const gw    = gaugeWidth(score);
 
-  // 차트 공통 옵션
+    const card = document.createElement('div');
+    card.className = 'score-card';
+    card.innerHTML = `
+      <div class="ticker">${asset.ticker}</div>
+      <div class="name">${name}</div>
+      <div class="score ${scoreClass(score)}" style="color:${scoreColor(score)}">${score !== null ? (score > 0 ? '+' : '') + score : '–'}</div>
+      <div class="sub">${scoreLabel(score)} · 주간변화 ${chg !== null ? (chg > 0 ? '+' : '') + chg + '%' : '–'}</div>
+      <div class="gauge"><div class="gauge-fill" style="width:${gw}%;background:${scoreColor(score)}"></div></div>
+      <div class="bar-bg"></div>
+      <div class="bar-fg" style="background:${color};left:${Math.min(gw,50)}%;width:${Math.abs(gw-50)}%"></div>
+    `;
+    grid.appendChild(card);
+  });
+
   const gridColor = '#1e2535';
   const tickColor = '#475569';
-  const baseOpts = {
-    responsive: true,
-    maintainAspectRatio: true,
-    interaction: { mode: 'index', intersect: false },
-    plugins: { legend: { labels: { color: '#94a3b8', boxWidth: 12, font: { size: 11 } } } },
-    scales: {
-      x: { ticks: { color: tickColor, maxTicksLimit: 10, font: { size: 10 } }, grid: { color: gridColor } },
-      y: { ticks: { color: tickColor, font: { size: 10 } }, grid: { color: gridColor } },
-    },
+  const baseScales = {
+    x: { ticks: { color: tickColor, maxTicksLimit: 12, font:{size:10} }, grid: { color: gridColor } },
+    y: { ticks: { color: tickColor, font:{size:10} }, grid: { color: gridColor } },
   };
 
-  // 데이터 thin (500일 → 약 100포인트)
-  const step = Math.ceil(daily.length / 120);
-  const d = thin(daily, step);
-  const labels = d.map(r => r.date);
+  // 공통 라벨 (첫 번째 자산 기준)
+  const labels = data[names[0]].records.map(r => r.date);
 
-  // 1. 포트폴리오
-  new Chart(document.getElementById('chart-portfolio'), {
+  // ── 추세 강도 차트 ──
+  const scoreDatasets = names.map(name => ({
+    label: name,
+    data:  data[name].records.map(r => r.score),
+    borderColor: data[name].color,
+    borderWidth: 2,
+    pointRadius: 0,
+    tension: 0.3,
+    fill: false,
+  }));
+
+  new Chart(document.getElementById('chart-score'), {
     type: 'line',
-    data: {
-      labels,
-      datasets: [
-        { label: '전략', data: d.map(r => r.strategy), borderColor: '#34d399', borderWidth: 2, pointRadius: 0, tension: 0.3, fill: false },
-        { label: 'Buy & Hold', data: d.map(r => r.buyhold), borderColor: '#60a5fa', borderWidth: 2, pointRadius: 0, tension: 0.3, fill: false, borderDash: [4,3] },
-      ]
-    },
-    options: { ...baseOpts,
-      plugins: { ...baseOpts.plugins },
-      scales: { ...baseOpts.scales, y: { ...baseOpts.scales.y, ticks: { ...baseOpts.scales.y.ticks, callback: v => (v/1e4).toFixed(0)+'만' } } }
+    data: { labels, datasets: scoreDatasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#94a3b8', boxWidth: 12, font:{size:11} } },
+        annotation: {
+          annotations: {
+            zero: { type:'line', yMin:0, yMax:0, borderColor:'#334155', borderWidth:1, borderDash:[4,4] },
+            pos70: { type:'line', yMin:70, yMax:70, borderColor:'#1a3a2a', borderWidth:1, borderDash:[2,4] },
+            neg70: { type:'line', yMin:-70, yMax:-70, borderColor:'#3a1a1a', borderWidth:1, borderDash:[2,4] },
+          }
+        }
+      },
+      scales: {
+        ...baseScales,
+        y: { ...baseScales.y, min:-100, max:100, ticks:{...baseScales.y.ticks, callback: v => v > 0 ? '+'+v : v } },
+      },
     }
   });
 
-  // 2. 가격 + VWAP
-  new Chart(document.getElementById('chart-price'), {
-    type: 'line',
-    data: {
-      labels,
-      datasets: [
-        { label: 'GLD 가격', data: d.map(r => r.price), borderColor: '#fbbf24', borderWidth: 1.5, pointRadius: 0, tension: 0.2, fill: false },
-        { label: '2주 VWAP', data: d.map(r => r.vwap), borderColor: '#a78bfa', borderWidth: 2, pointRadius: 0, tension: 0.3, fill: false, borderDash: [5,3] },
-      ]
-    },
-    options: baseOpts,
+  // ── 가격 차트 (정규화: 각 자산 첫 값=100) ──
+  const priceDatasets = names.map(name => {
+    const recs = data[name].records;
+    const base = recs.find(r => r.price)?.price || 1;
+    return {
+      label: name,
+      data:  recs.map(r => r.price ? round2(r.price / base * 100) : null),
+      borderColor: data[name].color,
+      borderWidth: 1.5,
+      pointRadius: 0,
+      tension: 0.2,
+      fill: false,
+    };
   });
 
-  // 3. 비중
-  new Chart(document.getElementById('chart-alloc'), {
+  function round2(v) { return Math.round(v * 100) / 100; }
+
+  new Chart(document.getElementById('chart-price'), {
     type: 'line',
-    data: {
-      labels,
-      datasets: [
-        { label: '금 비중 (%)', data: d.map(r => r.allocation), borderColor: '#f97316', borderWidth: 2, pointRadius: 0, tension: 0.1, fill: { target: 'origin', above: 'rgba(249,115,22,0.08)' } },
-      ]
-    },
-    options: { ...baseOpts,
-      scales: { ...baseOpts.scales, y: { ...baseOpts.scales.y, min: 0, max: 100, ticks: { ...baseOpts.scales.y.ticks, callback: v => v+'%' } } }
+    data: { labels, datasets: priceDatasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { labels: { color: '#94a3b8', boxWidth: 12, font:{size:11} } },
+        tooltip: { callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(1)}` } }
+      },
+      scales: {
+        ...baseScales,
+        y: { ...baseScales.y, ticks: { ...baseScales.y.ticks, callback: v => v.toFixed(0) } },
+      },
     }
   });
 });
