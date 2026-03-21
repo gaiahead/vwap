@@ -260,11 +260,11 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       },
       scales:{
         x:{ticks:{color:TICK,maxTicksLimit:10,font:{size:10}},grid:{color:GRID}},
-        y:{min:50,max:200,ticks:{color:TICK,font:{size:10},callback:v=>v.toFixed(0)},grid:{color:GRID},
+        y:{min:100,max:200,ticks:{color:TICK,font:{size:10},callback:v=>v.toFixed(0)},grid:{color:GRID},
            afterDataLimits(scale){
              if(activeSet.size===0){scale.min=100;scale.max=200;return;}
              const pad=10;
-             scale.min=Math.floor(scale.min-pad);
+             scale.min=Math.max(0, Math.floor(scale.min-pad));
              scale.max=Math.ceil(scale.max+pad);
            }
         },
