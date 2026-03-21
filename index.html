@@ -9,16 +9,15 @@
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:'Apple SD Gothic Neo','Pretendard',sans-serif;background:#0f1117;color:#e2e8f0;min-height:100vh}
-    header{padding:20px 28px 12px;border-bottom:1px solid #1e2535}
+    header{padding:20px 28px 14px;border-bottom:1px solid #1e2535}
     header h1{font-size:1.2rem;font-weight:700;color:#f8fafc}
     header p{font-size:0.74rem;color:#475569;margin-top:4px}
 
-    .section{padding:20px 28px 0}
-    .section h2{font-size:0.72rem;font-weight:600;color:#475569;text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px}
+    .chart-section{padding:20px 28px 0}
     .chart-wrap{background:#161b27;border:1px solid #1e2535;border-radius:14px;padding:18px;margin-bottom:20px}
-    .chart-wrap canvas{max-height:320px}
+    .chart-wrap canvas{max-height:340px}
 
-    .asset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;padding:0 28px 24px}
+    .asset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:8px;padding:0 28px 24px}
     .asset-btn{
       background:#161b27;border:1.5px solid #1e2535;border-radius:10px;
       padding:10px 12px;cursor:pointer;transition:all .2s;user-select:none;
@@ -28,30 +27,23 @@
     .asset-btn:hover{background:#1a2030}
     .asset-btn .name{font-size:0.82rem;font-weight:700;color:#94a3b8;transition:color .2s}
     .asset-btn.active .name{color:var(--c)}
-    .asset-btn .val20{font-size:1.3rem;font-weight:800;line-height:1.1;margin-top:4px}
+    .asset-btn .val{font-size:1.25rem;font-weight:800;line-height:1.1;margin-top:5px}
     .asset-btn .indicator{position:absolute;top:0;left:0;right:0;height:2px;background:var(--c);opacity:0;transition:opacity .2s}
     .asset-btn.active .indicator{opacity:1}
-
-    footer{padding:14px 28px;border-top:1px solid #1e2535;font-size:0.68rem;color:#374151}
   </style>
 </head>
 <body>
 
 <header>
   <h1>📊 추세 강도 모니터</h1>
-  <p>VWAP(Volume Weighted Average Price) · <span id="updated"></span></p>
+  <p>VWAP (Volume Weighted Average Price) · <span id="updated"></span></p>
 </header>
 
-<div class="section">
-  <h2>VWAP 추이</h2>
+<div class="chart-section">
   <div class="chart-wrap"><canvas id="chart-structure"></canvas></div>
 </div>
 
 <div class="asset-grid" id="asset-grid"></div>
-
-<footer>
-  데이터: Yahoo Finance · 주 1회 업데이트 · 과거 성과는 미래를 보장하지 않습니다.
-</footer>
 
 <script>
 const GRID='#1e2535', TICK='#475569';
@@ -66,16 +58,14 @@ let activeSet = new Set(['TLT']);
 fetch('trend_data.json').then(r=>r.json()).then(data=>{
   const names = ['TLT','GLD','IBIT','SPY','QQQ','삼성전자','SK하이닉스','리노공업'].filter(n=>data[n]);
 
-  // 최신 날짜
-  const latestDate = data[names[0]].records.slice(-1)[0]?.date || '';
-  document.getElementById('updated').textContent = latestDate + ' 기준';
+  // 헤더 업데이트 시각
+  document.getElementById('updated').textContent =
+    (data._meta?.updated_at || '') + ' 기준';
 
-  // 20d VWAP 정규화 값 (vwap_structure[1] = 20d, index from start=10d)
-  function get20d(name){
+  // 10d 정규화값
+  function get10d(name){
     const s = data[name].vwap_structure || [];
-    // s[0]=10d, s[1]=20d
-    const v = s[1]?.norm;
-    return v != null ? round2(v - 100) : null;
+    return s[0]?.norm ?? null; // s[0] = 10d
   }
 
   const grid = document.getElementById('asset-grid');
@@ -83,10 +73,10 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
   function renderCards(){
     grid.innerHTML='';
     names.forEach(name=>{
-      const color   = data[name].color;
-      const isActive= activeSet.has(name);
-      const v20     = get20d(name);
-      const valColor= v20==null?'#475569': v20>=0?'#34d399':'#f87171';
+      const color    = data[name].color;
+      const isActive = activeSet.has(name);
+      const v10      = get10d(name);
+      const valColor = v10==null?'#475569': v10>=100?'#34d399':'#f87171';
 
       const btn = document.createElement('div');
       btn.className='asset-btn'+(isActive?' active':'');
@@ -94,19 +84,19 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       btn.innerHTML=`
         <div class="indicator"></div>
         <div class="name">${name}</div>
-        <div class="val20" style="color:${isActive?color:valColor}">${v20!=null?(v20>=0?'+':'')+v20+'%':'–'}</div>
+        <div class="val" style="color:${isActive?color:valColor}">${v10!=null?v10.toFixed(2):'–'}</div>
       `;
       btn.addEventListener('click',()=>{
         if(activeSet.has(name)) activeSet.delete(name);
         else activeSet.add(name);
         renderCards();
-        updateCharts();
+        updateChart();
       });
       grid.appendChild(btn);
     });
   }
 
-  function makeStructDatasets(){
+  function makeDatasets(){
     return names.map(name=>{
       const isActive = activeSet.has(name);
       const reversed = [...(data[name].vwap_structure||[])].reverse();
@@ -124,7 +114,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     });
   }
 
-  function makeStructAnnotations(){
+  function makeAnnotations(){
     const annotations = {
       base:{type:'line',yMin:100,yMax:100,borderColor:'#475569',borderWidth:1.5},
     };
@@ -134,10 +124,9 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     }).filter(d=>d.val!=null).sort((a,b)=>b.val-a.val);
 
     active.forEach(({name,val})=>{
-      const diff = round2(val-100);
       annotations['lbl_'+name]={
         type:'label', xValue:19, yValue:val,
-        content: name+' '+(diff>=0?'+':'')+diff+'%',
+        content: name+' '+val.toFixed(2),
         color: data[name].color,
         font:{size:10,weight:'bold'},
         backgroundColor:'rgba(15,17,23,0.85)',
@@ -149,14 +138,14 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     return annotations;
   }
 
-  function updateCharts(){
+  function updateChart(){
     structChart.data.datasets.forEach((d,i)=>{
-      const ds=makeStructDatasets();
+      const ds=makeDatasets();
       d.borderWidth=ds[i].borderWidth;
       d.hidden=ds[i].hidden;
       d.pointRadius=ds[i].pointRadius;
     });
-    structChart.options.plugins.annotation.annotations=makeStructAnnotations();
+    structChart.options.plugins.annotation.annotations=makeAnnotations();
     structChart.update('none');
   }
 
@@ -164,20 +153,28 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
 
   structChart = new Chart(document.getElementById('chart-structure'),{
     type:'line',
-    data:{labels:STRUCT_LABELS, datasets:makeStructDatasets()},
+    data:{labels:STRUCT_LABELS, datasets:makeDatasets()},
     options:{
       responsive:true, maintainAspectRatio:true,
       animation:{duration:300},
       interaction:{mode:'index',intersect:false},
-      layout:{padding:{right:80}},
+      layout:{padding:{right:90}},
       plugins:{
         legend:{display:false},
-        annotation:{annotations:makeStructAnnotations()},
+        annotation:{annotations:makeAnnotations()},
         tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(2)}`}}
       },
       scales:{
         x:{ticks:{color:TICK,font:{size:10}},grid:{color:GRID}},
-        y:{ticks:{color:TICK,font:{size:10},callback:v=>v.toFixed(0)},grid:{color:GRID}},
+        y:{
+          ticks:{
+            color:TICK,
+            font:{size:10},
+            count:10,
+            callback:v=>v.toFixed(2)
+          },
+          grid:{color:GRID}
+        },
       }
     }
   });
