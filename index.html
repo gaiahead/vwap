@@ -150,21 +150,77 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     });
   }
 
-  function updateCharts(){
-    ['score','price'].forEach((type,ci)=>{
-      const chart = ci===0?scoreChart:priceChart;
-      const ds    = makeDatasets(type);
-      chart.data.datasets.forEach((d,i)=>{
-        d.borderWidth = ds[i].borderWidth;
-        d.hidden      = ds[i].hidden;
-      });
-      chart.update('none');
+  // 가격 차트용 라인 끝 annotation 생성
+  function makePriceAnnotations(){
+    const annotations = {
+      base:{type:'line',yMin:100,yMax:100,borderColor:'#475569',borderWidth:1.5},
+    };
+    names.forEach(name=>{
+      if(!activeSet.has(name)) return;
+      const recs  = data[name].records;
+      const base  = recs.find(r=>r.price)?.price||1;
+      const last  = recs.slice(-1)[0];
+      if(!last?.price) return;
+      const val   = round2(last.price/base*100);
+      const ret   = round2(val-100);
+      const label = (ret>=0?'+':'')+ret+'%';
+      annotations['lbl_'+name] = {
+        type:'label',
+        xValue: labels[labels.length-1],
+        yValue: val,
+        content: [name, label],
+        color: data[name].color,
+        font:{size:10, weight:'bold'},
+        backgroundColor:'rgba(15,17,23,0.85)',
+        padding:{x:5,y:3},
+        position:'start',
+        xAdjust: -4,
+      };
     });
+    return annotations;
+  }
+
+  // 추세 강도 차트용 라인 끝 annotation
+  function makeScoreAnnotations(){
+    const annotations = {
+      zero:{type:'line',yMin:0,yMax:0,borderColor:'#475569',borderWidth:1.5},
+    };
+    names.forEach(name=>{
+      if(!activeSet.has(name)) return;
+      const recs = data[name].records;
+      const last = recs.slice(-1)[0];
+      if(last?.score==null) return;
+      const val  = last.score;
+      annotations['lbl_'+name] = {
+        type:'label',
+        xValue: labels[labels.length-1],
+        yValue: val,
+        content: [name, (val>=0?'+':'')+val],
+        color: data[name].color,
+        font:{size:10, weight:'bold'},
+        backgroundColor:'rgba(15,17,23,0.85)',
+        padding:{x:5,y:3},
+        position:'start',
+        xAdjust: -4,
+      };
+    });
+    return annotations;
+  }
+
+  function updateCharts(){
+    const scoreDS = makeDatasets('score');
+    const priceDS = makeDatasets('price');
+    scoreChart.data.datasets.forEach((d,i)=>{ d.borderWidth=scoreDS[i].borderWidth; d.hidden=scoreDS[i].hidden; });
+    priceChart.data.datasets.forEach((d,i)=>{ d.borderWidth=priceDS[i].borderWidth; d.hidden=priceDS[i].hidden; });
+    scoreChart.options.plugins.annotation.annotations = makeScoreAnnotations();
+    priceChart.options.plugins.annotation.annotations = makePriceAnnotations();
+    scoreChart.update('none');
+    priceChart.update('none');
   }
 
   renderCards();
 
-  // ── 추세 강도 차트 (0선 강조) ──
+  // ── 추세 강도 차트 ──
   scoreChart = new Chart(document.getElementById('chart-score'),{
     type:'line',
     data:{labels, datasets: makeDatasets('score')},
@@ -172,16 +228,10 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       responsive:true, maintainAspectRatio:true,
       animation:{duration:300},
       interaction:{mode:'index',intersect:false},
+      layout:{padding:{right:70}},
       plugins:{
         legend:{display:false},
-        annotation:{
-          annotations:{
-            zero:{
-              type:'line', yMin:0, yMax:0,
-              borderColor:'#475569', borderWidth:1.5,
-            },
-          }
-        }
+        annotation:{annotations: makeScoreAnnotations()}
       },
       scales:{
         x:{ticks:{color:TICK,maxTicksLimit:10,font:{size:10}},grid:{color:GRID}},
@@ -190,7 +240,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     }
   });
 
-  // ── 가격 차트 (100선 강조) ──
+  // ── 가격 차트 ──
   priceChart = new Chart(document.getElementById('chart-price'),{
     type:'line',
     data:{labels, datasets: makeDatasets('price')},
@@ -198,20 +248,14 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       responsive:true, maintainAspectRatio:true,
       animation:{duration:300},
       interaction:{mode:'index',intersect:false},
+      layout:{padding:{right:70}},
       plugins:{
         legend:{display:false},
-        annotation:{
-          annotations:{
-            base:{
-              type:'line', yMin:100, yMax:100,
-              borderColor:'#475569', borderWidth:1.5,
-            },
-          }
-        }
+        annotation:{annotations: makePriceAnnotations()}
       },
       scales:{
         x:{ticks:{color:TICK,maxTicksLimit:10,font:{size:10}},grid:{color:GRID}},
-        y:{ticks:{color:TICK,font:{size:10},callback:v=>v.toFixed(0)},grid:{color:GRID}},
+        y:{min:50,max:200,ticks:{color:TICK,font:{size:10},callback:v=>v.toFixed(0)},grid:{color:GRID}},
       }
     }
   });
