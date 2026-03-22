@@ -164,7 +164,7 @@ for name, ticker, group in ASSETS:
     s = vwap_structure
     print(f"    200d={s[-1]['norm']} / 10d={s[0]['norm']}")
 
-output_path = "/tmp/trend_data.json"
+output_path = "trend_data.json"
 with open(output_path, "w", encoding="utf-8") as f:
     json.dump(result, f, ensure_ascii=False)
 print(f"\n✅ 저장 완료: {output_path}  (기준: {run_time})")
