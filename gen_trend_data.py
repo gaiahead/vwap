@@ -98,7 +98,7 @@ def strength_score(arr, norm_window=52):
 
 # 실행 시각 (KST)
 KST = timezone(timedelta(hours=9))
-run_time = datetime.now(KST).strftime("%Y-%m-%d 07:00")
+run_time = datetime.now(KST).strftime("%Y-%m-%d %H:%M")
 
 result = {"_meta": {"updated_at": run_time}}
 cutoff = date(2025, 1, 6)
