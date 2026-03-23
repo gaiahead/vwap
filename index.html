@@ -35,6 +35,17 @@
     .asset-btn .name{font-size:0.78rem;font-weight:700;color:#94a3b8;transition:color .2s;white-space:nowrap}
     .asset-btn.active .name{color:var(--c)}
     .asset-btn .val{font-size:1.2rem;font-weight:800;line-height:1.1;margin-top:4px}
+    .asset-btn .sci{font-size:0.68rem;color:#475569;margin-top:3px}
+    .asset-btn.active .sci{color:#64748b}
+
+    /* SCI 섹션 */
+    .sci-section{padding:0 28px 24px}
+    .sci-title{font-size:0.72rem;font-weight:700;color:#475569;letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px}
+    .sci-table{width:100%;border-collapse:collapse;font-size:0.8rem}
+    .sci-table th{padding:5px 10px;text-align:right;font-size:0.65rem;font-weight:600;color:#334155;letter-spacing:.04em}
+    .sci-table th:first-child{text-align:left}
+    .sci-table td{padding:7px 10px;text-align:right;color:#cbd5e1;border-top:1px solid #161b27}
+    .sci-table td:first-child{text-align:left;font-weight:700;color:#94a3b8}
     .asset-btn .indicator{position:absolute;top:0;left:0;right:0;height:2px;background:var(--c);opacity:0;transition:opacity .2s}
     .asset-btn.active .indicator{opacity:1}
   </style>
@@ -51,6 +62,22 @@
 </div>
 
 <div class="groups" id="groups"></div>
+
+<div class="sci-section" id="sci-section" style="display:none">
+  <div class="sci-title">📐 SCI (Slope Consistency Index)</div>
+  <table class="sci-table">
+    <thead>
+      <tr>
+        <th>종목</th>
+        <th>SCI</th>
+        <th>기준기울기</th>
+        <th>10d</th><th>20d</th><th>30d</th><th>40d</th><th>50d</th>
+        <th>60d</th><th>70d</th><th>80d</th><th>90d</th><th>100d</th>
+      </tr>
+    </thead>
+    <tbody id="sci-body"></tbody>
+  </table>
+</div>
 
 <script>
 const GRID='#1e2535', TICK='#475569';
@@ -93,6 +120,75 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
 
   function get10d(name){ return data[name]?.vwap_structure?.[0]?.norm??null; }
 
+  // ─── SCI 계산 ──────────────────────────────────────────
+  const SCI_DECAY = 0.8;
+
+  function calcSCI(name) {
+    const vs = data[name]?.vwap_structure;
+    if (!vs) return null;
+    const vmap = {};
+    vs.forEach(v => { vmap[v.window] = v.vwap; });
+    if (!vmap[10] || !vmap[200]) return null;
+
+    const baseSlope = (vmap[10] - vmap[200]) / 19;
+    const weights = Array.from({length:10}, (_,i) => 10 * Math.pow(SCI_DECAY, i));
+    const totalW = weights.reduce((a,b)=>a+b, 0);
+
+    let weightedSum = 0;
+    const rowScores = [];
+
+    for (let i = 0; i < 10; i++) {
+      const endpoint = (i+1)*10;
+      let above = 0, total = 0;
+      for (let j = 1; j <= 10; j++) {
+        const start = endpoint + j*10;
+        if (!vmap[start]) continue;
+        const slope = (vmap[endpoint] - vmap[start]) / j;
+        if (slope > baseSlope) above++;
+        total++;
+      }
+      const rowScore = total > 0 ? above/total : 0;
+      rowScores.push(rowScore);
+      weightedSum += weights[i] * rowScore;
+    }
+
+    return { sci: weightedSum/totalW, rowScores, baseSlope };
+  }
+
+  function renderSCI() {
+    const targets = ['삼성전자','SK하이닉스','한미반도체','리노공업'];
+    const hasSCI = targets.some(n => data[n]);
+    if (!hasSCI) return;
+
+    document.getElementById('sci-section').style.display = '';
+    const tbody = document.getElementById('sci-body');
+    tbody.innerHTML = '';
+
+    // SCI 기준 정렬
+    const rows = allNames
+      .map(n => ({ name: n, result: calcSCI(n) }))
+      .filter(r => r.result !== null)
+      .sort((a,b) => b.result.sci - a.result.sci);
+
+    rows.forEach(({name, result}) => {
+      const {sci, rowScores, baseSlope} = result;
+      const price = data[name]?.latest_price;
+      const sciColor = sci >= 0.8 ? '#4ade80' : sci >= 0.6 ? '#94a3b8' : '#f87171';
+      const tr = document.createElement('tr');
+      const cells = [
+        `<td>${name}</td>`,
+        `<td style="color:${sciColor};font-weight:700">${sci.toFixed(3)}</td>`,
+        `<td style="color:#334155;font-size:0.72rem">${(baseSlope/1000).toFixed(1)}k/10d</td>`,
+        ...rowScores.map(s => {
+          const c = s >= 0.8 ? '#4ade80' : s >= 0.5 ? '#94a3b8' : '#475569';
+          return `<td style="color:${c}">${(s*10).toFixed(0)}/10</td>`;
+        })
+      ];
+      tr.innerHTML = cells.join('');
+      tbody.appendChild(tr);
+    });
+  }
+
   const groupsEl = document.getElementById('groups');
 
   function renderCards(){
@@ -110,10 +206,13 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
         const btn = document.createElement('div');
         btn.className='asset-btn'+(isActive?' active':'');
         btn.style.setProperty('--c',color);
+        const sciResult = calcSCI(name);
+        const sciStr = sciResult ? `SCI ${sciResult.sci.toFixed(3)}` : '';
         btn.innerHTML=`
           <div class="indicator"></div>
           <div class="name">${name}</div>
           <div class="val" style="color:${color}">${v10!=null?v10.toFixed(2):'–'}</div>
+          <div class="sci">${sciStr}</div>
         `;
         btn.addEventListener('click',()=>{
           if(activeSet.has(name)) activeSet.delete(name);
@@ -180,6 +279,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
   }
 
   renderCards();
+  renderSCI();
 
   structChart = new Chart(document.getElementById('chart-structure'),{
     type:'line',
