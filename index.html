@@ -319,5 +319,62 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
   window.addEventListener('resize', resizeChart);
 });
 </script>
+
+<!-- SCI 가중치 설명 -->
+<div style="padding:16px 28px 32px;border-top:1px solid #1e2535;margin-top:8px">
+  <div style="font-size:0.72rem;font-weight:700;color:#334155;letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px">
+    📐 SCI — Slope Consistency Index
+  </div>
+  <div style="font-size:0.75rem;color:#475569;margin-bottom:10px">
+    투자금 = 기준값 × SCI &nbsp;|&nbsp; SCI = Σ(가중치 × 행 점수) / Σ(가중치) &nbsp;|&nbsp; 지수 감소 0.75
+  </div>
+  <div style="font-size:0.73rem;color:#334155;margin-bottom:10px">
+    기준기울기 = (VWAP[10d] − VWAP[200d]) / 19구간 &nbsp;|&nbsp;
+    행 점수 = endpoint에서 시작점 10개 중 기준기울기 초과 비율
+  </div>
+  <table style="border-collapse:collapse;font-size:0.72rem;width:100%;max-width:700px">
+    <thead>
+      <tr>
+        <th style="padding:4px 12px;text-align:left;color:#334155;border-bottom:1px solid #1e2535">Endpoint</th>
+        <th style="padding:4px 12px;text-align:right;color:#334155;border-bottom:1px solid #1e2535">가중치</th>
+        <th style="padding:4px 12px;text-align:right;color:#334155;border-bottom:1px solid #1e2535">비중</th>
+        <th style="padding:4px 12px;text-align:left;color:#1e2535;border-bottom:1px solid #1e2535;padding-left:16px">시작점 범위</th>
+      </tr>
+    </thead>
+    <tbody id="sci-weight-table"></tbody>
+  </table>
+</div>
+
+<script>
+(function(){
+  const decay = 0.75;
+  const weights = Array.from({length:10}, (_,i) => +(10 * Math.pow(decay, i)).toFixed(4));
+  const total = weights.reduce((a,b)=>a+b,0);
+  const tbody = document.getElementById('sci-weight-table');
+  weights.forEach((w, i) => {
+    const ep = (i+1)*10;
+    const pct = (w/total*100).toFixed(2);
+    const barW = Math.round(w/total*120);
+    const bar = `<span style="display:inline-block;width:${barW}px;height:8px;background:#1e3a5f;border-radius:2px;vertical-align:middle;margin-right:6px"></span>`;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="padding:4px 12px;color:#94a3b8">${ep}d</td>
+      <td style="padding:4px 12px;text-align:right;color:#cbd5e1">${w.toFixed(4)}</td>
+      <td style="padding:4px 12px;text-align:right;color:#60a5fa">${pct}%</td>
+      <td style="padding:4px 12px 4px 16px;color:#334155">${bar}${ep+10}d ~ ${ep+100}d</td>
+    `;
+    tbody.appendChild(tr);
+  });
+  // 합계 행
+  const tfootr = document.createElement('tr');
+  tfootr.innerHTML = `
+    <td style="padding:6px 12px;color:#475569;border-top:1px solid #1e2535;font-weight:600">합계</td>
+    <td style="padding:6px 12px;text-align:right;color:#475569;border-top:1px solid #1e2535">${total.toFixed(4)}</td>
+    <td style="padding:6px 12px;text-align:right;color:#475569;border-top:1px solid #1e2535">100.00%</td>
+    <td style="padding:6px 12px 6px 16px;color:#334155;border-top:1px solid #1e2535">10~50d: 80.8% / 60~100d: 19.2%</td>
+  `;
+  tbody.appendChild(tfootr);
+})();
+</script>
 </body>
 </html>
