@@ -122,6 +122,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
 
   // ─── SCI 계산 ──────────────────────────────────────────
   const SCI_DECAY = 0.75;
+  const SCI_THRESHOLD = 0.02;  // endpoint × 2% (10d당, ≈ 연60% 기준)
 
   function calcSCI(name) {
     const vs = data[name]?.vwap_structure;
@@ -130,7 +131,6 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     vs.forEach(v => { vmap[v.window] = v.vwap; });
     if (!vmap[10] || !vmap[200]) return null;
 
-    const baseSlope = (vmap[10] - vmap[200]) / 19;
     const weights = Array.from({length:10}, (_,i) => 10 * Math.pow(SCI_DECAY, i));
     const totalW = weights.reduce((a,b)=>a+b, 0);
 
@@ -144,7 +144,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
         const start = endpoint + j*10;
         if (!vmap[start]) continue;
         const slope = (vmap[endpoint] - vmap[start]) / j;
-        if (slope > baseSlope) above++;
+        if (slope > vmap[endpoint] * SCI_THRESHOLD) above++;
         total++;
       }
       const rowScore = total > 0 ? above/total : 0;
@@ -329,8 +329,8 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     투자금 = 기준값 × SCI &nbsp;|&nbsp; SCI = Σ(가중치 × 행 점수) / Σ(가중치) &nbsp;|&nbsp; 지수 감소 0.75
   </div>
   <div style="font-size:0.73rem;color:#334155;margin-bottom:10px">
-    기준기울기 = (VWAP[10d] − VWAP[200d]) / 19구간 &nbsp;|&nbsp;
-    행 점수 = endpoint에서 시작점 10개 중 기준기울기 초과 비율
+    비교 기준: slope &gt; endpoint × 2% (10d당 ≈ 주간 1% = 연 60%) &nbsp;|&nbsp;
+    행 점수 = 100개 슬로프 중 기준 초과 비율 (가중 평균)
   </div>
   <table style="border-collapse:collapse;font-size:0.72rem;width:100%;max-width:700px">
     <thead>
