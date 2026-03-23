@@ -121,7 +121,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
   function get10d(name){ return data[name]?.vwap_structure?.[0]?.norm??null; }
 
   // ─── SCI 계산 ──────────────────────────────────────────
-  const SCI_DECAY = 0.8;
+  const SCI_DECAY = 0.75;
 
   function calcSCI(name) {
     const vs = data[name]?.vwap_structure;
