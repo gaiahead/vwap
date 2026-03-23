@@ -70,7 +70,7 @@
       <tr>
         <th>종목</th>
         <th>SCI</th>
-        <th>기준기울기</th>
+        <th>SCI%</th>
         <th>10d</th><th>20d</th><th>30d</th><th>40d</th><th>50d</th>
         <th>60d</th><th>70d</th><th>80d</th><th>90d</th><th>100d</th>
       </tr>
@@ -152,7 +152,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       weightedSum += weights[i] * rowScore;
     }
 
-    return { sci: weightedSum/totalW, rowScores, baseSlope };
+    return { sci: weightedSum/totalW, rowScores };
   }
 
   function renderSCI() {
@@ -171,14 +171,14 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       .sort((a,b) => b.result.sci - a.result.sci);
 
     rows.forEach(({name, result}) => {
-      const {sci, rowScores, baseSlope} = result;
+      const {sci, rowScores} = result;
       const price = data[name]?.latest_price;
       const sciColor = sci >= 0.8 ? '#4ade80' : sci >= 0.6 ? '#94a3b8' : '#f87171';
       const tr = document.createElement('tr');
       const cells = [
         `<td>${name}</td>`,
         `<td style="color:${sciColor};font-weight:700">${sci.toFixed(3)}</td>`,
-        `<td style="color:#334155;font-size:0.72rem">${(baseSlope/1000).toFixed(1)}k/10d</td>`,
+        `<td style="color:#334155;font-size:0.72rem">${(sci*100).toFixed(1)}%</td>`,
         ...rowScores.map(s => {
           const c = s >= 0.8 ? '#4ade80' : s >= 0.5 ? '#94a3b8' : '#475569';
           return `<td style="color:${c}">${(s*10).toFixed(0)}/10</td>`;
