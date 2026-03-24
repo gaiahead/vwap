@@ -122,7 +122,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
 
   // ─── SCI 계산 ──────────────────────────────────────────
   const SCI_DECAY = 0.75;
-  const SCI_THRESHOLD = 0.02;  // endpoint × 2% (10d당, ≈ 연60% 기준)
+  const SCI_THRESHOLD = 0.01;  // endpoint × 1% (10d당, ≈ 연30% 기준)
 
   function calcSCI(name) {
     const vs = data[name]?.vwap_structure;
@@ -329,7 +329,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     투자금 = 기준값 × SCI &nbsp;|&nbsp; SCI = Σ(가중치 × 행 점수) / Σ(가중치) &nbsp;|&nbsp; 지수 감소 0.75
   </div>
   <div style="font-size:0.73rem;color:#334155;margin-bottom:10px">
-    비교 기준: slope &gt; endpoint × 2% (10d당 ≈ 주간 1% = 연 60%) &nbsp;|&nbsp;
+    비교 기준: slope &gt; endpoint × 1% (10d당 ≈ 주간 0.5% = 연 30%) &nbsp;|&nbsp;
     행 점수 = 100개 슬로프 중 기준 초과 비율 (가중 평균)
   </div>
   <table style="border-collapse:collapse;font-size:0.72rem;width:100%;max-width:700px">
