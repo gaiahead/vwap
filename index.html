@@ -235,6 +235,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       return {
         label: name,
         data:  reversed.map(s=>s.norm),
+        rawVwap: reversed.map(s=>s.vwap),
         borderColor: color,
         borderWidth: isActive?2:0,
         pointRadius: isActive?3:0,
@@ -293,7 +294,12 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       plugins:{
         legend:{display:false},
         annotation:{annotations:makeAnnotations()},
-        tooltip:{callbacks:{label:ctx=>` ${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(2)}`}}
+        tooltip:{callbacks:{label:ctx=>{
+          const norm = ctx.parsed.y?.toFixed(2);
+          const raw = ctx.dataset.rawVwap?.[ctx.dataIndex];
+          const rawStr = raw != null ? raw.toLocaleString(undefined,{maximumFractionDigits:2}) : '–';
+          return ` ${ctx.dataset.label}: ${norm} (VWAP ${rawStr})`;
+        }}}
       },
       scales:{
         x:{ticks:{color:TICK,font:{size:10}},grid:{color:GRID}},
