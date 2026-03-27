@@ -1,0 +1,41 @@
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Apple SD Gothic Neo','Pretendard',sans-serif;background:#0f1117;color:#e2e8f0;min-height:100vh}
+header{padding:20px 28px 14px;border-bottom:1px solid #1e2535}
+header h1{font-size:1.2rem;font-weight:700;color:#f8fafc}
+header p{font-size:0.74rem;color:#475569;margin-top:4px}
+
+.chart-section{padding:20px 28px 0}
+.chart-wrap{
+  background:#161b27;border:1px solid #1e2535;border-radius:14px;
+  padding:18px;margin-bottom:20px;
+  position:relative;width:100%;
+}
+
+/* 종목 그룹 */
+.groups{padding:0 28px 24px;display:flex;flex-direction:column;gap:8px}
+.group{display:flex;flex-wrap:wrap;gap:8px}
+
+.asset-btn{
+  background:#161b27;border:1.5px solid #1e2535;border-radius:10px;
+  padding:10px 12px;cursor:pointer;transition:all .2s;user-select:none;
+  text-align:left;position:relative;overflow:hidden;
+  flex:0 0 auto;min-width:90px;
+}
+.asset-btn.active{border-color:var(--c);background:#1a2030}
+.asset-btn:hover{background:#1a2030}
+.asset-btn .name{font-size:0.78rem;font-weight:700;color:#94a3b8;transition:color .2s;white-space:nowrap}
+.asset-btn.active .name{color:var(--c)}
+.asset-btn .val{font-size:1.2rem;font-weight:800;line-height:1.1;margin-top:4px}
+.asset-btn .sci{font-size:0.68rem;color:#475569;margin-top:3px}
+.asset-btn.active .sci{color:#64748b}
+
+/* SCI 섹션 */
+.sci-section{padding:0 28px 24px}
+.sci-title{font-size:0.72rem;font-weight:700;color:#475569;letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px}
+.sci-table{width:100%;border-collapse:collapse;font-size:0.8rem}
+.sci-table th{padding:5px 10px;text-align:right;font-size:0.65rem;font-weight:600;color:#334155;letter-spacing:.04em}
+.sci-table th:first-child{text-align:left}
+.sci-table td{padding:7px 10px;text-align:right;color:#cbd5e1;border-top:1px solid #161b27}
+.sci-table td:first-child{text-align:left;font-weight:700;color:#94a3b8}
+.asset-btn .indicator{position:absolute;top:0;left:0;right:0;height:2px;background:var(--c);opacity:0;transition:opacity .2s}
+.asset-btn.active .indicator{opacity:1}
