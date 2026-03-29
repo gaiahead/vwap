@@ -295,7 +295,7 @@ def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any
             if endpoint not in vmap or start not in vmap:
                 continue
             slope = (vmap[endpoint] - vmap[start]) / j
-            is_above = slope > vmap[endpoint] * sci_threshold
+            is_above = slope > vmap[start] * sci_threshold
             cells.append({
                 "endpoint": endpoint,
                 "start": start,

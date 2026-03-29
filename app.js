@@ -40,7 +40,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
 
   // ─── SCI 계산 ──────────────────────────────────────────
   const SCI_DECAY = 0.75;
-  const SCI_THRESHOLD = 0.01;  // endpoint × 1% (10d당, ≈ 연30% 기준)
+  const SCI_THRESHOLD = 0.01;  // start × 1% (10d당, ≈ 연30% 기준)
 
   function calcSCI(name) {
     const vs = data[name]?.vwap_structure;
@@ -62,7 +62,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
         const start = endpoint + j*10;
         if (!vmap[start]) continue;
         const slope = (vmap[endpoint] - vmap[start]) / j;
-        if (slope > vmap[endpoint] * SCI_THRESHOLD) above++;
+        if (slope > vmap[start] * SCI_THRESHOLD) above++;
         total++;
       }
       const rowScore = total > 0 ? above/total : 0;
