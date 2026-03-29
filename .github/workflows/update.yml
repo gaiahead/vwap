@@ -31,6 +31,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add trend_data.json
+          git add trend_data.json detail_data/
           git diff --staged --quiet || git commit -m "data: auto update $(TZ='Asia/Seoul' date +'%Y-%m-%d %H:%M KST')"
           git push

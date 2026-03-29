@@ -133,6 +133,11 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
           <div class="sci">${sciStr}</div>
         `;
         btn.addEventListener('click',()=>{
+          const ticker = data[name]?.ticker;
+          if(ticker) location.href = `detail.html?ticker=${encodeURIComponent(ticker)}`;
+        });
+        btn.addEventListener('dblclick',(e)=>{
+          e.preventDefault();
           if(activeSet.has(name)) activeSet.delete(name);
           else activeSet.add(name);
           renderCards();

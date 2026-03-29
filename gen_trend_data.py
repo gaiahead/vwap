@@ -7,6 +7,7 @@ trend_data.json으로 출력한다.
 from __future__ import annotations
 
 import json
+import os
 import sys
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
@@ -64,6 +65,7 @@ DATA_START: str = "2023-01-01"
 WEEKLY_CUTOFF: date = date(2025, 1, 6)
 EXCLUDE_DATES: frozenset[str] = frozenset({"2025-12-31", "2025-12-30", "2025-12-29"})
 OUTPUT_PATH: str = "trend_data.json"
+DETAIL_DIR: str = "detail_data"
 
 
 # ──────────────────────────────────────────────────────────
@@ -96,6 +98,47 @@ def compute_vwap(df_window: pd.DataFrame) -> float:
     if total_vol == 0:
         return float(df_window["close"].iloc[-1])
     return float((bucket_prices * bvol).sum() / total_vol)
+
+
+def compute_vwap_with_profile(
+    df_window: pd.DataFrame,
+) -> tuple[float, list[dict[str, float]]]:
+    """정규분포 기반 Volume Profile VWAP + 버킷 배열 반환."""
+    lo = float(df_window["low"].min())
+    hi = float(df_window["high"].max())
+    if hi == lo:
+        mid = float(df_window["close"].mean())
+        bsize = 1.0
+        bucket_prices = [mid] * N_BUCKETS
+        return mid, [{"price": mid, "volume": 0.0} for _ in range(N_BUCKETS)]
+
+    bsize = (hi - lo) / N_BUCKETS
+    bucket_prices = np.array([lo + (b + 0.5) * bsize for b in range(N_BUCKETS)])
+    bvol = np.zeros(N_BUCKETS)
+
+    for _, r in df_window.iterrows():
+        mu = (float(r["high"]) + float(r["low"]) + float(r["close"])) / 3
+        sigma = (float(r["high"]) - float(r["low"])) / 4
+        if sigma == 0:
+            idx = min(N_BUCKETS - 1, int((mu - lo) / bsize))
+            bvol[idx] += float(r["volume"])
+            continue
+        weights = norm.pdf(bucket_prices, mu, sigma)
+        total_w = weights.sum()
+        if total_w > 0:
+            bvol += float(r["volume"]) * (weights / total_w)
+
+    total_vol = bvol.sum()
+    if total_vol == 0:
+        vwap = float(df_window["close"].iloc[-1])
+    else:
+        vwap = float((bucket_prices * bvol).sum() / total_vol)
+
+    buckets = [
+        {"price": round(float(bucket_prices[i]), 4), "volume": round(float(bvol[i]), 2)}
+        for i in range(N_BUCKETS)
+    ]
+    return vwap, buckets
 
 
 def compute_vwap_series(df: pd.DataFrame, window: int = 20) -> list[float | None]:
@@ -201,6 +244,90 @@ def build_weekly_records(df: pd.DataFrame) -> list[dict[str, Any]]:
     ]
 
 
+def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any]:
+    """detail.html용 상세 데이터 생성."""
+    # ohlcv: 최근 200일 + vwap_20d 롤링
+    tail = df.iloc[-200:].copy()
+    vwap_series = compute_vwap_series(tail, window=20)
+    ohlcv = []
+    for i, (dt, row) in enumerate(tail.iterrows()):
+        rec: dict[str, Any] = {
+            "date": str(dt.date()),
+            "open": round(float(row["open"]), 4),
+            "high": round(float(row["high"]), 4),
+            "low": round(float(row["low"]), 4),
+            "close": round(float(row["close"]), 4),
+            "volume": int(row["volume"]),
+        }
+        rec["vwap_20d"] = round(vwap_series[i], 4) if vwap_series[i] is not None else None
+        ohlcv.append(rec)
+
+    # volume_profile: 10d/20d/50d/200d
+    volume_profile: dict[str, Any] = {}
+    for period in [10, 20, 50, 100, 200]:
+        if len(df) >= period:
+            vwap_val, buckets = compute_vwap_with_profile(df.iloc[-period:])
+            volume_profile[f"{period}d"] = {
+                "buckets": buckets,
+                "vwap": round(vwap_val, 4),
+            }
+
+    # sci_matrix: vwap_map에서 100셀 계산
+    vmap: dict[int, float] = {}
+    for w in WINDOWS:
+        if len(df) >= w:
+            vmap[w] = compute_vwap(df.iloc[-w:])
+
+    sci_threshold = 0.01
+    sci_decay = 0.75
+    cells: list[dict[str, Any]] = []
+    row_scores: list[float] = []
+    weights = [10 * sci_decay**i for i in range(10)]
+    total_weight = sum(weights)
+    weighted_sum = 0.0
+
+    for i in range(10):
+        endpoint = (i + 1) * 10
+        above_count = 0
+        total_count = 0
+        for j in range(1, 11):
+            start = endpoint + j * 10
+            if endpoint not in vmap or start not in vmap:
+                continue
+            slope = (vmap[endpoint] - vmap[start]) / j
+            is_above = slope > vmap[endpoint] * sci_threshold
+            cells.append({
+                "endpoint": endpoint,
+                "start": start,
+                "slope": round(slope, 6),
+                "above": is_above,
+            })
+            if is_above:
+                above_count += 1
+            total_count += 1
+        rs = above_count / total_count if total_count > 0 else 0.0
+        row_scores.append(round(rs, 4))
+        weighted_sum += weights[i] * rs
+
+    sci_val = weighted_sum / total_weight if total_weight > 0 else 0.0
+
+    sci_matrix = {
+        "cells": cells,
+        "row_scores": row_scores,
+        "sci": round(sci_val, 4),
+        "threshold": sci_threshold,
+    }
+
+    return {
+        "name": name,
+        "ticker": ticker,
+        "ohlcv": ohlcv,
+        "volume_profile": volume_profile,
+        "sci_matrix": sci_matrix,
+        "latest_price": round(float(df["close"].iloc[-1]), 2),
+    }
+
+
 def process_asset(
     name: str, ticker: str, group: str, end_date: str
 ) -> dict[str, Any] | None:
@@ -250,6 +377,25 @@ def main() -> None:
 
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False)
+
+    # detail_data/ 생성
+    os.makedirs(DETAIL_DIR, exist_ok=True)
+    print("\n📊 detail_data 생성 중...")
+    for name, ticker, _group in ASSETS:
+        if name in failed or name not in result:
+            continue
+        try:
+            df = download_ohlcv(ticker, end_date)
+            if df.empty:
+                continue
+            detail = build_detail_data(name, ticker, df)
+            detail["_meta"] = {"updated_at": run_time}
+            out_path = os.path.join(DETAIL_DIR, f"{ticker}.json")
+            with open(out_path, "w", encoding="utf-8") as f:
+                json.dump(detail, f, ensure_ascii=False)
+            print(f"  ✅ {name} → {out_path}")
+        except Exception as e:
+            print(f"  [ERROR] detail {name}: {e}")
 
     print(f"\n✅ 저장 완료: {OUTPUT_PATH}  (기준: {run_time})")
     if failed:

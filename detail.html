@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>VWAP Detail</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
+  <link rel="stylesheet" href="style.css"/>
+  <style>
+    .detail-header{padding:16px 28px 12px;border-bottom:1px solid #1e2535;display:flex;align-items:center;gap:16px}
+    .detail-header .back{color:#94a3b8;text-decoration:none;font-size:1.1rem;font-weight:700;padding:4px 8px;border:1px solid #1e2535;border-radius:6px;transition:all .2s}
+    .detail-header .back:hover{background:#1a2030;color:#e2e8f0}
+    .detail-header .title-area{flex:1}
+    .detail-header h1{font-size:1.1rem;font-weight:700;color:#f8fafc}
+    .detail-header .date{font-size:0.72rem;color:#475569;margin-top:2px}
+
+    .tab-bar{padding:10px 28px;display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid #1e2535}
+    .tab-btn{background:#161b27;border:1px solid #1e2535;border-radius:6px;padding:5px 10px;cursor:pointer;font-size:0.7rem;font-weight:600;color:#94a3b8;transition:all .2s;font-family:inherit}
+    .tab-btn:hover{background:#1a2030}
+    .tab-btn.active{background:#1a2030;border-color:#60a5fa;color:#e2e8f0}
+
+    .panels{display:flex;gap:16px;padding:16px 28px;flex-wrap:wrap}
+    .panel-a{flex:0 0 59%;min-width:320px}
+    .panel-b{flex:1;min-width:260px}
+    .panel-c{width:100%;padding:0 28px 28px}
+
+    .panel-box{background:#161b27;border:1px solid #1e2535;border-radius:14px;padding:16px}
+    .panel-title{font-size:0.7rem;font-weight:700;color:#475569;letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px}
+
+    .vp-tabs{display:flex;gap:4px;margin-bottom:10px}
+    .vp-tab{background:#0f1117;border:1px solid #1e2535;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:0.68rem;font-weight:600;color:#94a3b8;transition:all .2s;font-family:inherit}
+    .vp-tab:hover{background:#1a2030}
+    .vp-tab.active{background:#1a2030;border-color:#60a5fa;color:#e2e8f0}
+
+    /* SCI Matrix */
+    .sci-grid{display:grid;grid-template-columns:40px 60px repeat(10,1fr) 50px;gap:1px;font-size:0.65rem}
+    .sci-grid .hdr{color:#334155;font-weight:600;padding:4px 2px;text-align:center}
+    .sci-cell{padding:6px 2px;text-align:center;border-radius:3px;cursor:default;position:relative}
+    .sci-cell.above{background:#4ade80;color:#0f1117;font-weight:700}
+    .sci-cell.below{background:#f87171;color:#0f1117;font-weight:700}
+    .sci-cell.empty{background:#1e2535;color:#475569}
+    .sci-cell .tooltip{display:none;position:absolute;bottom:100%;left:50%;transform:translateX(-50%);background:#0f1117;border:1px solid #1e2535;border-radius:6px;padding:6px 10px;font-size:0.65rem;color:#e2e8f0;white-space:nowrap;z-index:10;pointer-events:none}
+    .sci-cell:hover .tooltip{display:block}
+    .weight-bar{height:8px;background:#1e3a5f;border-radius:2px}
+    .row-score{color:#cbd5e1;font-weight:600;text-align:center;padding:6px 2px}
+    .sci-summary{margin-top:12px;display:flex;align-items:center;gap:16px;font-size:0.78rem}
+    .sci-val{font-weight:800;font-size:1rem}
+    .gauge-track{flex:1;max-width:300px;height:8px;background:#1e2535;border-radius:4px;overflow:hidden}
+    .gauge-fill{height:100%;border-radius:4px;transition:width .3s}
+
+    @media(max-width:768px){
+      .panels{flex-direction:column}
+      .panel-a,.panel-b{flex:1 1 100%;min-width:0}
+      .panel-c{padding:0 16px 20px}
+      .sci-grid{font-size:0.55rem;grid-template-columns:30px 45px repeat(10,1fr) 40px}
+    }
+  </style>
+</head>
+<body>
+
+<div class="detail-header">
+  <a href="index.html" class="back">&larr;</a>
+  <div class="title-area">
+    <h1 id="detail-title">Loading...</h1>
+    <div class="date" id="detail-date"></div>
+  </div>
+</div>
+
+<div class="tab-bar" id="ticker-tabs"></div>
+
+<div class="panels">
+  <div class="panel-a">
+    <div class="panel-box">
+      <div class="panel-title">Price + VWAP Lines</div>
+      <div style="position:relative;height:360px"><canvas id="chart-price"></canvas></div>
+    </div>
+  </div>
+  <div class="panel-b">
+    <div class="panel-box">
+      <div class="panel-title">Volume Profile</div>
+      <div class="vp-tabs" id="vp-tabs">
+        <button class="vp-tab active" data-period="10d">10d</button>
+        <button class="vp-tab" data-period="20d">20d</button>
+        <button class="vp-tab" data-period="50d">50d</button>
+        <button class="vp-tab" data-period="200d">200d</button>
+      </div>
+      <div style="position:relative;height:310px"><canvas id="chart-vp"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel-c">
+  <div class="panel-box">
+    <div class="panel-title">SCI Matrix (Slope Consistency Index)</div>
+    <div id="sci-matrix"></div>
+  </div>
+</div>
+
+<script>
+const GRID='#1e2535', TICK='#475569';
+
+// asset list (same order as gen_trend_data.py)
+const ASSETS = [
+  ["TLT","TLT"],["GLD","GLD"],["IBIT","IBIT"],["SPY","SPY"],["QQQ","QQQ"],
+  ["SOL \ubbf8\uad6d\ud14c\ud06cTOP10","481190.KS"],["TIGER \ubbf8\uad6d\ud544\ub77c\ub378\ud53c\uc544\ubc18\ub3c4\uccb4\ub098\uc2a4\ub2e5","381180.KS"],
+  ["KODEX \ubbf8\uad6d\ubc18\ub3c4\uccb4","390390.KS"],["ACE \uae00\ub85c\ubc8c\ubc18\ub3c4\uccb4TOP4 Plus","446770.KS"],
+  ["\uc5d4\ube44\ub514\uc544","NVDA"],["\uc54c\ud30c\ubcb3","GOOGL"],["\uc560\ud50c","AAPL"],
+  ["\ub9c8\uc774\ud06c\ub85c\uc18c\ud504\ud2b8","MSFT"],["\uc544\ub9c8\uc874","AMZN"],["\uba54\ud0c0","META"],
+  ["\ube0c\ub85c\ub4dc\ucef4","AVGO"],["\ud14c\uc2ac\ub77c","TSLA"],["\ub137\ud50c\ub9ad\uc2a4","NFLX"],
+  ["\ud314\ub780\ud2f0\uc5b4","PLTR"],["\uc2dc\uc2a4\ucf54","CSCO"],
+  ["KODEX 200","069500.KS"],["KODEX \ucf54\uc2a4\ub2e5150","229200.KS"],
+  ["KODEX \ubc18\ub3c4\uccb4","091160.KS"],["KODEX AI\ubc18\ub3c4\uccb4","395160.KS"],
+  ["KODEX AI\ubc18\ub3c4\uccb4\ud575\uc2ec\uc7a5\ube44","471990.KS"],["TIGER \ubc18\ub3c4\uccb4TOP10","396500.KS"],
+  ["\uc0bc\uc131\uc804\uc790","005930.KS"],["SK\ud558\uc774\ub2c9\uc2a4","000660.KS"],
+  ["\ud55c\ubbf8\ubc18\ub3c4\uccb4","042700.KS"],["\ub9ac\ub178\uacf5\uc5c5","058470.KS"]
+];
+
+const params = new URLSearchParams(location.search);
+let currentTicker = params.get('ticker') || ASSETS[0][1];
+let detailData = null;
+let priceChart = null;
+let vpChart = null;
+let currentVpPeriod = '10d';
+
+// ─── Ticker tabs ─────────────────────────────────────
+const tabBar = document.getElementById('ticker-tabs');
+ASSETS.forEach(([name, ticker]) => {
+  const btn = document.createElement('button');
+  btn.className = 'tab-btn' + (ticker === currentTicker ? ' active' : '');
+  btn.textContent = name;
+  btn.addEventListener('click', () => {
+    currentTicker = ticker;
+    history.replaceState(null, '', `detail.html?ticker=${encodeURIComponent(ticker)}`);
+    tabBar.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    loadData();
+  });
+  tabBar.appendChild(btn);
+});
+
+// ─── Load data ───────────────────────────────────────
+async function loadData() {
+  try {
+    const resp = await fetch(`detail_data/${encodeURIComponent(currentTicker)}.json`);
+    if (!resp.ok) throw new Error('not found');
+    detailData = await resp.json();
+  } catch {
+    document.getElementById('detail-title').textContent = 'Data not available';
+    return;
+  }
+  document.getElementById('detail-title').textContent = detailData.name;
+  document.getElementById('detail-date').textContent = (detailData._meta?.updated_at || '') + ' \uae30\uc900';
+  renderPriceChart();
+  renderVpChart();
+  renderSCIMatrix();
+}
+
+// ─── Panel A: Price + VWAP ───────────────────────────
+function renderPriceChart() {
+  const ohlcv = detailData.ohlcv;
+  const labels = ohlcv.map(d => d.date);
+  const closes = ohlcv.map(d => d.close);
+  const vwap20 = ohlcv.map(d => d.vwap_20d);
+
+  const vp = detailData.volume_profile;
+  const annotations = {};
+
+  // VWAP horizontal lines
+  const vwapLines = [
+    {key: '10d', color: '#4ade80'}, {key: '50d', color: '#60a5fa'},
+    {key: '100d', color: '#fbbf24'}, {key: '200d', color: '#94a3b8'}
+  ];
+  vwapLines.forEach(({key, color}) => {
+    const v = vp[key]?.vwap;
+    if (v != null) {
+      annotations['vwap_' + key] = {
+        type: 'line', yMin: v, yMax: v,
+        borderColor: color, borderWidth: 1.5, borderDash: [6, 3],
+        label: {display: true, content: `VWAP ${key}: ${v.toLocaleString()}`, position: 'start',
+          color, backgroundColor: 'rgba(15,17,23,0.85)', font: {size: 9, weight: 'bold'}, padding: {x: 4, y: 2}}
+      };
+    }
+  });
+
+  const config = {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {label: 'Close', data: closes, borderColor: '#475569', borderWidth: 1, pointRadius: 0, tension: 0.1, fill: false, order: 2},
+        {label: 'VWAP 20d', data: vwap20, borderColor: '#e2e8f0', borderWidth: 2, borderDash: [4, 2], pointRadius: 0, tension: 0.2, fill: false, order: 1}
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, animation: {duration: 200},
+      interaction: {mode: 'index', intersect: false},
+      plugins: {
+        legend: {display: true, labels: {color: '#94a3b8', font: {size: 10}, boxWidth: 12, padding: 10}},
+        annotation: {annotations},
+        tooltip: {callbacks: {label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y?.toLocaleString(undefined, {maximumFractionDigits: 2})}`}}
+      },
+      scales: {
+        x: {ticks: {color: TICK, font: {size: 9}, maxTicksLimit: 12, maxRotation: 0}, grid: {color: GRID}},
+        y: {ticks: {color: TICK, font: {size: 10}}, grid: {color: GRID}}
+      }
+    }
+  };
+
+  if (priceChart) { priceChart.destroy(); }
+  priceChart = new Chart(document.getElementById('chart-price'), config);
+}
+
+// ─── Panel B: Volume Profile ─────────────────────────
+function renderVpChart() {
+  const period = currentVpPeriod;
+  const vp = detailData.volume_profile[period];
+  if (!vp) { if (vpChart) vpChart.destroy(); vpChart = null; return; }
+
+  const buckets = vp.buckets;
+  const labels = buckets.map(b => b.price.toLocaleString(undefined, {maximumFractionDigits: 2}));
+  const volumes = buckets.map(b => b.volume);
+
+  const annotations = {};
+  // VWAP vertical line
+  const vwapIdx = buckets.findIndex(b => b.price >= vp.vwap);
+  if (vwapIdx >= 0) {
+    annotations.vwapLine = {
+      type: 'line', yMin: vwapIdx - 0.5, yMax: vwapIdx + 0.5, xMin: 0, xMax: Math.max(...volumes) * 1.05,
+      borderColor: '#60a5fa', borderWidth: 2,
+      label: {display: true, content: `VWAP ${vp.vwap.toLocaleString()}`, color: '#60a5fa',
+        backgroundColor: 'rgba(15,17,23,0.85)', font: {size: 9}, position: 'end', padding: {x: 3, y: 1}}
+    };
+  }
+  // Current price line
+  const cp = detailData.latest_price;
+  const cpIdx = buckets.findIndex(b => b.price >= cp);
+  if (cpIdx >= 0) {
+    annotations.priceLine = {
+      type: 'line', yMin: cpIdx - 0.5, yMax: cpIdx + 0.5, xMin: 0, xMax: Math.max(...volumes) * 1.05,
+      borderColor: '#f8fafc', borderWidth: 1.5, borderDash: [4, 2],
+      label: {display: true, content: `Price ${cp.toLocaleString()}`, color: '#f8fafc',
+        backgroundColor: 'rgba(15,17,23,0.85)', font: {size: 9}, position: 'start', padding: {x: 3, y: 1}}
+    };
+  }
+
+  const config = {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Volume', data: volumes,
+        backgroundColor: volumes.map((_, i) => {
+          const price = buckets[i].price;
+          if (price >= vp.vwap) return 'rgba(74,222,128,0.5)';
+          return 'rgba(248,113,113,0.5)';
+        }),
+        borderColor: volumes.map((_, i) => {
+          const price = buckets[i].price;
+          if (price >= vp.vwap) return '#4ade80';
+          return '#f87171';
+        }),
+        borderWidth: 1
+      }]
+    },
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false, animation: {duration: 200},
+      plugins: {
+        legend: {display: false},
+        annotation: {annotations}
+      },
+      scales: {
+        x: {ticks: {color: TICK, font: {size: 9}}, grid: {color: GRID}},
+        y: {ticks: {color: TICK, font: {size: 8}}, grid: {color: GRID}}
+      }
+    }
+  };
+
+  if (vpChart) { vpChart.destroy(); }
+  vpChart = new Chart(document.getElementById('chart-vp'), config);
+}
+
+// VP tab switching
+document.getElementById('vp-tabs').addEventListener('click', e => {
+  if (!e.target.matches('.vp-tab')) return;
+  currentVpPeriod = e.target.dataset.period;
+  document.querySelectorAll('.vp-tab').forEach(b => b.classList.remove('active'));
+  e.target.classList.add('active');
+  if (detailData) renderVpChart();
+});
+
+// ─── Panel C: SCI Matrix ────────────────────────────
+function renderSCIMatrix() {
+  const sci = detailData.sci_matrix;
+  const container = document.getElementById('sci-matrix');
+  container.innerHTML = '';
+
+  const decay = 0.75;
+  const weights = Array.from({length: 10}, (_, i) => 10 * Math.pow(decay, i));
+  const maxW = Math.max(...weights);
+
+  // Cell lookup
+  const cellMap = {};
+  sci.cells.forEach(c => { cellMap[`${c.endpoint}_${c.start}`] = c; });
+
+  // Build grid
+  const grid = document.createElement('div');
+  grid.className = 'sci-grid';
+
+  // Header row
+  grid.innerHTML = `
+    <div class="hdr"></div>
+    <div class="hdr">EP</div>
+    ${Array.from({length:10}, (_,j) => `<div class="hdr">${(j+1)*10+10}d~</div>`).join('')}
+    <div class="hdr">Score</div>
+  `;
+
+  // Data rows
+  for (let i = 0; i < 10; i++) {
+    const endpoint = (i + 1) * 10;
+    const w = weights[i];
+    const barWidth = Math.round(w / maxW * 36);
+
+    // Weight bar
+    const wCell = document.createElement('div');
+    wCell.style.cssText = 'padding:4px 2px;display:flex;align-items:center;justify-content:center';
+    wCell.innerHTML = `<div class="weight-bar" style="width:${barWidth}px"></div>`;
+    grid.appendChild(wCell);
+
+    // Endpoint label
+    const epCell = document.createElement('div');
+    epCell.style.cssText = 'color:#94a3b8;font-weight:600;padding:6px 2px;text-align:center';
+    epCell.textContent = `${endpoint}d`;
+    grid.appendChild(epCell);
+
+    // 10 slope cells
+    for (let j = 1; j <= 10; j++) {
+      const start = endpoint + j * 10;
+      const key = `${endpoint}_${start}`;
+      const cell = document.createElement('div');
+      const data = cellMap[key];
+
+      if (data) {
+        cell.className = `sci-cell ${data.above ? 'above' : 'below'}`;
+        cell.textContent = data.above ? '+' : '-';
+        const slopeStr = data.slope >= 0 ? `+${data.slope.toFixed(4)}` : data.slope.toFixed(4);
+        const status = data.above ? `\uae30\uc900(${(sci.threshold*100).toFixed(0)}%) \ucd08\uacfc` : `\uae30\uc900 \ubbf8\ub2ec`;
+        cell.innerHTML += `<div class="tooltip">${endpoint}d vs ${start}d / slope: ${slopeStr} / ${status}</div>`;
+      } else {
+        cell.className = 'sci-cell empty';
+        cell.textContent = '\u00b7';
+      }
+      grid.appendChild(cell);
+    }
+
+    // Row score
+    const rsCell = document.createElement('div');
+    rsCell.className = 'row-score';
+    const rs = sci.row_scores[i];
+    rsCell.textContent = (rs * 10).toFixed(0) + '/10';
+    rsCell.style.color = rs >= 0.8 ? '#4ade80' : rs >= 0.5 ? '#94a3b8' : '#f87171';
+    grid.appendChild(rsCell);
+  }
+
+  container.appendChild(grid);
+
+  // Summary
+  const summary = document.createElement('div');
+  summary.className = 'sci-summary';
+  const sciColor = sci.sci >= 0.8 ? '#4ade80' : sci.sci >= 0.6 ? '#94a3b8' : '#f87171';
+  summary.innerHTML = `
+    <span style="color:#94a3b8">SCI</span>
+    <span class="sci-val" style="color:${sciColor}">${sci.sci.toFixed(4)}</span>
+    <div class="gauge-track">
+      <div class="gauge-fill" style="width:${(sci.sci*100).toFixed(1)}%;background:${sciColor}"></div>
+    </div>
+    <span style="color:#475569;font-size:0.7rem">${(sci.sci*100).toFixed(1)}%</span>
+  `;
+  container.appendChild(summary);
+}
+
+// ─── Init ────────────────────────────────────────────
+loadData();
+</script>
+</body>
+</html>
