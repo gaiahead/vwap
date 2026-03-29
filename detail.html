@@ -28,7 +28,7 @@
     .panel-box{background:#161b27;border:1px solid #1e2535;border-radius:14px;padding:16px}
     .panel-title{font-size:0.7rem;font-weight:700;color:#475569;letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px}
 
-    .vp-tabs{display:flex;gap:4px;margin-bottom:10px}
+    .vp-tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
     .vp-tab{background:#0f1117;border:1px solid #1e2535;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:0.68rem;font-weight:600;color:#94a3b8;transition:all .2s;font-family:inherit}
     .vp-tab:hover{background:#1a2030}
     .vp-tab.active{background:#1a2030;border-color:#60a5fa;color:#e2e8f0}
@@ -82,7 +82,23 @@
       <div class="vp-tabs" id="vp-tabs">
         <button class="vp-tab active" data-period="10d">10d</button>
         <button class="vp-tab" data-period="20d">20d</button>
+        <button class="vp-tab" data-period="30d">30d</button>
+        <button class="vp-tab" data-period="40d">40d</button>
         <button class="vp-tab" data-period="50d">50d</button>
+        <button class="vp-tab" data-period="60d">60d</button>
+        <button class="vp-tab" data-period="70d">70d</button>
+        <button class="vp-tab" data-period="80d">80d</button>
+        <button class="vp-tab" data-period="90d">90d</button>
+        <button class="vp-tab" data-period="100d">100d</button>
+        <button class="vp-tab" data-period="110d">110d</button>
+        <button class="vp-tab" data-period="120d">120d</button>
+        <button class="vp-tab" data-period="130d">130d</button>
+        <button class="vp-tab" data-period="140d">140d</button>
+        <button class="vp-tab" data-period="150d">150d</button>
+        <button class="vp-tab" data-period="160d">160d</button>
+        <button class="vp-tab" data-period="170d">170d</button>
+        <button class="vp-tab" data-period="180d">180d</button>
+        <button class="vp-tab" data-period="190d">190d</button>
         <button class="vp-tab" data-period="200d">200d</button>
       </div>
       <div style="position:relative;height:310px"><canvas id="chart-vp"></canvas></div>

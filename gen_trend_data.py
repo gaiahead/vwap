@@ -262,9 +262,9 @@ def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any
         rec["vwap_20d"] = round(vwap_series[i], 4) if vwap_series[i] is not None else None
         ohlcv.append(rec)
 
-    # volume_profile: 10d/20d/50d/200d
+    # volume_profile: 10d~200d (20개 전체)
     volume_profile: dict[str, Any] = {}
-    for period in [10, 20, 50, 100, 200]:
+    for period in range(10, 201, 10):
         if len(df) >= period:
             vwap_val, buckets = compute_vwap_with_profile(df.iloc[-period:])
             volume_profile[f"{period}d"] = {
