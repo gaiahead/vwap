@@ -142,13 +142,13 @@ def compute_vwap_with_profile(
 
 
 def compute_vwap_series(df: pd.DataFrame, window: int = 20) -> list[float | None]:
-    """롤링 윈도우 VWAP 시계열."""
+    """롤링 윈도우 VWAP 시계열. 현재 봉 포함 (i-window+1 : i+1)."""
     vwaps: list[float | None] = []
     for i in range(len(df)):
-        if i < window:
+        if i < window - 1:
             vwaps.append(None)
             continue
-        vwaps.append(compute_vwap(df.iloc[i - window : i]))
+        vwaps.append(compute_vwap(df.iloc[i - window + 1 : i + 1]))
     return vwaps
 
 
