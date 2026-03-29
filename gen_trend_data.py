@@ -246,9 +246,9 @@ def build_weekly_records(df: pd.DataFrame) -> list[dict[str, Any]]:
 
 def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any]:
     """detail.html용 상세 데이터 생성."""
-    # ohlcv: 최근 200일 + vwap_20d 롤링
+    # ohlcv: 최근 200일 + vwap_10d 롤링
     tail = df.iloc[-200:].copy()
-    vwap_series = compute_vwap_series(tail, window=20)
+    vwap_series = compute_vwap_series(tail, window=10)
     ohlcv = []
     for i, (dt, row) in enumerate(tail.iterrows()):
         rec: dict[str, Any] = {
@@ -259,7 +259,7 @@ def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any
             "close": round(float(row["close"]), 4),
             "volume": int(row["volume"]),
         }
-        rec["vwap_20d"] = round(vwap_series[i], 4) if vwap_series[i] is not None else None
+        rec["vwap_10d"] = round(vwap_series[i], 4) if vwap_series[i] is not None else None
         ohlcv.append(rec)
 
     # volume_profile: 10d~200d (20개 전체)
