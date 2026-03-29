@@ -226,7 +226,7 @@ function renderVpChart() {
   const vwapIdx = buckets.findIndex(b => b.price >= vp.vwap);
   if (vwapIdx >= 0) {
     annotations.vwapLine = {
-      type: 'line', yMin: vwapIdx - 0.5, yMax: vwapIdx + 0.5, xMin: 0, xMax: Math.max(...volumes) * 1.05,
+      type: 'line', scaleID: 'y', value: vwapIdx,
       borderColor: '#60a5fa', borderWidth: 2,
       label: {display: true, content: `VWAP ${vp.vwap.toLocaleString()}`, color: '#60a5fa',
         backgroundColor: 'rgba(15,17,23,0.85)', font: {size: 9}, position: 'end', padding: {x: 3, y: 1}}
@@ -237,7 +237,7 @@ function renderVpChart() {
   const cpIdx = buckets.findIndex(b => b.price >= cp);
   if (cpIdx >= 0) {
     annotations.priceLine = {
-      type: 'line', yMin: cpIdx - 0.5, yMax: cpIdx + 0.5, xMin: 0, xMax: Math.max(...volumes) * 1.05,
+      type: 'line', scaleID: 'y', value: cpIdx,
       borderColor: '#f8fafc', borderWidth: 1.5, borderDash: [4, 2],
       label: {display: true, content: `Price ${cp.toLocaleString()}`, color: '#f8fafc',
         backgroundColor: 'rgba(15,17,23,0.85)', font: {size: 9}, position: 'start', padding: {x: 3, y: 1}}
