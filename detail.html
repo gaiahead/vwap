@@ -311,7 +311,7 @@ function renderSCIMatrix() {
   grid.innerHTML = `
     <div class="hdr"></div>
     <div class="hdr">EP</div>
-    ${Array.from({length:10}, (_,j) => `<div class="hdr">${(j+1)*10+10}d~</div>`).join('')}
+    ${Array.from({length:10}, (_,j) => `<div class="hdr">+${(j+1)*10}d</div>`).join('')}
     <div class="hdr">Score</div>
   `;
 
