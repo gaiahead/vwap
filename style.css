@@ -18,7 +18,7 @@ header p{font-size:0.74rem;color:#475569;margin-top:4px}
 .asset-btn .name{font-size:0.78rem;font-weight:700;color:#94a3b8;transition:color .2s;white-space:nowrap}
 .asset-btn .val{font-size:1.2rem;font-weight:800;line-height:1.1;margin-top:4px}
 .asset-btn .sci{font-size:0.68rem;color:#475569;margin-top:3px}
-.asset-btn .indicator{position:absolute;top:0;left:0;right:0;height:2px;background:var(--c);opacity:0;transition:opacity .2s}
+.asset-btn .indicator{position:absolute;top:0;left:0;bottom:0;width:3px;height:auto;right:auto;background:var(--c);opacity:0;transition:opacity .2s;border-radius:3px 0 0 3px}
 
 /* Detail-active card */
 .asset-btn.detail-active{border-color:var(--c);background:#1a2030}
