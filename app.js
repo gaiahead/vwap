@@ -1,12 +1,11 @@
 const GRID='#1e2535', TICK='#475569';
-
-const STRUCT_LABELS = ['200d','190d','180d','170d','160d','150d','140d','130d','120d','110d',
-                       '100d','90d','80d','70d','60d','50d','40d','30d','20d','10d'];
-
 const GROUP_ORDER = ['g1','g2','g3'];
 
-let structChart;
-let activeSet = new Set(['TLT']);
+let priceChart = null;
+let vpChart = null;
+let currentVpPeriod = '10d';
+let currentDetailName = null;
+const detailCache = {};
 
 function rankColor(t){
   if(t>=0.5){
@@ -27,7 +26,6 @@ function calcColors(names, data){
 }
 
 fetch('trend_data.json').then(r=>r.json()).then(data=>{
-  // 그룹별 순서 유지
   const allNames = Object.keys(data).filter(k=>k!=='_meta');
   const namesByGroup = {};
   GROUP_ORDER.forEach(g=>{ namesByGroup[g]=[]; });
@@ -40,7 +38,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
 
   // ─── SCI 계산 ──────────────────────────────────────────
   const SCI_DECAY = 0.75;
-  const SCI_THRESHOLD = 0.01;  // start × 1% (10d당, ≈ 연30% 기준)
+  const SCI_THRESHOLD = 0.01;
 
   function calcSCI(name) {
     const vs = data[name]?.vwap_structure;
@@ -82,7 +80,6 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     const tbody = document.getElementById('sci-body');
     tbody.innerHTML = '';
 
-    // SCI 기준 정렬
     const rows = allNames
       .map(n => ({ name: n, result: calcSCI(n) }))
       .filter(r => r.result !== null)
@@ -90,13 +87,11 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
 
     rows.forEach(({name, result}) => {
       const {sci, rowScores} = result;
-      const price = data[name]?.latest_price;
       const sciColor = sci >= 0.8 ? '#4ade80' : sci >= 0.6 ? '#94a3b8' : '#f87171';
       const tr = document.createElement('tr');
       const cells = [
         `<td>${name}</td>`,
         `<td style="color:${sciColor};font-weight:700">${sci.toFixed(3)}</td>`,
-
         ...rowScores.map(s => {
           const c = s >= 0.8 ? '#4ade80' : s >= 0.5 ? '#94a3b8' : '#475569';
           return `<td style="color:${c}">${(s*10).toFixed(0)}/10</td>`;
@@ -107,6 +102,283 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     });
   }
 
+  // ─── Detail section ────────────────────────────────────
+  const detailSection = document.getElementById('detail-section');
+  const detailContent = document.getElementById('detail-content');
+  const detailTitle = document.getElementById('detail-title');
+
+  document.getElementById('detail-close').addEventListener('click', () => {
+    detailSection.style.display = 'none';
+    currentDetailName = null;
+    location.hash = '';
+    renderCards();
+  });
+
+  async function fetchDetail(ticker, name) {
+    detailSection.style.display = '';
+    currentDetailName = name;
+    renderCards();
+
+    if (detailCache[ticker]) {
+      renderDetail(detailCache[ticker]);
+      return;
+    }
+
+    detailContent.innerHTML = '<div class="loading">Loading...</div>';
+    detailTitle.textContent = name;
+
+    try {
+      const resp = await fetch(`detail_data/${encodeURIComponent(ticker)}.json`);
+      if (!resp.ok) throw new Error('not found');
+      const json = await resp.json();
+      detailCache[ticker] = json;
+      // Restore panel HTML after loading spinner
+      detailContent.innerHTML = buildPanelHTML();
+      initVpTabs();
+      renderDetail(json);
+    } catch {
+      detailContent.innerHTML = '<div class="loading">Data not available</div>';
+    }
+  }
+
+  function buildPanelHTML() {
+    const vpButtons = ['10d','20d','30d','40d','50d','60d','70d','80d','90d','100d',
+      '110d','120d','130d','140d','150d','160d','170d','180d','190d','200d']
+      .map(p => `<button class="vp-tab${p===currentVpPeriod?' active':''}" data-period="${p}">${p}</button>`)
+      .join('');
+    return `
+      <div class="panel-box">
+        <div class="panel-title">Price + VWAP Lines</div>
+        <div style="position:relative;height:440px"><canvas id="chart-price"></canvas></div>
+      </div>
+      <div class="panel-box" style="margin-top:16px">
+        <div class="panel-title">Volume Profile</div>
+        <div class="vp-tabs" id="vp-tabs">${vpButtons}</div>
+        <div style="position:relative;height:440px"><canvas id="chart-vp"></canvas></div>
+      </div>
+      <div class="panel-box" style="margin-top:16px">
+        <div class="panel-title">SCI Matrix (Slope Consistency Index)</div>
+        <div id="sci-matrix"></div>
+      </div>
+    `;
+  }
+
+  function initVpTabs() {
+    document.getElementById('vp-tabs').addEventListener('click', e => {
+      if (!e.target.matches('.vp-tab')) return;
+      currentVpPeriod = e.target.dataset.period;
+      document.querySelectorAll('.vp-tab').forEach(b => b.classList.remove('active'));
+      e.target.classList.add('active');
+      const ticker = data[currentDetailName]?.ticker;
+      if (ticker && detailCache[ticker]) renderVpChart(detailCache[ticker], currentVpPeriod);
+    });
+  }
+
+  // Initial VP tab handler (for static HTML case)
+  initVpTabs();
+
+  function renderDetail(detailData) {
+    detailTitle.textContent = detailData.name;
+    renderPriceChart(detailData);
+    renderVpChart(detailData, currentVpPeriod);
+    renderSCIMatrix(detailData);
+    detailSection.scrollIntoView({behavior:'smooth', block:'start'});
+  }
+
+  // ─── Panel A: Price + VWAP ─────────────────────────────
+  function renderPriceChart(detailData) {
+    const ohlcv = detailData.ohlcv;
+    const labels = ohlcv.map(d => d.date);
+    const closes = ohlcv.map(d => d.close);
+    const vwap10 = ohlcv.map(d => d.vwap_10d);
+
+    const vp = detailData.volume_profile;
+    const annotations = {};
+
+    const v200 = vp['200d']?.vwap;
+    if (v200 != null) {
+      annotations['vwap_200d'] = {
+        type: 'line', yMin: v200, yMax: v200,
+        borderColor: '#94a3b8', borderWidth: 1.5, borderDash: [6, 3],
+        label: {display: true, content: `VWAP 200d: ${v200.toLocaleString()}`, position: 'start',
+          color: '#94a3b8', backgroundColor: 'rgba(15,17,23,0.85)', font: {size: 9, weight: 'bold'}, padding: {x: 4, y: 2}}
+      };
+    }
+
+    const config = {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {label: 'Close', data: closes, borderColor: '#475569', borderWidth: 1, pointRadius: 0, tension: 0.1, fill: false, order: 2},
+          {label: 'VWAP 10d', data: vwap10, borderColor: '#e2e8f0', borderWidth: 2, borderDash: [4, 2], pointRadius: 0, tension: 0.2, fill: false, order: 1}
+        ]
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false, animation: {duration: 200},
+        interaction: {mode: 'index', intersect: false},
+        plugins: {
+          legend: {display: true, labels: {color: '#94a3b8', font: {size: 10}, boxWidth: 12, padding: 10}},
+          annotation: {annotations},
+          tooltip: {callbacks: {label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y?.toLocaleString(undefined, {maximumFractionDigits: 2})}`}}
+        },
+        scales: {
+          x: {ticks: {color: TICK, font: {size: 9}, maxTicksLimit: 12, maxRotation: 0}, grid: {color: GRID}},
+          y: {ticks: {color: TICK, font: {size: 10}}, grid: {color: GRID}}
+        }
+      }
+    };
+
+    if (priceChart) priceChart.destroy();
+    priceChart = new Chart(document.getElementById('chart-price'), config);
+  }
+
+  // ─── Panel B: Volume Profile ───────────────────────────
+  function renderVpChart(detailData, period) {
+    const vp = detailData.volume_profile[period];
+    if (!vp) { if (vpChart) vpChart.destroy(); vpChart = null; return; }
+
+    const buckets = vp.buckets;
+    const labels = buckets.map(b => b.price.toLocaleString(undefined, {maximumFractionDigits: 2}));
+    const volumes = buckets.map(b => b.volume);
+
+    const annotations = {};
+    const vwapIdx = buckets.findIndex(b => b.price >= vp.vwap);
+    if (vwapIdx >= 0) {
+      annotations.vwapLine = {
+        type: 'line', scaleID: 'y', value: vwapIdx,
+        borderColor: '#60a5fa', borderWidth: 2,
+        label: {display: true, content: `VWAP ${vp.vwap.toLocaleString()}`, color: '#60a5fa',
+          backgroundColor: 'rgba(15,17,23,0.85)', font: {size: 9}, position: 'end', padding: {x: 3, y: 1}}
+      };
+    }
+    const cp = detailData.latest_price;
+    const cpIdx = buckets.findIndex(b => b.price >= cp);
+    if (cpIdx >= 0) {
+      annotations.priceLine = {
+        type: 'line', scaleID: 'y', value: cpIdx,
+        borderColor: '#f8fafc', borderWidth: 1.5, borderDash: [4, 2],
+        label: {display: true, content: `Price ${cp.toLocaleString()}`, color: '#f8fafc',
+          backgroundColor: 'rgba(15,17,23,0.85)', font: {size: 9}, position: 'start', padding: {x: 3, y: 1}}
+      };
+    }
+
+    const config = {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Volume', data: volumes,
+          backgroundColor: volumes.map((_, i) => {
+            const price = buckets[i].price;
+            return price >= vp.vwap ? 'rgba(74,222,128,0.5)' : 'rgba(248,113,113,0.5)';
+          }),
+          borderColor: volumes.map((_, i) => {
+            const price = buckets[i].price;
+            return price >= vp.vwap ? '#4ade80' : '#f87171';
+          }),
+          borderWidth: 1
+        }]
+      },
+      options: {
+        indexAxis: 'y', responsive: true, maintainAspectRatio: false, animation: {duration: 200},
+        plugins: {
+          legend: {display: false},
+          annotation: {annotations}
+        },
+        scales: {
+          x: {ticks: {color: TICK, font: {size: 9}}, grid: {color: GRID}},
+          y: {reverse: true, ticks: {color: TICK, font: {size: 8}}, grid: {color: GRID}}
+        }
+      }
+    };
+
+    if (vpChart) vpChart.destroy();
+    vpChart = new Chart(document.getElementById('chart-vp'), config);
+  }
+
+  // ─── Panel C: SCI Matrix ──────────────────────────────
+  function renderSCIMatrix(detailData) {
+    const sci = detailData.sci_matrix;
+    const container = document.getElementById('sci-matrix');
+    container.innerHTML = '';
+
+    const decay = 0.75;
+    const weights = Array.from({length: 10}, (_, i) => 10 * Math.pow(decay, i));
+    const maxW = Math.max(...weights);
+
+    const cellMap = {};
+    sci.cells.forEach(c => { cellMap[`${c.endpoint}_${c.start}`] = c; });
+
+    const grid = document.createElement('div');
+    grid.className = 'sci-grid';
+
+    grid.innerHTML = `
+      <div class="hdr"></div>
+      <div class="hdr">EP</div>
+      ${Array.from({length:10}, (_,j) => `<div class="hdr">+${(j+1)*10}d</div>`).join('')}
+      <div class="hdr">Score</div>
+    `;
+
+    for (let i = 0; i < 10; i++) {
+      const endpoint = (i + 1) * 10;
+      const w = weights[i];
+      const barWidth = Math.round(w / maxW * 36);
+
+      const wCell = document.createElement('div');
+      wCell.style.cssText = 'padding:4px 2px;display:flex;align-items:center;justify-content:center';
+      wCell.innerHTML = `<div class="weight-bar" style="width:${barWidth}px"></div>`;
+      grid.appendChild(wCell);
+
+      const epCell = document.createElement('div');
+      epCell.style.cssText = 'color:#94a3b8;font-weight:600;padding:6px 2px;text-align:center';
+      epCell.textContent = `${endpoint}d`;
+      grid.appendChild(epCell);
+
+      for (let j = 1; j <= 10; j++) {
+        const start = endpoint + j * 10;
+        const key = `${endpoint}_${start}`;
+        const cell = document.createElement('div');
+        const d = cellMap[key];
+
+        if (d) {
+          cell.className = `sci-cell ${d.above ? 'above' : 'below'}`;
+          cell.textContent = d.above ? '+' : '-';
+          const slopeStr = d.slope >= 0 ? `+${d.slope.toFixed(4)}` : d.slope.toFixed(4);
+          const status = d.above ? `기준(${(sci.threshold*100).toFixed(0)}%) 초과` : '기준 미달';
+          cell.innerHTML += `<div class="tooltip">${endpoint}d vs ${start}d / slope: ${slopeStr} / ${status}</div>`;
+        } else {
+          cell.className = 'sci-cell empty';
+          cell.textContent = '·';
+        }
+        grid.appendChild(cell);
+      }
+
+      const rsCell = document.createElement('div');
+      rsCell.className = 'row-score';
+      const rs = sci.row_scores[i];
+      rsCell.textContent = (rs * 10).toFixed(0) + '/10';
+      rsCell.style.color = rs >= 0.8 ? '#4ade80' : rs >= 0.5 ? '#94a3b8' : '#f87171';
+      grid.appendChild(rsCell);
+    }
+
+    container.appendChild(grid);
+
+    const summary = document.createElement('div');
+    summary.className = 'sci-summary';
+    const sciColor = sci.sci >= 0.8 ? '#4ade80' : sci.sci >= 0.6 ? '#94a3b8' : '#f87171';
+    summary.innerHTML = `
+      <span style="color:#94a3b8">SCI</span>
+      <span class="sci-val" style="color:${sciColor}">${sci.sci.toFixed(4)}</span>
+      <div class="gauge-track">
+        <div class="gauge-fill" style="width:${(sci.sci*100).toFixed(1)}%;background:${sciColor}"></div>
+      </div>
+      <span style="color:#475569;font-size:0.7rem">${(sci.sci*100).toFixed(1)}%</span>
+    `;
+    container.appendChild(summary);
+  }
+
+  // ─── Cards ─────────────────────────────────────────────
   const groupsEl = document.getElementById('groups');
 
   function renderCards(){
@@ -119,10 +391,10 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       div.className='group';
       names.forEach(name=>{
         const color    = colors[name];
-        const isActive = activeSet.has(name);
+        const isActive = name === currentDetailName;
         const v10      = get10d(name);
         const btn = document.createElement('div');
-        btn.className='asset-btn'+(isActive?' active':'');
+        btn.className='asset-btn'+(isActive?' detail-active':'');
         btn.style.setProperty('--c',color);
         const sciResult = calcSCI(name);
         const sciStr = sciResult ? `SCI ${sciResult.sci.toFixed(3)}` : '';
@@ -134,14 +406,10 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
         `;
         btn.addEventListener('click',()=>{
           const ticker = data[name]?.ticker;
-          if(ticker) location.href = `detail.html?ticker=${encodeURIComponent(ticker)}`;
-        });
-        btn.addEventListener('dblclick',(e)=>{
-          e.preventDefault();
-          if(activeSet.has(name)) activeSet.delete(name);
-          else activeSet.add(name);
-          renderCards();
-          updateChart();
+          if(!ticker) return;
+          currentVpPeriod = '10d';
+          location.hash = encodeURIComponent(ticker);
+          fetchDetail(ticker, name);
         });
         div.appendChild(btn);
       });
@@ -149,103 +417,17 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     });
   }
 
-  function makeDatasets(){
-    const colors = calcColors(allNames, data);
-    return allNames.map(name=>{
-      const isActive = activeSet.has(name);
-      const reversed = [...(data[name].vwap_structure||[])].reverse();
-      const color    = colors[name];
-      return {
-        label: name,
-        data:  reversed.map(s=>s.norm),
-        rawVwap: reversed.map(s=>s.vwap),
-        borderColor: color,
-        borderWidth: isActive?2:0,
-        pointRadius: isActive?3:0,
-        pointHoverRadius: isActive?4:0,
-        pointBackgroundColor: color,
-        tension: 0.3,
-        fill: false,
-        hidden: !isActive,
-      };
-    });
-  }
-
-  function makeAnnotations(){
-    const colors = calcColors(allNames, data);
-    const annotations = {
-      base:{type:'line',yMin:100,yMax:100,borderColor:'#475569',borderWidth:1.5},
-    };
-    const active = allNames.filter(n=>activeSet.has(n))
-      .map(n=>({name:n, val:get10d(n)}))
-      .filter(d=>d.val!=null)
-      .sort((a,b)=>b.val-a.val);
-
-    active.forEach(({name,val})=>{
-      annotations['lbl_'+name]={
-        type:'label', xValue:19, yValue:val,
-        content: name+' '+val.toFixed(2),
-        color: colors[name],
-        font:{size:10,weight:'bold'},
-        backgroundColor:'rgba(15,17,23,0.85)',
-        padding:{x:4,y:2},
-        position:{x:'start',y:'center'},
-        xAdjust:4,
-      };
-    });
-    return annotations;
-  }
-
-  function updateChart(){
-    structChart.data.datasets = makeDatasets();
-    structChart.options.plugins.annotation.annotations = makeAnnotations();
-    structChart.update('none');
-  }
-
   renderCards();
   renderSCI();
 
-  structChart = new Chart(document.getElementById('chart-structure'),{
-    type:'line',
-    data:{labels:STRUCT_LABELS, datasets:makeDatasets()},
-    options:{
-      responsive:true,
-      maintainAspectRatio:false,
-      animation:{duration:300},
-      interaction:{mode:'index',intersect:false},
-      layout:{padding:0},
-      plugins:{
-        legend:{display:false},
-        annotation:{annotations:makeAnnotations()},
-        tooltip:{callbacks:{label:ctx=>{
-          const norm = ctx.parsed.y?.toFixed(2);
-          const raw = ctx.dataset.rawVwap?.[ctx.dataIndex];
-          const rawStr = raw != null ? raw.toLocaleString(undefined,{maximumFractionDigits:2}) : '–';
-          return ` ${ctx.dataset.label}: ${norm} (VWAP ${rawStr})`;
-        }}}
-      },
-      scales:{
-        x:{ticks:{color:TICK,font:{size:10}},grid:{color:GRID}},
-        y:{
-          ticks:{color:TICK,font:{size:10},count:11,callback:v=>v.toFixed(2)},
-          grid:{color:GRID},
-          afterDataLimits(scale){
-            if(activeSet.size===0){scale.min=100;scale.max=200;}
-          }
-        },
-      }
-    }
-  });
-
-  // 리사이즈 시 차트 높이 반응형
-  function resizeChart(){
-    const wrap = document.querySelector('.chart-wrap');
-    const h = Math.max(300, Math.min(420, window.innerHeight * 0.45));
-    wrap.style.height = h + 'px';
-    structChart.resize();
+  // ─── URL hash → auto open ──────────────────────────────
+  function handleHash() {
+    const hash = decodeURIComponent(location.hash.slice(1));
+    if (!hash) return;
+    const matched = allNames.find(n => data[n]?.ticker === hash);
+    if (matched) fetchDetail(hash, matched);
   }
-  resizeChart();
-  window.addEventListener('resize', resizeChart);
+  handleHash();
 });
 
 // SCI 가중치 테이블
@@ -268,7 +450,6 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     `;
     tbody.appendChild(tr);
   });
-  // 합계 행
   const tfootr = document.createElement('tr');
   tfootr.innerHTML = `
     <td style="padding:6px 12px;color:#475569;border-top:1px solid #1e2535;font-weight:600">합계</td>
