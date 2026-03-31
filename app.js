@@ -66,9 +66,9 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
         const start = endpoint + j*10;
         if (!vmap[start]) continue;
         const slope = (vmap[endpoint] - vmap[start]) / j;
-        const denom = vmap[start] * 0.022;
-        const raw = denom !== 0 ? slope / denom : 0;
-        cellScores.push(Math.min(Math.max(raw, 0.0), 2.2) / 2);
+        const pct = vmap[start] > 0 ? (vmap[endpoint] - vmap[start]) / vmap[start] / j : 0;
+        const cell = Math.min(Math.max(pct / 0.022, 0), 1.0) * 1.1;
+        cellScores.push(cell);
       }
       const rowScore = cellScores.length > 0 ? cellScores.reduce((a,b)=>a+b,0)/cellScores.length : 0;
       rowScores.push(rowScore);

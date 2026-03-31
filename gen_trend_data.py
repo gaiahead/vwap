@@ -293,9 +293,8 @@ def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any
             if endpoint not in vmap or start not in vmap:
                 continue
             slope = (vmap[endpoint] - vmap[start]) / j
-            denom = vmap[start] * 0.022
-            raw = slope / denom if denom != 0 else 0.0
-            cell_score = min(max(raw, 0.0), 2.2) / 2
+            pct = (vmap[endpoint] - vmap[start]) / vmap[start] / j if vmap[start] > 0 else 0.0
+            cell_score = min(max(pct / 0.022, 0.0), 1.0) * 1.1
             cells.append({
                 "endpoint": endpoint,
                 "start": start,
@@ -313,7 +312,7 @@ def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any
         "cells": cells,
         "row_scores": row_scores,
         "sci": round(sci_val, 4),
-        "threshold": 0.022,
+        "threshold": 0.01,
     }
 
     return {
