@@ -1,3 +1,10 @@
+function getSciColor(s) {
+  if (s >= 0.9) return '#15803d';
+  if (s >= 0.7) return '#4ade80';
+  if (s >= 0.5) return '#94a3b8';
+  return '#f87171';
+}
+
 const GRID='#1e2535', TICK='#475569';
 const GROUP_ORDER = ['g1','g2','g3'];
 
@@ -87,14 +94,13 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
 
     rows.forEach(({name, result}) => {
       const {sci, rowScores} = result;
-      const sciColor = sci >= 1.0 ? '#4ade80' : sci >= 0.7 ? '#94a3b8' : '#f87171';
+      const sciColor = getSciColor(sci);
       const tr = document.createElement('tr');
       const cells = [
         `<td>${name}</td>`,
         `<td style="color:${sciColor};font-weight:700">${sci.toFixed(3)}</td>`,
         ...rowScores.map(s => {
-          const c = s >= 1.0 ? '#4ade80' : s >= 0.7 ? '#94a3b8' : '#f87171';
-          return `<td style="color:${c}">${s.toFixed(2)}</td>`;
+          return `<td style="color:${getSciColor(s)}">${s.toFixed(2)}</td>`;
         })
       ];
       tr.innerHTML = cells.join('');
@@ -343,13 +349,11 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
 
         if (d) {
           const score = d.score != null ? d.score : 0;
-          const cc = score <= 0 ? '#1e293b' : score >= 1.0 ? '#15803d' : score >= 0.75 ? '#4ade80' : score >= 0.5 ? '#94a3b8' : '#f87171';
+          const cc = score <= 0 ? '#1e293b' : getSciColor(score);
           cell.className = 'sci-cell';
           cell.style.backgroundColor = cc;
           cell.style.color = score >= 0.5 ? '#0f1117' : '#e2e8f0';
-          cell.textContent = score.toFixed(1);
-          const slopeStr = d.slope >= 0 ? `+${d.slope.toFixed(4)}` : d.slope.toFixed(4);
-          cell.innerHTML += `<div class="tooltip">${endpoint}d vs ${start}d / slope: ${slopeStr} / score: ${score.toFixed(2)}</div>`;
+          cell.textContent = score <= 0 ? '–' : score.toFixed(2);
         } else {
           cell.className = 'sci-cell empty';
           cell.textContent = '·';
@@ -361,7 +365,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       rsCell.className = 'row-score';
       const rs = sci.row_scores[i];
       rsCell.textContent = rs.toFixed(2);
-      rsCell.style.color = rs >= 1.0 ? '#4ade80' : rs >= 0.7 ? '#94a3b8' : '#f87171';
+      rsCell.style.color = getSciColor(rs);
       grid.appendChild(rsCell);
     }
 
@@ -369,7 +373,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
 
     const summary = document.createElement('div');
     summary.className = 'sci-summary';
-    const sciColor = sci.sci >= 1.0 ? '#4ade80' : sci.sci >= 0.7 ? '#94a3b8' : '#f87171';
+    const sciColor = getSciColor(sci.sci);
     summary.innerHTML = `
       <span style="color:#94a3b8">SCI</span>
       <span class="sci-val" style="color:${sciColor}">${sci.sci.toFixed(4)}</span>
