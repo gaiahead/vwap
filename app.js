@@ -47,6 +47,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     vs.forEach(v => { vmap[v.window] = v.vwap; });
     if (!vmap[10] || !vmap[200]) return null;
 
+    const SCI_MAX = 1.1;
     const weights = Array.from({length:10}, (_,i) => 10 * Math.pow(SCI_DECAY, i));
     const totalW = weights.reduce((a,b)=>a+b, 0);
 
@@ -55,15 +56,16 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
 
     for (let i = 0; i < 10; i++) {
       const endpoint = (i+1)*10;
-      let above = 0, total = 0;
+      const cellScores = [];
       for (let j = 1; j <= 10; j++) {
         const start = endpoint + j*10;
         if (!vmap[start]) continue;
         const slope = (vmap[endpoint] - vmap[start]) / j;
-        if (slope > vmap[start] * SCI_THRESHOLD) above++;
-        total++;
+        const denom = vmap[start] * SCI_THRESHOLD;
+        const raw = denom !== 0 ? slope / denom : 0;
+        cellScores.push(Math.min(Math.max(raw, 0.0), SCI_MAX));
       }
-      const rowScore = total > 0 ? above/total : 0;
+      const rowScore = cellScores.length > 0 ? cellScores.reduce((a,b)=>a+b,0)/cellScores.length : 0;
       rowScores.push(rowScore);
       weightedSum += weights[i] * rowScore;
     }
@@ -87,14 +89,14 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
 
     rows.forEach(({name, result}) => {
       const {sci, rowScores} = result;
-      const sciColor = sci >= 0.8 ? '#4ade80' : sci >= 0.6 ? '#94a3b8' : '#f87171';
+      const sciColor = sci >= 1.0 ? '#4ade80' : sci >= 0.7 ? '#94a3b8' : '#f87171';
       const tr = document.createElement('tr');
       const cells = [
         `<td>${name}</td>`,
         `<td style="color:${sciColor};font-weight:700">${sci.toFixed(3)}</td>`,
         ...rowScores.map(s => {
-          const c = s >= 0.8 ? '#4ade80' : s >= 0.5 ? '#94a3b8' : '#475569';
-          return `<td style="color:${c}">${(s*10).toFixed(0)}/10</td>`;
+          const c = s >= 1.0 ? '#4ade80' : s >= 0.7 ? '#94a3b8' : '#f87171';
+          return `<td style="color:${c}">${s.toFixed(2)}</td>`;
         })
       ];
       tr.innerHTML = cells.join('');
@@ -342,11 +344,14 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
         const d = cellMap[key];
 
         if (d) {
-          cell.className = `sci-cell ${d.above ? 'above' : 'below'}`;
-          cell.textContent = d.above ? '+' : '-';
+          const score = d.score != null ? d.score : 0;
+          const cc = score <= 0 ? '#1e293b' : score >= 1.1 ? '#15803d' : score >= 1.0 ? '#4ade80' : score >= 0.5 ? '#94a3b8' : '#f87171';
+          cell.className = 'sci-cell';
+          cell.style.backgroundColor = cc;
+          cell.style.color = score >= 0.5 ? '#0f1117' : '#e2e8f0';
+          cell.textContent = score.toFixed(1);
           const slopeStr = d.slope >= 0 ? `+${d.slope.toFixed(4)}` : d.slope.toFixed(4);
-          const status = d.above ? `기준(${(sci.threshold*100).toFixed(0)}%) 초과` : '기준 미달';
-          cell.innerHTML += `<div class="tooltip">${endpoint}d vs ${start}d / slope: ${slopeStr} / ${status}</div>`;
+          cell.innerHTML += `<div class="tooltip">${endpoint}d vs ${start}d / slope: ${slopeStr} / score: ${score.toFixed(2)}</div>`;
         } else {
           cell.className = 'sci-cell empty';
           cell.textContent = '·';
@@ -357,8 +362,8 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       const rsCell = document.createElement('div');
       rsCell.className = 'row-score';
       const rs = sci.row_scores[i];
-      rsCell.textContent = (rs * 10).toFixed(0) + '/10';
-      rsCell.style.color = rs >= 0.8 ? '#4ade80' : rs >= 0.5 ? '#94a3b8' : '#f87171';
+      rsCell.textContent = rs.toFixed(2);
+      rsCell.style.color = rs >= 1.0 ? '#4ade80' : rs >= 0.7 ? '#94a3b8' : '#f87171';
       grid.appendChild(rsCell);
     }
 
@@ -366,7 +371,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
 
     const summary = document.createElement('div');
     summary.className = 'sci-summary';
-    const sciColor = sci.sci >= 0.8 ? '#4ade80' : sci.sci >= 0.6 ? '#94a3b8' : '#f87171';
+    const sciColor = sci.sci >= 1.0 ? '#4ade80' : sci.sci >= 0.7 ? '#94a3b8' : '#f87171';
     summary.innerHTML = `
       <span style="color:#94a3b8">SCI</span>
       <span class="sci-val" style="color:${sciColor}">${sci.sci.toFixed(4)}</span>

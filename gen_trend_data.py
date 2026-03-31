@@ -279,6 +279,7 @@ def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any
             vmap[w] = compute_vwap(df.iloc[-w:])
 
     sci_threshold = 0.01
+    sci_max = 1.1
     sci_decay = 0.75
     cells: list[dict[str, Any]] = []
     row_scores: list[float] = []
@@ -288,24 +289,22 @@ def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any
 
     for i in range(10):
         endpoint = (i + 1) * 10
-        above_count = 0
-        total_count = 0
+        cell_scores: list[float] = []
         for j in range(1, 11):
             start = endpoint + j * 10
             if endpoint not in vmap or start not in vmap:
                 continue
             slope = (vmap[endpoint] - vmap[start]) / j
-            is_above = slope > vmap[start] * sci_threshold
+            raw = slope / (vmap[start] * sci_threshold) if vmap[start] * sci_threshold != 0 else 0.0
+            cell_score = min(max(raw, 0.0), sci_max)
             cells.append({
                 "endpoint": endpoint,
                 "start": start,
                 "slope": round(slope, 6),
-                "above": is_above,
+                "score": round(cell_score, 4),
             })
-            if is_above:
-                above_count += 1
-            total_count += 1
-        rs = above_count / total_count if total_count > 0 else 0.0
+            cell_scores.append(cell_score)
+        rs = sum(cell_scores) / len(cell_scores) if cell_scores else 0.0
         row_scores.append(round(rs, 4))
         weighted_sum += weights[i] * rs
 
