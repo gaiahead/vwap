@@ -38,7 +38,6 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
 
   // ─── SCI 계산 ──────────────────────────────────────────
   const SCI_DECAY = 0.75;
-  const SCI_THRESHOLD = 0.01;
 
   function calcSCI(name) {
     const vs = data[name]?.vwap_structure;
@@ -47,7 +46,6 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     vs.forEach(v => { vmap[v.window] = v.vwap; });
     if (!vmap[10] || !vmap[200]) return null;
 
-    const SCI_MAX = 1.1;
     const weights = Array.from({length:10}, (_,i) => 10 * Math.pow(SCI_DECAY, i));
     const totalW = weights.reduce((a,b)=>a+b, 0);
 
@@ -61,9 +59,9 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
         const start = endpoint + j*10;
         if (!vmap[start]) continue;
         const slope = (vmap[endpoint] - vmap[start]) / j;
-        const denom = vmap[start] * SCI_THRESHOLD;
+        const denom = vmap[start] * 0.022;
         const raw = denom !== 0 ? slope / denom : 0;
-        cellScores.push(Math.min(Math.max(raw, 0.0), SCI_MAX));
+        cellScores.push(Math.min(Math.max(raw, 0.0), 2.2) / 2);
       }
       const rowScore = cellScores.length > 0 ? cellScores.reduce((a,b)=>a+b,0)/cellScores.length : 0;
       rowScores.push(rowScore);
@@ -345,7 +343,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
 
         if (d) {
           const score = d.score != null ? d.score : 0;
-          const cc = score <= 0 ? '#1e293b' : score >= 1.1 ? '#15803d' : score >= 1.0 ? '#4ade80' : score >= 0.5 ? '#94a3b8' : '#f87171';
+          const cc = score <= 0 ? '#1e293b' : score >= 1.0 ? '#15803d' : score >= 0.75 ? '#4ade80' : score >= 0.5 ? '#94a3b8' : '#f87171';
           cell.className = 'sci-cell';
           cell.style.backgroundColor = cc;
           cell.style.color = score >= 0.5 ? '#0f1117' : '#e2e8f0';
