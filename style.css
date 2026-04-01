@@ -32,7 +32,8 @@ header p{font-size:0.74rem;color:#475569;margin-top:4px}
 .vms-table{width:100%;border-collapse:collapse;font-size:0.8rem}
 .vms-table th{padding:5px 10px;text-align:right;font-size:0.65rem;font-weight:600;color:#334155;letter-spacing:.04em}
 .vms-table th:first-child{text-align:left}
-.vms-table td{padding:7px 10px;text-align:right;color:#cbd5e1;border-top:1px solid #161b27;vertical-align:middle;font-variant-numeric:tabular-nums}
+.vms-table td{padding:7px 10px;text-align:right;color:#cbd5e1;border-top:1px solid #161b27;vertical-align:middle;font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+.vms-table td:not(:first-child){font-family:'SF Mono','Consolas','Menlo',monospace;font-size:0.78rem}
 .vms-table td:first-child{text-align:left;font-weight:700;color:#94a3b8}
 
 /* Detail section */
@@ -45,7 +46,7 @@ header p{font-size:0.74rem;color:#475569;margin-top:4px}
 
 /* Panel styles (from detail.html) */
 .panel-box{background:#161b27;border:1px solid #1e2535;border-radius:14px;padding:16px}
-.section-box{background:#161b27;border:1px solid #1e2535;border-radius:14px;padding:16px 20px;margin:0 28px 16px}
+.section-box{background:#161b27;border:1px solid #1e2535;border-radius:14px;padding:16px 20px;margin:16px 28px 0}
 .panel-title{font-size:0.7rem;font-weight:700;color:#475569;letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px}
 
 .vp-tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
