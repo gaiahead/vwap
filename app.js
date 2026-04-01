@@ -257,16 +257,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
           backgroundColor: 'rgba(15,17,23,0.85)', font: {size: 9}, position: 'end', padding: {x: 3, y: 1}}
       };
     }
-    const cp = detailData.latest_price;
-    const cpIdx = buckets.findIndex(b => b.price >= cp);
-    if (cpIdx >= 0) {
-      annotations.priceLine = {
-        type: 'line', scaleID: 'y', value: cpIdx,
-        borderColor: '#f8fafc', borderWidth: 1.5, borderDash: [4, 2],
-        label: {display: true, content: `Price ${cp.toLocaleString()}`, color: '#f8fafc',
-          backgroundColor: 'rgba(15,17,23,0.85)', font: {size: 9}, position: 'start', padding: {x: 3, y: 1}}
-      };
-    }
+    // 현재가 라인 제거
 
     const config = {
       type: 'bar',
@@ -369,20 +360,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
 
     container.appendChild(grid);
 
-    const summary = document.createElement('div');
-    summary.className = 'vms-summary';
-    const vmsColor = getVmsColor(vms.vms);
-    const vmsDisplay = (vms.vms * 100).toFixed(2);
-    const gaugePct = Math.min(vms.vms / 0.05 * 100, 100).toFixed(1);
-    summary.innerHTML = `
-      <span style="color:#94a3b8">VMS</span>
-      <span class="vms-val" style="color:${vmsColor}">${vmsDisplay}</span>
-      <div class="gauge-track">
-        <div class="gauge-fill" style="width:${gaugePct}%;background:${vmsColor}"></div>
-      </div>
-      <span style="color:#475569;font-size:0.7rem">${vmsDisplay}</span>
-    `;
-    container.appendChild(summary);
+    // summary 제거
   }
 
   // ─── Cards ─────────────────────────────────────────────
