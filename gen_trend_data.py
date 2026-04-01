@@ -272,16 +272,16 @@ def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any
                 "vwap": round(vwap_val, 4),
             }
 
-    # sci_matrix: vwap_map에서 100셀 계산
+    # vms_matrix: vwap_map에서 100셀 계산 (복리 방식)
     vmap: dict[int, float] = {}
     for w in WINDOWS:
         if len(df) >= w:
             vmap[w] = compute_vwap(df.iloc[-w:])
 
-    sci_decay = 0.75
+    vms_decay = 0.75
     cells: list[dict[str, Any]] = []
     row_scores: list[float] = []
-    weights = [10 * sci_decay**i for i in range(10)]
+    weights = [10 * vms_decay**i for i in range(10)]
     total_weight = sum(weights)
     weighted_sum = 0.0
 
@@ -292,27 +292,23 @@ def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any
             start = endpoint + j * 10
             if endpoint not in vmap or start not in vmap:
                 continue
-            slope = (vmap[endpoint] - vmap[start]) / j
-            pct = (vmap[endpoint] - vmap[start]) / vmap[start] / j if vmap[start] > 0 else 0.0
-            cell_score = min(max(pct / 0.022, 0.0), 1.0) * 1.1
+            cell_score = max((vmap[endpoint] / vmap[start]) ** (1 / j) - 1, 0.0)
             cells.append({
                 "endpoint": endpoint,
                 "start": start,
-                "slope": round(slope, 6),
-                "score": round(cell_score, 4),
+                "score": round(cell_score, 6),
             })
             cell_scores.append(cell_score)
         rs = sum(cell_scores) / len(cell_scores) if cell_scores else 0.0
-        row_scores.append(round(rs, 4))
+        row_scores.append(round(rs, 6))
         weighted_sum += weights[i] * rs
 
-    sci_val = weighted_sum / total_weight if total_weight > 0 else 0.0
+    vms_val = weighted_sum / total_weight if total_weight > 0 else 0.0
 
-    sci_matrix = {
+    vms_matrix = {
         "cells": cells,
         "row_scores": row_scores,
-        "sci": round(sci_val, 4),
-        "threshold": 0.01,
+        "vms": round(vms_val, 6),
     }
 
     return {
@@ -320,7 +316,7 @@ def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any
         "ticker": ticker,
         "ohlcv": ohlcv,
         "volume_profile": volume_profile,
-        "sci_matrix": sci_matrix,
+        "vms_matrix": vms_matrix,
         "latest_price": round(float(df["close"].iloc[-1]), 2),
     }
 

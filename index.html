@@ -57,39 +57,39 @@
     </div>
     <!-- Panel C -->
     <div class="panel-box" style="margin-top:16px">
-      <div class="panel-title">SCI Matrix (Slope Consistency Index)</div>
-      <div id="sci-matrix"></div>
+      <div class="panel-title">VMS Matrix (VWAP Momentum Score)</div>
+      <div id="vms-matrix"></div>
     </div>
   </div>
 </div>
 
-<div class="sci-section" id="sci-section" style="display:none">
-  <div class="sci-title">📐 SCI (Slope Consistency Index)</div>
-  <table class="sci-table">
+<div class="vms-section" id="vms-section" style="display:none">
+  <div class="vms-title">📐 VMS (VWAP Momentum Score)</div>
+  <table class="vms-table">
     <thead>
       <tr>
         <th>종목</th>
-        <th>SCI</th>
+        <th>VMS</th>
 
         <th>10d</th><th>20d</th><th>30d</th><th>40d</th><th>50d</th>
         <th>60d</th><th>70d</th><th>80d</th><th>90d</th><th>100d</th>
       </tr>
     </thead>
-    <tbody id="sci-body"></tbody>
+    <tbody id="vms-body"></tbody>
   </table>
 </div>
 
-<!-- SCI 가중치 설명 -->
+<!-- VMS 가중치 설명 -->
 <div style="padding:16px 28px 32px;border-top:1px solid #1e2535;margin-top:8px">
   <div style="font-size:0.72rem;font-weight:700;color:#334155;letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px">
-    📐 SCI — Slope Consistency Index
+    📐 VMS — VWAP Momentum Score
   </div>
   <div style="font-size:0.75rem;color:#475569;margin-bottom:10px">
-    투자금 = 기준값 × SCI &nbsp;|&nbsp; SCI = Σ(가중치 × 행 점수) / Σ(가중치) &nbsp;|&nbsp; 지수 감소 0.75
+    투자금 = 기준값 × VMS &nbsp;|&nbsp; VMS = Σ(가중치 × 행 점수) / Σ(가중치) &nbsp;|&nbsp; 지수 감소 0.75
   </div>
   <div style="font-size:0.73rem;color:#334155;margin-bottom:10px">
-    비교 기준: slope &gt; endpoint × 1% (10d당 ≈ 주간 0.5% = 연 30%) &nbsp;|&nbsp;
-    행 점수 = 100개 슬로프 중 기준 초과 비율 (가중 평균)
+    복리 10d당 성장률 = (endpoint_vwap / start_vwap)^(1/j) - 1 &nbsp;|&nbsp;
+    행 점수 = 셀 점수의 가중 평균
   </div>
   <table style="border-collapse:collapse;font-size:0.72rem;width:100%;max-width:700px">
     <thead>
@@ -100,7 +100,7 @@
         <th style="padding:4px 12px;text-align:left;color:#1e2535;border-bottom:1px solid #1e2535;padding-left:16px">시작점 범위</th>
       </tr>
     </thead>
-    <tbody id="sci-weight-table"></tbody>
+    <tbody id="vms-weight-table"></tbody>
   </table>
 </div>
 

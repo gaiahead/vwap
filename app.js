@@ -1,7 +1,8 @@
-function getSciColor(s) {
-  if (s >= 0.9) return '#15803d';
-  if (s >= 0.7) return '#4ade80';
-  if (s >= 0.5) return '#94a3b8';
+function getVmsColor(s) {
+  if (s <= 0)    return '#1e293b';
+  if (s >= 0.03) return '#15803d';
+  if (s >= 0.02) return '#4ade80';
+  if (s >= 0.01) return '#94a3b8';
   return '#f87171';
 }
 
@@ -43,17 +44,17 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
 
   function get10d(name){ return data[name]?.vwap_structure?.[0]?.norm??null; }
 
-  // ─── SCI 계산 ──────────────────────────────────────────
-  const SCI_DECAY = 0.75;
+  // ─── VMS 계산 ──────────────────────────────────────────
+  const VMS_DECAY = 0.75;
 
-  function calcSCI(name) {
+  function calcVMS(name) {
     const vs = data[name]?.vwap_structure;
     if (!vs) return null;
     const vmap = {};
     vs.forEach(v => { vmap[v.window] = v.vwap; });
     if (!vmap[10] || !vmap[200]) return null;
 
-    const weights = Array.from({length:10}, (_,i) => 10 * Math.pow(SCI_DECAY, i));
+    const weights = Array.from({length:10}, (_,i) => 10 * Math.pow(VMS_DECAY, i));
     const totalW = weights.reduce((a,b)=>a+b, 0);
 
     let weightedSum = 0;
@@ -65,9 +66,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       for (let j = 1; j <= 10; j++) {
         const start = endpoint + j*10;
         if (!vmap[start]) continue;
-        const slope = (vmap[endpoint] - vmap[start]) / j;
-        const pct = vmap[start] > 0 ? (vmap[endpoint] - vmap[start]) / vmap[start] / j : 0;
-        const cell = Math.min(Math.max(pct / 0.022, 0), 1.0) * 1.1;
+        const cell = Math.max(Math.pow(vmap[endpoint] / vmap[start], 1/j) - 1, 0);
         cellScores.push(cell);
       }
       const rowScore = cellScores.length > 0 ? cellScores.reduce((a,b)=>a+b,0)/cellScores.length : 0;
@@ -75,32 +74,32 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       weightedSum += weights[i] * rowScore;
     }
 
-    return { sci: weightedSum/totalW, rowScores };
+    return { vms: weightedSum/totalW, rowScores };
   }
 
-  function renderSCI() {
+  function renderVMS() {
     const targets = ['삼성전자','SK하이닉스','한미반도체','리노공업'];
-    const hasSCI = targets.some(n => data[n]);
-    if (!hasSCI) return;
+    const hasVMS = targets.some(n => data[n]);
+    if (!hasVMS) return;
 
-    document.getElementById('sci-section').style.display = '';
-    const tbody = document.getElementById('sci-body');
+    document.getElementById('vms-section').style.display = '';
+    const tbody = document.getElementById('vms-body');
     tbody.innerHTML = '';
 
     const rows = allNames
-      .map(n => ({ name: n, result: calcSCI(n) }))
+      .map(n => ({ name: n, result: calcVMS(n) }))
       .filter(r => r.result !== null)
-      .sort((a,b) => b.result.sci - a.result.sci);
+      .sort((a,b) => b.result.vms - a.result.vms);
 
     rows.forEach(({name, result}) => {
-      const {sci, rowScores} = result;
-      const sciColor = getSciColor(sci);
+      const {vms, rowScores} = result;
+      const vmsColor = getVmsColor(vms);
       const tr = document.createElement('tr');
       const cells = [
         `<td>${name}</td>`,
-        `<td style="color:${sciColor};font-weight:700">${sci.toFixed(3)}</td>`,
+        `<td style="color:${vmsColor};font-weight:700">${vms <= 0 ? '–' : (vms * 100).toFixed(1) + '%'}</td>`,
         ...rowScores.map(s => {
-          return `<td style="color:${getSciColor(s)}">${s.toFixed(2)}</td>`;
+          return `<td style="color:${getVmsColor(s)}">${s <= 0 ? '–' : (s * 100).toFixed(1) + '%'}</td>`;
         })
       ];
       tr.innerHTML = cells.join('');
@@ -163,8 +162,8 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
         <div style="position:relative;height:440px"><canvas id="chart-vp"></canvas></div>
       </div>
       <div class="panel-box" style="margin-top:16px">
-        <div class="panel-title">SCI Matrix (Slope Consistency Index)</div>
-        <div id="sci-matrix"></div>
+        <div class="panel-title">VMS Matrix (VWAP Momentum Score)</div>
+        <div id="vms-matrix"></div>
       </div>
     `;
   }
@@ -187,7 +186,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     detailTitle.textContent = detailData.name;
     renderPriceChart(detailData);
     renderVpChart(detailData, currentVpPeriod);
-    renderSCIMatrix(detailData);
+    renderVMSMatrix(detailData);
     detailSection.scrollIntoView({behavior:'smooth', block:'start'});
   }
 
@@ -303,10 +302,10 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     vpChart = new Chart(document.getElementById('chart-vp'), config);
   }
 
-  // ─── Panel C: SCI Matrix ──────────────────────────────
-  function renderSCIMatrix(detailData) {
-    const sci = detailData.sci_matrix;
-    const container = document.getElementById('sci-matrix');
+  // ─── Panel C: VMS Matrix ──────────────────────────────
+  function renderVMSMatrix(detailData) {
+    const vms = detailData.vms_matrix;
+    const container = document.getElementById('vms-matrix');
     container.innerHTML = '';
 
     const decay = 0.75;
@@ -314,10 +313,10 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     const maxW = Math.max(...weights);
 
     const cellMap = {};
-    sci.cells.forEach(c => { cellMap[`${c.endpoint}_${c.start}`] = c; });
+    vms.cells.forEach(c => { cellMap[`${c.endpoint}_${c.start}`] = c; });
 
     const grid = document.createElement('div');
-    grid.className = 'sci-grid';
+    grid.className = 'vms-grid';
 
     grid.innerHTML = `
       <div class="hdr"></div>
@@ -349,13 +348,13 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
 
         if (d) {
           const score = d.score != null ? d.score : 0;
-          const cc = score <= 0 ? '#1e293b' : getSciColor(score);
-          cell.className = 'sci-cell';
+          const cc = getVmsColor(score);
+          cell.className = 'vms-cell';
           cell.style.backgroundColor = cc;
-          cell.style.color = score >= 0.5 ? '#0f1117' : '#e2e8f0';
-          cell.textContent = score <= 0 ? '–' : score.toFixed(2);
+          cell.style.color = score >= 0.03 ? '#0f1117' : '#e2e8f0';
+          cell.textContent = score <= 0 ? '–' : (score * 100).toFixed(1) + '%';
         } else {
-          cell.className = 'sci-cell empty';
+          cell.className = 'vms-cell empty';
           cell.textContent = '·';
         }
         grid.appendChild(cell);
@@ -363,24 +362,26 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
 
       const rsCell = document.createElement('div');
       rsCell.className = 'row-score';
-      const rs = sci.row_scores[i];
-      rsCell.textContent = rs.toFixed(2);
-      rsCell.style.color = getSciColor(rs);
+      const rs = vms.row_scores[i];
+      rsCell.textContent = rs <= 0 ? '–' : (rs * 100).toFixed(1) + '%';
+      rsCell.style.color = getVmsColor(rs);
       grid.appendChild(rsCell);
     }
 
     container.appendChild(grid);
 
     const summary = document.createElement('div');
-    summary.className = 'sci-summary';
-    const sciColor = getSciColor(sci.sci);
+    summary.className = 'vms-summary';
+    const vmsColor = getVmsColor(vms.vms);
+    const vmsDisplay = vms.vms <= 0 ? '–' : (vms.vms * 100).toFixed(1) + '%';
+    const gaugePct = Math.min(vms.vms / 0.05 * 100, 100).toFixed(1);
     summary.innerHTML = `
-      <span style="color:#94a3b8">SCI</span>
-      <span class="sci-val" style="color:${sciColor}">${sci.sci.toFixed(4)}</span>
+      <span style="color:#94a3b8">VMS</span>
+      <span class="vms-val" style="color:${vmsColor}">${vmsDisplay}</span>
       <div class="gauge-track">
-        <div class="gauge-fill" style="width:${(sci.sci*100).toFixed(1)}%;background:${sciColor}"></div>
+        <div class="gauge-fill" style="width:${gaugePct}%;background:${vmsColor}"></div>
       </div>
-      <span style="color:#475569;font-size:0.7rem">${(sci.sci*100).toFixed(1)}%</span>
+      <span style="color:#475569;font-size:0.7rem">${vmsDisplay}</span>
     `;
     container.appendChild(summary);
   }
@@ -403,13 +404,13 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
         const btn = document.createElement('div');
         btn.className='asset-btn'+(isActive?' detail-active':'');
         btn.style.setProperty('--c',color);
-        const sciResult = calcSCI(name);
-        const sciStr = sciResult ? `SCI ${sciResult.sci.toFixed(3)}` : '';
+        const vmsResult = calcVMS(name);
+        const vmsStr = vmsResult ? `VMS ${vmsResult.vms <= 0 ? '–' : (vmsResult.vms * 100).toFixed(1) + '%'}` : '';
         btn.innerHTML=`
           <div class="indicator"></div>
           <div class="name">${name}</div>
           <div class="val" style="color:${color}">${v10!=null?v10.toFixed(2):'–'}</div>
-          <div class="sci">${sciStr}</div>
+          <div class="vms">${vmsStr}</div>
         `;
         btn.addEventListener('click',()=>{
           const ticker = data[name]?.ticker;
@@ -425,7 +426,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
   }
 
   renderCards();
-  renderSCI();
+  renderVMS();
 
   // ─── URL hash → auto open ──────────────────────────────
   function handleHash() {
@@ -437,12 +438,12 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
   handleHash();
 });
 
-// SCI 가중치 테이블
+// VMS 가중치 테이블
 (function(){
   const decay = 0.75;
   const weights = Array.from({length:10}, (_,i) => +(10 * Math.pow(decay, i)).toFixed(4));
   const total = weights.reduce((a,b)=>a+b,0);
-  const tbody = document.getElementById('sci-weight-table');
+  const tbody = document.getElementById('vms-weight-table');
   weights.forEach((w, i) => {
     const ep = (i+1)*10;
     const pct = (w/total*100).toFixed(2);
