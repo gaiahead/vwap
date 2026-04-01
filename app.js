@@ -306,6 +306,8 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     const cellMap = {};
     vms.cells.forEach(c => { cellMap[`${c.endpoint}_${c.start}`] = c; });
 
+    const wrap = document.createElement('div');
+    wrap.className = 'vms-grid-wrap';
     const grid = document.createElement('div');
     grid.className = 'vms-grid';
 
@@ -358,7 +360,8 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       grid.appendChild(rsCell);
     }
 
-    container.appendChild(grid);
+    wrap.appendChild(grid);
+    container.appendChild(wrap);
 
     // summary 제거
   }
