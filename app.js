@@ -1,9 +1,9 @@
 function getVmsColor(s) {
-  if (s <= 0)    return '#1e293b';
-  if (s >= 0.03) return '#15803d';
-  if (s >= 0.02) return '#4ade80';
-  if (s >= 0.01) return '#94a3b8';
-  return '#f87171';
+  if (s >= 0.03)  return '#4ade80';   // 3%+ → 녹 (텍스트)
+  if (s >= 0.01)  return '#94a3b8';   // 1%+ → 회
+  if (s >= 0)     return '#64748b';   // 0%+ → 어두운 회
+  if (s >= -0.01) return '#fb923c';   // -1%~0 → 주황
+  return '#f87171';                   // -1% 미만 → 적
 }
 
 const GRID='#1e2535', TICK='#475569';
@@ -66,7 +66,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       for (let j = 1; j <= 10; j++) {
         const start = endpoint + j*10;
         if (!vmap[start]) continue;
-        const cell = Math.max(Math.pow(vmap[endpoint] / vmap[start], 1/j) - 1, 0);
+        const cell = Math.pow(vmap[endpoint] / vmap[start], 1/j) - 1;  // 마이너스 허용
         cellScores.push(cell);
       }
       const rowScore = cellScores.length > 0 ? cellScores.reduce((a,b)=>a+b,0)/cellScores.length : 0;
@@ -348,11 +348,10 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
 
         if (d) {
           const score = d.score != null ? d.score : 0;
-          const cc = getVmsColor(score);
           cell.className = 'vms-cell';
-          cell.style.backgroundColor = cc;
-          cell.style.color = score >= 0.03 ? '#0f1117' : '#e2e8f0';
-          cell.textContent = score <= 0 ? '–' : (score * 100).toFixed(2);
+          cell.style.backgroundColor = '#161b27';
+          cell.style.color = getVmsColor(score);
+          cell.textContent = score === 0 ? '–' : (score * 100).toFixed(2);
         } else {
           cell.className = 'vms-cell empty';
           cell.textContent = '·';

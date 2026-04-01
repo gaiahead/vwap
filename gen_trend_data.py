@@ -292,7 +292,7 @@ def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any
             start = endpoint + j * 10
             if endpoint not in vmap or start not in vmap:
                 continue
-            cell_score = max((vmap[endpoint] / vmap[start]) ** (1 / j) - 1, 0.0)
+            cell_score = (vmap[endpoint] / vmap[start]) ** (1 / j) - 1  # 마이너스 허용
             cells.append({
                 "endpoint": endpoint,
                 "start": start,
