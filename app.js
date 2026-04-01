@@ -97,9 +97,9 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       const tr = document.createElement('tr');
       const cells = [
         `<td>${name}</td>`,
-        `<td style="color:${vmsColor};font-weight:700">${vms <= 0 ? '–' : (vms * 100).toFixed(1) + '%'}</td>`,
+        `<td style="color:${vmsColor};font-weight:700">${vms <= 0 ? '–' : vms.toFixed(2)}</td>`,
         ...rowScores.map(s => {
-          return `<td style="color:${getVmsColor(s)}">${s <= 0 ? '–' : (s * 100).toFixed(1) + '%'}</td>`;
+          return `<td style="color:${getVmsColor(s)}">${s <= 0 ? '–' : s.toFixed(2)}</td>`;
         })
       ];
       tr.innerHTML = cells.join('');
@@ -352,7 +352,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
           cell.className = 'vms-cell';
           cell.style.backgroundColor = cc;
           cell.style.color = score >= 0.03 ? '#0f1117' : '#e2e8f0';
-          cell.textContent = score <= 0 ? '–' : (score * 100).toFixed(1) + '%';
+          cell.textContent = score <= 0 ? '–' : score.toFixed(2);
         } else {
           cell.className = 'vms-cell empty';
           cell.textContent = '·';
@@ -363,7 +363,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       const rsCell = document.createElement('div');
       rsCell.className = 'row-score';
       const rs = vms.row_scores[i];
-      rsCell.textContent = rs <= 0 ? '–' : (rs * 100).toFixed(1) + '%';
+      rsCell.textContent = rs <= 0 ? '–' : rs.toFixed(2);
       rsCell.style.color = getVmsColor(rs);
       grid.appendChild(rsCell);
     }
@@ -373,7 +373,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     const summary = document.createElement('div');
     summary.className = 'vms-summary';
     const vmsColor = getVmsColor(vms.vms);
-    const vmsDisplay = vms.vms <= 0 ? '–' : (vms.vms * 100).toFixed(1) + '%';
+    const vmsDisplay = vms.vms <= 0 ? '–' : vms.vms.toFixed(2);
     const gaugePct = Math.min(vms.vms / 0.05 * 100, 100).toFixed(1);
     summary.innerHTML = `
       <span style="color:#94a3b8">VMS</span>
@@ -405,7 +405,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
         btn.className='asset-btn'+(isActive?' detail-active':'');
         btn.style.setProperty('--c',color);
         const vmsResult = calcVMS(name);
-        const vmsStr = vmsResult ? `VMS ${vmsResult.vms <= 0 ? '–' : (vmsResult.vms * 100).toFixed(1) + '%'}` : '';
+        const vmsStr = vmsResult ? `VMS ${vmsResult.vms <= 0 ? '–' : vmsResult.vms.toFixed(2)}` : '';
         btn.innerHTML=`
           <div class="indicator"></div>
           <div class="name">${name}</div>
