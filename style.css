@@ -45,6 +45,7 @@ header p{font-size:0.74rem;color:#475569;margin-top:4px}
 
 /* Panel styles (from detail.html) */
 .panel-box{background:#161b27;border:1px solid #1e2535;border-radius:14px;padding:16px}
+.section-box{background:#161b27;border:1px solid #1e2535;border-radius:14px;padding:16px 20px;margin:0 28px 16px}
 .panel-title{font-size:0.7rem;font-weight:700;color:#475569;letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px}
 
 .vp-tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}

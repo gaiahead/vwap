@@ -153,7 +153,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       .join('');
     return `
       <div class="panel-box">
-        <div class="panel-title">Price + VWAP Lines</div>
+        <div class="panel-title">VWAP Lines</div>
         <div style="position:relative;height:440px"><canvas id="chart-price"></canvas></div>
       </div>
       <div class="panel-box" style="margin-top:16px">
@@ -162,7 +162,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
         <div style="position:relative;height:440px"><canvas id="chart-vp"></canvas></div>
       </div>
       <div class="panel-box" style="margin-top:16px">
-        <div class="panel-title">VMS Matrix (VWAP Momentum Score)</div>
+        <div class="panel-title">VMS Matrix</div>
         <div id="vms-matrix"></div>
       </div>
     `;
@@ -323,7 +323,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
 
       const wCell = document.createElement('div');
       wCell.style.cssText = 'padding:4px 2px;display:flex;align-items:center;justify-content:center';
-      wCell.innerHTML = `<div class="weight-bar" style="width:${barWidth}px"></div>`;
+      wCell.innerHTML = '';  // 가중치 바 제거
       grid.appendChild(wCell);
 
       const epCell = document.createElement('div');
@@ -424,14 +424,12 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
   weights.forEach((w, i) => {
     const ep = (i+1)*10;
     const pct = (w/total*100).toFixed(2);
-    const barW = Math.round(w/total*120);
-    const bar = `<span style="display:inline-block;width:${barW}px;height:8px;background:#1e3a5f;border-radius:2px;vertical-align:middle;margin-right:6px"></span>`;
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td style="padding:4px 12px;color:#94a3b8">${ep}d</td>
       <td style="padding:4px 12px;text-align:right;color:#cbd5e1">${w.toFixed(4)}</td>
       <td style="padding:4px 12px;text-align:right;color:#60a5fa">${pct}%</td>
-      <td style="padding:4px 12px 4px 16px;color:#334155">${bar}${ep+10}d ~ ${ep+100}d</td>
+      <td style="padding:4px 12px 4px 16px;color:#334155">${ep+10}d ~ ${ep+100}d</td>
     `;
     tbody.appendChild(tr);
   });

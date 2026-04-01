@@ -25,7 +25,7 @@
   <div id="detail-content">
     <!-- Panel A -->
     <div class="panel-box">
-      <div class="panel-title">Price + VWAP Lines</div>
+      <div class="panel-title">VWAP Lines</div>
       <div style="position:relative;height:440px"><canvas id="chart-price"></canvas></div>
     </div>
     <!-- Panel B -->
@@ -63,14 +63,13 @@
   </div>
 </div>
 
-<div class="vms-section" id="vms-section" style="display:none">
-  <div class="vms-title">📐 VMS List</div>
+<div class="section-box" id="vms-section" style="display:none">
+  <div class="panel-title">📐 VMS List</div>
   <table class="vms-table">
     <thead>
       <tr>
         <th>종목</th>
         <th>VMS</th>
-
         <th>10d</th><th>20d</th><th>30d</th><th>40d</th><th>50d</th>
         <th>60d</th><th>70d</th><th>80d</th><th>90d</th><th>100d</th>
       </tr>
@@ -79,17 +78,14 @@
   </table>
 </div>
 
-<!-- VMS 가중치 설명 -->
-<div style="padding:16px 28px 32px;border-top:1px solid #1e2535;margin-top:8px">
-  <div style="font-size:0.72rem;font-weight:700;color:#334155;letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px">
-    📐 VMS — VWAP Momentum Score
-  </div>
+<div class="section-box">
+  <div class="panel-title">VMS 설명</div>
   <div style="font-size:0.75rem;color:#475569;margin-bottom:10px">
-    투자금 = 기준값 × VMS &nbsp;|&nbsp; VMS = Σ(가중치 × 행 점수) / Σ(가중치) &nbsp;|&nbsp; 지수 감소 0.75
+    VMS = Σ(가중치 × 행 점수) / Σ(가중치) &nbsp;|&nbsp; 지수 감소 0.75
   </div>
-  <div style="font-size:0.73rem;color:#334155;margin-bottom:10px">
+  <div style="font-size:0.73rem;color:#334155;margin-bottom:12px">
     복리 10d당 성장률 = (endpoint_vwap / start_vwap)^(1/j) - 1 &nbsp;|&nbsp;
-    행 점수 = 셀 점수의 가중 평균
+    행 점수 = 셀 점수의 평균
   </div>
   <table style="border-collapse:collapse;font-size:0.72rem;width:100%;max-width:700px">
     <thead>
