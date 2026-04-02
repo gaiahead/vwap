@@ -62,14 +62,16 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
 
     for (let i = 0; i < 10; i++) {
       const endpoint = (i+1)*10;
-      const cellScores = [];
+      let cellWeightedSum = 0, cellTotalW = 0;
       for (let j = 1; j <= 10; j++) {
         const start = endpoint + j*10;
         if (!vmap[start]) continue;
-        const cell = Math.pow(vmap[endpoint] / vmap[start], 1/j) - 1;  // 마이너스 허용
-        cellScores.push(cell);
+        const cell = Math.pow(vmap[endpoint] / vmap[start], 1/j) - 1;
+        const cw = 10 * Math.pow(VMS_DECAY, j-1);  // +10d 가중 높음
+        cellWeightedSum += cw * cell;
+        cellTotalW += cw;
       }
-      const rowScore = cellScores.length > 0 ? cellScores.reduce((a,b)=>a+b,0)/cellScores.length : 0;
+      const rowScore = cellTotalW > 0 ? cellWeightedSum / cellTotalW : 0;
       rowScores.push(rowScore);
       weightedSum += weights[i] * rowScore;
     }

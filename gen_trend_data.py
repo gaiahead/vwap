@@ -287,19 +287,22 @@ def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any
 
     for i in range(10):
         endpoint = (i + 1) * 10
-        cell_scores: list[float] = []
+        cell_weighted_sum = 0.0
+        cell_total_w = 0.0
         for j in range(1, 11):
             start = endpoint + j * 10
             if endpoint not in vmap or start not in vmap:
                 continue
-            cell_score = (vmap[endpoint] / vmap[start]) ** (1 / j) - 1  # 마이너스 허용
+            cell_score = (vmap[endpoint] / vmap[start]) ** (1 / j) - 1
+            cw = 10 * vms_decay ** (j - 1)  # +10d 가중 높음
             cells.append({
                 "endpoint": endpoint,
                 "start": start,
                 "score": round(cell_score, 6),
             })
-            cell_scores.append(cell_score)
-        rs = sum(cell_scores) / len(cell_scores) if cell_scores else 0.0
+            cell_weighted_sum += cw * cell_score
+            cell_total_w += cw
+        rs = cell_weighted_sum / cell_total_w if cell_total_w > 0 else 0.0
         row_scores.append(round(rs, 6))
         weighted_sum += weights[i] * rs
 
