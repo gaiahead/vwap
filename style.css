@@ -57,7 +57,7 @@ header p{font-size:0.74rem;color:#475569;margin-top:4px}
 
 /* VMS Matrix */
 .vms-grid-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
-.vms-grid{display:grid;grid-template-columns:40px 60px repeat(10,minmax(36px,1fr)) 50px;gap:1px;font-size:0.65rem;min-width:520px}
+.vms-grid{display:grid;grid-template-columns:40px 60px 50px repeat(10,minmax(36px,1fr));gap:1px;font-size:0.65rem;min-width:520px}
 .vms-grid .hdr{color:#334155;font-weight:600;padding:4px 2px;text-align:center}
 .vms-cell{padding:6px 2px;text-align:center;border-radius:3px;cursor:default;position:relative}
 .vms-cell.above{background:#4ade80;color:#0f1117;font-weight:700}
@@ -73,5 +73,5 @@ header p{font-size:0.74rem;color:#475569;margin-top:4px}
 .gauge-fill{height:100%;border-radius:4px;transition:width .3s}
 
 @media(max-width:768px){
-  .vms-grid{font-size:0.55rem;grid-template-columns:30px 45px repeat(10,1fr) 40px}
+  .vms-grid{font-size:0.55rem;grid-template-columns:30px 45px 40px repeat(10,1fr)}
 }

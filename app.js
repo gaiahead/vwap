@@ -316,8 +316,8 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     grid.innerHTML = `
       <div class="hdr"></div>
       <div class="hdr">EP</div>
-      ${Array.from({length:10}, (_,j) => `<div class="hdr">+${(j+1)*10}d</div>`).join('')}
       <div class="hdr">Score</div>
+      ${Array.from({length:10}, (_,j) => `<div class="hdr">+${(j+1)*10}d</div>`).join('')}
     `;
 
     for (let i = 0; i < 10; i++) {
@@ -334,6 +334,13 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       epCell.style.cssText = 'color:#94a3b8;font-weight:600;padding:6px 2px;text-align:center';
       epCell.textContent = `${endpoint}d`;
       grid.appendChild(epCell);
+
+      const rsCell = document.createElement('div');
+      rsCell.className = 'row-score';
+      const rs = vms.row_scores[i];
+      rsCell.textContent = (rs * 100).toFixed(2);
+      rsCell.style.color = getVmsColor(rs);
+      grid.appendChild(rsCell);
 
       for (let j = 1; j <= 10; j++) {
         const start = endpoint + j * 10;
@@ -354,12 +361,6 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
         grid.appendChild(cell);
       }
 
-      const rsCell = document.createElement('div');
-      rsCell.className = 'row-score';
-      const rs = vms.row_scores[i];
-      rsCell.textContent = rs <= 0 ? '–' : (rs * 100).toFixed(2);
-      rsCell.style.color = getVmsColor(rs);
-      grid.appendChild(rsCell);
     }
 
     wrap.appendChild(grid);
