@@ -47,11 +47,11 @@ AssetTuple = tuple[str, str, str]  # (표시명, 티커, 그룹)
 
 | 그룹 | 종목 수 | 내용 |
 |------|--------|------|
-| `g1` | 6 | TLT, GLD, IBIT, SPY, QQQ, SCHD — 미국 대표 ETF |
+| `g1` | 8 | TLT, GLD, IBIT, SPY, QQQ, SCHD, XLE, GUNR — 미국 대표 ETF |
 | `g2` | 15 | 한국 해외투자 ETF + 미국 대형 기술주 — SOL, TIGER, KODEX, ACE ETF + NVDA, GOOGL, AAPL, MSFT, AMZN, META, AVGO, TSLA, NFLX, PLTR, CSCO |
 | `g3` | 10 | 한국 시장 — KODEX 200, KODEX 코스닥150, 반도체 ETF 4종, 삼성전자, SK하이닉스, 한미반도체, 리노공업 |
 
-**총 31개 종목**
+**총 33개 종목**
 
 한국 종목 티커 형식: `XXXXXX.KS` (KRX 거래소 코드)
 
