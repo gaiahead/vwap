@@ -29,6 +29,7 @@ ASSETS: list[AssetTuple] = [
     ("IBIT",                       "IBIT",      "g1"),
     ("SPY",                        "SPY",       "g1"),
     ("QQQ",                        "QQQ",       "g1"),
+    ("SCHD",                       "SCHD",      "g1"),
     # 그룹 2
     ("SOL 미국테크TOP10",            "481190.KS", "g2"),
     ("TIGER 미국필라델피아반도체나스닥", "381180.KS", "g2"),
