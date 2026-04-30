@@ -373,7 +373,6 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
   const groupsEl = document.getElementById('groups');
 
   function renderCards(){
-    const colors = calcColors(allNames, data);
     groupsEl.innerHTML='';
     GROUP_ORDER.forEach(g=>{
       const names = namesByGroup[g];
@@ -381,19 +380,20 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       const div = document.createElement('div');
       div.className='group';
       names.forEach(name=>{
-        const color    = colors[name];
         const isActive = name === currentDetailName;
         const v10      = get10d(name);
+        const vmsResult = calcVMS(name);
+        const vmsValue = vmsResult?.vms ?? null;
+        const color = vmsValue != null ? getVmsColor(vmsValue) : '#64748b';
         const btn = document.createElement('div');
         btn.className='asset-btn'+(isActive?' detail-active':'');
         btn.style.setProperty('--c',color);
-        const vmsResult = calcVMS(name);
-        const vmsStr = vmsResult ? `VMS ${(vmsResult.vms * 100).toFixed(2)}` : '';
         btn.innerHTML=`
           <div class="indicator"></div>
           <div class="name">${name}</div>
-          <div class="val" style="color:${color}">${v10!=null?v10.toFixed(2):'–'}</div>
-          <div class="vms">${vmsStr}</div>
+          <div class="metric-label">VMS</div>
+          <div class="val" style="color:${color}">${vmsValue!=null?(vmsValue * 100).toFixed(2):'–'}</div>
+          <div class="legacy-val">10d/200d ${v10!=null?v10.toFixed(2):'–'}</div>
         `;
         btn.addEventListener('click',()=>{
           const ticker = data[name]?.ticker;
