@@ -6,7 +6,7 @@
   <title>VWAP 추세 모니터</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
-  <link rel="stylesheet" href="style.css"/>
+  <link rel="stylesheet" href="style.css?v=light-20260503"/>
 </head>
 <body>
 
@@ -80,26 +80,26 @@
 
 <div class="section-box">
   <div class="panel-title">VMS 설명</div>
-  <div style="font-size:0.75rem;color:#475569;margin-bottom:10px">
+  <div style="font-size:0.75rem;color:#64748b;margin-bottom:10px">
     VMS = Σ(가중치 × 행 점수) / Σ(가중치) &nbsp;|&nbsp; 지수 감소 0.75
   </div>
-  <div style="font-size:0.73rem;color:#334155;margin-bottom:12px">
+  <div style="font-size:0.73rem;color:#64748b;margin-bottom:12px">
     10d당 복리 성장률 = (endpoint_vwap / start_vwap)^(1/j) - 1 &nbsp;|&nbsp;
     행 점수 = 셀 점수의 평균
   </div>
   <table style="border-collapse:collapse;font-size:0.72rem;width:100%;max-width:700px">
     <thead>
       <tr>
-        <th style="padding:4px 12px;text-align:left;color:#334155;border-bottom:1px solid #1e2535">Endpoint</th>
-        <th style="padding:4px 12px;text-align:right;color:#334155;border-bottom:1px solid #1e2535">가중치</th>
-        <th style="padding:4px 12px;text-align:right;color:#334155;border-bottom:1px solid #1e2535">비중</th>
-        <th style="padding:4px 12px;text-align:left;color:#1e2535;border-bottom:1px solid #1e2535;padding-left:16px">시작점 범위</th>
+        <th style="padding:4px 12px;text-align:left;color:#475569;border-bottom:1px solid #e2e8f0">Endpoint</th>
+        <th style="padding:4px 12px;text-align:right;color:#475569;border-bottom:1px solid #e2e8f0">가중치</th>
+        <th style="padding:4px 12px;text-align:right;color:#475569;border-bottom:1px solid #e2e8f0">비중</th>
+        <th style="padding:4px 12px;text-align:left;color:#475569;border-bottom:1px solid #e2e8f0;padding-left:16px">시작점 범위</th>
       </tr>
     </thead>
     <tbody id="vms-weight-table"></tbody>
   </table>
 </div>
 
-<script src="app.js"></script>
+<script src="app.js?v=light-20260503"></script>
 </body>
 </html>

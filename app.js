@@ -1,12 +1,12 @@
 function getVmsColor(s) {
-  if (s >= 0.03)  return '#4ade80';   // 3%+ → 녹 (텍스트)
-  if (s >= 0.01)  return '#94a3b8';   // 1%+ → 회
+  if (s >= 0.03)  return '#16a34a';   // 3%+ → 녹 (밝은 테마용)
+  if (s >= 0.01)  return '#475569';   // 1%+ → 회
   if (s >= 0)     return '#64748b';   // 0%+ → 어두운 회
-  if (s >= -0.01) return '#fb923c';   // -1%~0 → 주황
-  return '#f87171';                   // -1% 미만 → 적
+  if (s >= -0.01) return '#ea580c';   // -1%~0 → 주황
+  return '#dc2626';                   // -1% 미만 → 적
 }
 
-const GRID='#1e2535', TICK='#475569';
+const GRID='#e2e8f0', TICK='#64748b';
 const GROUP_ORDER = ['g1','g2','g3'];
 
 let priceChart = null;
@@ -206,9 +206,9 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     if (v200 != null) {
       annotations['vwap_200d'] = {
         type: 'line', yMin: v200, yMax: v200,
-        borderColor: '#94a3b8', borderWidth: 1.5, borderDash: [6, 3],
+        borderColor: '#64748b', borderWidth: 1.5, borderDash: [6, 3],
         label: {display: true, content: `VWAP 200d: ${v200.toLocaleString()}`, position: 'start',
-          color: '#94a3b8', backgroundColor: 'rgba(15,17,23,0.85)', font: {size: 9, weight: 'bold'}, padding: {x: 4, y: 2}}
+          color: '#334155', backgroundColor: 'rgba(255,255,255,0.9)', font: {size: 9, weight: 'bold'}, padding: {x: 4, y: 2}}
       };
     }
 
@@ -217,15 +217,15 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       data: {
         labels,
         datasets: [
-          {label: 'Close', data: closes, borderColor: '#475569', borderWidth: 1, pointRadius: 0, tension: 0.1, fill: false, order: 2},
-          {label: 'VWAP 10d', data: vwap10, borderColor: '#e2e8f0', borderWidth: 2, borderDash: [4, 2], pointRadius: 0, tension: 0.2, fill: false, order: 1}
+          {label: 'Close', data: closes, borderColor: '#64748b', borderWidth: 1, pointRadius: 0, tension: 0.1, fill: false, order: 2},
+          {label: 'VWAP 10d', data: vwap10, borderColor: '#2563eb', borderWidth: 2, borderDash: [4, 2], pointRadius: 0, tension: 0.2, fill: false, order: 1}
         ]
       },
       options: {
         responsive: true, maintainAspectRatio: false, animation: {duration: 200},
         interaction: {mode: 'index', intersect: false},
         plugins: {
-          legend: {display: true, labels: {color: '#94a3b8', font: {size: 10}, boxWidth: 12, padding: 10}},
+          legend: {display: true, labels: {color: '#334155', font: {size: 10}, boxWidth: 12, padding: 10}},
           annotation: {annotations},
           tooltip: {callbacks: {label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y?.toLocaleString(undefined, {maximumFractionDigits: 2})}`}}
         },
@@ -254,9 +254,9 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     if (vwapIdx >= 0) {
       annotations.vwapLine = {
         type: 'line', scaleID: 'y', value: vwapIdx,
-        borderColor: '#60a5fa', borderWidth: 2,
-        label: {display: true, content: `VWAP ${vp.vwap.toLocaleString()}`, color: '#60a5fa',
-          backgroundColor: 'rgba(15,17,23,0.85)', font: {size: 9}, position: 'end', padding: {x: 3, y: 1}}
+        borderColor: '#2563eb', borderWidth: 2,
+        label: {display: true, content: `VWAP ${vp.vwap.toLocaleString()}`, color: '#1d4ed8',
+          backgroundColor: 'rgba(255,255,255,0.9)', font: {size: 9}, position: 'end', padding: {x: 3, y: 1}}
       };
     }
     // 현재가 라인 제거
@@ -269,11 +269,11 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
           label: 'Volume', data: volumes,
           backgroundColor: volumes.map((_, i) => {
             const price = buckets[i].price;
-            return price >= vp.vwap ? 'rgba(74,222,128,0.5)' : 'rgba(248,113,113,0.5)';
+            return price >= vp.vwap ? 'rgba(34,197,94,0.35)' : 'rgba(239,68,68,0.32)';
           }),
           borderColor: volumes.map((_, i) => {
             const price = buckets[i].price;
-            return price >= vp.vwap ? '#4ade80' : '#f87171';
+            return price >= vp.vwap ? '#16a34a' : '#dc2626';
           }),
           borderWidth: 1
         }]
@@ -331,7 +331,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       grid.appendChild(wCell);
 
       const epCell = document.createElement('div');
-      epCell.style.cssText = 'color:#94a3b8;font-weight:600;padding:6px 2px;text-align:center';
+      epCell.style.cssText = 'color:#475569;font-weight:600;padding:6px 2px;text-align:center';
       epCell.textContent = `${endpoint}d`;
       grid.appendChild(epCell);
 
@@ -351,7 +351,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
         if (d) {
           const score = d.score != null ? d.score : 0;
           cell.className = 'vms-cell';
-          cell.style.backgroundColor = '#161b27';
+          cell.style.backgroundColor = '#f8fafc';
           cell.style.color = getVmsColor(score);
           cell.textContent = (score * 100).toFixed(2);
         } else {
@@ -432,19 +432,19 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     const pct = (w/total*100).toFixed(2);
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td style="padding:4px 12px;color:#94a3b8">${ep}d</td>
-      <td style="padding:4px 12px;text-align:right;color:#cbd5e1">${w.toFixed(4)}</td>
-      <td style="padding:4px 12px;text-align:right;color:#60a5fa">${pct}%</td>
-      <td style="padding:4px 12px 4px 16px;color:#334155">${ep+10}d ~ ${ep+100}d</td>
+      <td style="padding:4px 12px;color:#475569">${ep}d</td>
+      <td style="padding:4px 12px;text-align:right;color:#334155">${w.toFixed(4)}</td>
+      <td style="padding:4px 12px;text-align:right;color:#2563eb">${pct}%</td>
+      <td style="padding:4px 12px 4px 16px;color:#64748b">${ep+10}d ~ ${ep+100}d</td>
     `;
     tbody.appendChild(tr);
   });
   const tfootr = document.createElement('tr');
   tfootr.innerHTML = `
-    <td style="padding:6px 12px;color:#475569;border-top:1px solid #1e2535;font-weight:600">합계</td>
-    <td style="padding:6px 12px;text-align:right;color:#475569;border-top:1px solid #1e2535">${total.toFixed(4)}</td>
-    <td style="padding:6px 12px;text-align:right;color:#475569;border-top:1px solid #1e2535">100.00%</td>
-    <td style="padding:6px 12px 6px 16px;color:#334155;border-top:1px solid #1e2535">10~50d: 80.8% / 60~100d: 19.2%</td>
+    <td style="padding:6px 12px;color:#475569;border-top:1px solid #e2e8f0;font-weight:600">합계</td>
+    <td style="padding:6px 12px;text-align:right;color:#475569;border-top:1px solid #e2e8f0">${total.toFixed(4)}</td>
+    <td style="padding:6px 12px;text-align:right;color:#475569;border-top:1px solid #e2e8f0">100.00%</td>
+    <td style="padding:6px 12px 6px 16px;color:#64748b;border-top:1px solid #e2e8f0">10~50d: 80.8% / 60~100d: 19.2%</td>
   `;
   tbody.appendChild(tfootr);
 })();
