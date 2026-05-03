@@ -95,16 +95,25 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
 
     rows.forEach(({name, result}) => {
       const {vms, rowScores} = result;
+      const ticker = data[name]?.ticker;
       const vmsColor = getVmsColor(vms);
       const tr = document.createElement('tr');
+      tr.className = 'vms-row' + (name === currentDetailName ? ' detail-active' : '');
+      tr.style.setProperty('--c', vmsColor);
       const cells = [
-        `<td>${name}</td>`,
-        `<td style="color:${vmsColor};font-weight:700">${(vms * 100).toFixed(2)}</td>`,
+        `<td><span class="row-indicator"></span>${name}</td>`,
+        `<td style="color:${vmsColor};font-weight:800">${(vms * 100).toFixed(2)}</td>`,
         ...rowScores.map(s => {
           return `<td style="color:${getVmsColor(s)}">${(s * 100).toFixed(2)}</td>`;
         })
       ];
       tr.innerHTML = cells.join('');
+      tr.addEventListener('click', () => {
+        if (!ticker) return;
+        currentVpPeriod = '10d';
+        location.hash = encodeURIComponent(ticker);
+        fetchDetail(ticker, name);
+      });
       tbody.appendChild(tr);
     });
   }
@@ -118,13 +127,13 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     detailSection.style.display = 'none';
     currentDetailName = null;
     location.hash = '';
-    renderCards();
+    renderVMS();
   });
 
   async function fetchDetail(ticker, name) {
     detailSection.style.display = '';
     currentDetailName = name;
-    renderCards();
+    renderVMS();
 
     if (detailCache[ticker]) {
       renderDetail(detailCache[ticker]);
@@ -369,83 +378,10 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     // summary 제거
   }
 
-  // ─── Excel-style Market Monitor ─────────────────────────
-  const groupsEl = document.getElementById('groups');
-  const GROUP_LABELS = {
-    g1: '매크로·시장폭·크레딧',
-    g2: '미국 섹터·원자재·글로벌',
-    g3: 'AI·글로벌 기술주',
-    g4: '한국 지수·반도체',
-    g5: '한국 섹터·테마'
-  };
+  // ─── Legacy card renderer removed ───────────────────────
+  function renderCards(){ renderVMS(); }
 
-  function getNorm(name, window){
-    const item = data[name]?.vwap_structure?.find(v => v.window === window);
-    return item?.norm ?? null;
-  }
-
-  function fmtVal(v, digits=2){ return v == null ? '–' : v.toFixed(digits); }
-
-  function renderCards(){
-    groupsEl.innerHTML='';
-    const table = document.createElement('table');
-    table.className = 'asset-table';
-    table.innerHTML = `
-      <thead>
-        <tr>
-          <th class="col-name">종목</th>
-          <th>티커</th>
-          <th>VMS</th>
-          <th>10/200</th>
-          <th>20/200</th>
-          <th>50/200</th>
-          <th>100/200</th>
-        </tr>
-      </thead>
-      <tbody></tbody>
-    `;
-    const tbody = table.querySelector('tbody');
-
-    GROUP_ORDER.forEach(g=>{
-      const names = namesByGroup[g];
-      if(!names?.length) return;
-
-      const groupRow = document.createElement('tr');
-      groupRow.className = 'asset-group-row';
-      groupRow.innerHTML = `<td colspan="7">${GROUP_LABELS[g] || g} <span>${names.length}개</span></td>`;
-      tbody.appendChild(groupRow);
-
-      names.forEach(name=>{
-        const ticker = data[name]?.ticker;
-        const isActive = name === currentDetailName;
-        const vmsResult = calcVMS(name);
-        const vmsValue = vmsResult?.vms ?? null;
-        const color = vmsValue != null ? getVmsColor(vmsValue) : '#64748b';
-        const tr = document.createElement('tr');
-        tr.className = 'asset-row' + (isActive ? ' detail-active' : '');
-        tr.style.setProperty('--c', color);
-        tr.innerHTML = `
-          <td class="asset-name"><span class="row-indicator"></span>${name}</td>
-          <td class="ticker">${ticker || '–'}</td>
-          <td class="num vms-num" style="color:${color}">${vmsValue!=null?(vmsValue * 100).toFixed(2):'–'}</td>
-          <td class="num">${fmtVal(getNorm(name,10))}</td>
-          <td class="num">${fmtVal(getNorm(name,20))}</td>
-          <td class="num">${fmtVal(getNorm(name,50))}</td>
-          <td class="num">${fmtVal(getNorm(name,100))}</td>
-        `;
-        tr.addEventListener('click',()=>{
-          if(!ticker) return;
-          currentVpPeriod = '10d';
-          location.hash = encodeURIComponent(ticker);
-          fetchDetail(ticker, name);
-        });
-        tbody.appendChild(tr);
-      });
-    });
-    groupsEl.appendChild(table);
-  }
-
-  renderCards();
+  renderVMS();
   renderVMS();
 
   // ─── URL hash → auto open ──────────────────────────────

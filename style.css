@@ -4,38 +4,22 @@ header{padding:20px 28px 14px;border-bottom:1px solid #dbe6f3;background:rgba(25
 header h1{font-size:1.2rem;font-weight:700;color:#0f172a}
 header p{font-size:0.74rem;color:#64748b;margin-top:4px}
 
-/* 상단 종목 모니터: 엑셀형 표 */
-.asset-monitor{margin-top:16px}
-.asset-monitor-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin-bottom:10px}
-.asset-monitor-sub{font-size:0.73rem;color:#64748b;line-height:1.45}
-.asset-table-wrap{overflow:auto;-webkit-overflow-scrolling:touch;max-height:560px;border:1px solid #e2e8f0;border-radius:12px;background:#ffffff}
-.asset-table{width:100%;border-collapse:separate;border-spacing:0;font-size:0.8rem;min-width:680px}
-.asset-table th{position:sticky;top:0;z-index:3;background:#eff6ff;color:#475569;font-size:0.68rem;font-weight:800;letter-spacing:.04em;text-align:right;padding:8px 10px;border-bottom:1px solid #cbd5e1;white-space:nowrap}
-.asset-table th.col-name{text-align:left}
-.asset-table td{padding:8px 11px;border-bottom:1px solid #eef2f7;color:#334155;vertical-align:middle;background:#ffffff}
-.asset-table .asset-group-row td{position:sticky;top:32px;z-index:2;background:#f8fafc;color:#64748b;font-size:0.7rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;border-top:1px solid #e2e8f0;border-bottom:1px solid #dbe6f3;padding:7px 11px}
-.asset-table .asset-group-row span{font-weight:700;color:#94a3b8;margin-left:6px}
-.asset-row{cursor:pointer;transition:background .15s, box-shadow .15s}
-.asset-row:hover td{background:#eef6ff}
-.asset-row.detail-active td{background:#dbeafe;box-shadow:inset 0 1px 0 #93c5fd,inset 0 -1px 0 #93c5fd}
-.asset-row.detail-active .asset-name{color:#0f172a}
-.asset-table .asset-name{font-weight:800;color:#1e293b;white-space:nowrap}
-.asset-table .ticker{font-family:'SF Mono','Consolas','Menlo',monospace;font-size:0.72rem;color:#64748b;white-space:nowrap}
-.asset-table .num{text-align:right;font-family:'SF Mono','Consolas','Menlo',monospace;font-variant-numeric:tabular-nums;font-feature-settings:"tnum";font-size:0.76rem;color:#475569;white-space:nowrap}
-.asset-table .vms-num{font-weight:900;font-size:0.82rem}
-.row-indicator{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--c);margin-right:8px;box-shadow:0 0 0 3px color-mix(in srgb, var(--c) 18%, transparent)}
-
 /* VMS 섹션 */
 .vms-section{padding:0 28px 24px}
 .vms-title{font-size:0.72rem;font-weight:700;color:#64748b;letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px}
-.vms-table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
-.vms-table{width:100%;border-collapse:collapse;font-size:0.8rem;min-width:600px}
-.vms-table th{padding:5px 10px;text-align:right;font-size:0.65rem;font-weight:700;color:#475569;letter-spacing:.04em;background:#f1f5f9}
+.vms-monitor-sub{font-size:0.73rem;color:#64748b;line-height:1.45;margin:-4px 0 10px}
+.vms-table-wrap{overflow:auto;-webkit-overflow-scrolling:touch;max-height:560px;border:1px solid #e2e8f0;border-radius:12px;background:#ffffff}
+.vms-table{width:100%;border-collapse:separate;border-spacing:0;font-size:0.8rem;min-width:760px}
+.vms-table th{position:sticky;top:0;z-index:3;padding:8px 10px;text-align:right;font-size:0.65rem;font-weight:800;color:#475569;letter-spacing:.04em;background:#eff6ff;border-bottom:1px solid #cbd5e1}
 .vms-table th:first-child{text-align:left;border-radius:8px 0 0 8px}
 .vms-table th:last-child{border-radius:0 8px 8px 0}
-.vms-table td{padding:7px 10px;text-align:right;color:#334155;border-top:1px solid #e2e8f0;vertical-align:middle;font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+.vms-table td{padding:8px 10px;text-align:right;color:#334155;border-top:1px solid #e2e8f0;vertical-align:middle;font-variant-numeric:tabular-nums;font-feature-settings:"tnum";background:#ffffff}
 .vms-table td:not(:first-child){font-family:'SF Mono','Consolas','Menlo',monospace;font-size:0.78rem}
-.vms-table td:first-child{text-align:left;font-weight:700;color:#1e293b}
+.vms-table td:first-child{text-align:left;font-weight:800;color:#1e293b;white-space:nowrap}
+.vms-row{cursor:pointer;transition:background .15s}
+.vms-row:hover td{background:#eef6ff}
+.vms-row.detail-active td{background:#dbeafe;box-shadow:inset 0 1px 0 #93c5fd,inset 0 -1px 0 #93c5fd}
+.row-indicator{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--c);margin-right:8px;box-shadow:0 0 0 3px color-mix(in srgb, var(--c) 18%, transparent)}
 
 /* Detail section */
 .detail-section{border-top:1px solid #dbe6f3;padding:20px 28px 0}
