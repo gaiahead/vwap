@@ -7,7 +7,7 @@ function getVmsColor(s) {
 }
 
 const GRID='#e2e8f0', TICK='#64748b';
-const GROUP_ORDER = ['g1','g2','g3'];
+const GROUP_ORDER = ['g1','g2','g3','g4','g5'];
 
 let priceChart = null;
 let vpChart = null;

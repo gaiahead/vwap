@@ -23,7 +23,7 @@ from scipy.stats import norm
 AssetTuple = tuple[str, str, str]  # (표시명, 티커, 그룹)
 
 ASSETS: list[AssetTuple] = [
-    # 그룹 1
+    # 그룹 1: 핵심 매크로 / 시장 폭 / 크레딧
     ("TLT",                        "TLT",       "g1"),
     ("GLD",                        "GLD",       "g1"),
     ("IBIT",                       "IBIT",      "g1"),
@@ -32,35 +32,87 @@ ASSETS: list[AssetTuple] = [
     ("SCHD",                       "SCHD",      "g1"),
     ("XLE",                        "XLE",       "g1"),
     ("GUNR",                       "GUNR",      "g1"),
-    # 그룹 2
-    ("SOL 미국테크TOP10",            "481190.KS", "g2"),
-    ("TIGER 미국필라델피아반도체나스닥", "381180.KS", "g2"),
-    ("KODEX 미국반도체",              "390390.KS", "g2"),
-    ("ACE 글로벌반도체TOP4 Plus",     "446770.KS", "g2"),
-    ("엔비디아",                      "NVDA",      "g2"),
-    ("알파벳",                        "GOOGL",     "g2"),
-    ("애플",                          "AAPL",      "g2"),
-    ("마이크로소프트",                 "MSFT",      "g2"),
-    ("아마존",                        "AMZN",      "g2"),
-    ("메타",                          "META",      "g2"),
-    ("브로드컴",                      "AVGO",      "g2"),
-    ("테슬라",                        "TSLA",      "g2"),
-    ("넷플릭스",                      "NFLX",      "g2"),
-    ("팔란티어",                      "PLTR",      "g2"),
-    ("시스코",                        "CSCO",      "g2"),
-    # 그룹 3
-    ("KODEX 200",                    "069500.KS", "g3"),
-    ("KODEX 코스닥150",               "229200.KS", "g3"),
-    ("KODEX 반도체",                  "091160.KS", "g3"),
-    ("KODEX AI반도체",                "395160.KS", "g3"),
-    ("KODEX AI반도체핵심장비",          "471990.KS", "g3"),
-    ("TIGER 반도체TOP10",             "396500.KS", "g3"),
-    ("삼성전자",                      "005930.KS", "g3"),
-    ("SK하이닉스",                    "000660.KS", "g3"),
-    ("한미반도체",                    "042700.KS", "g3"),
-    ("리노공업",                      "058470.KS", "g3"),
-]
+    ("RSP",                        "RSP",       "g1"),  # S&P500 동일가중
+    ("IWM",                        "IWM",       "g1"),  # 러셀2000
+    ("IEF",                        "IEF",       "g1"),  # 미국 7-10년 국채
+    ("SHY",                        "SHY",       "g1"),  # 미국 단기국채
+    ("TIP",                        "TIP",       "g1"),  # 물가연동채
+    ("HYG",                        "HYG",       "g1"),  # 하이일드 채권
+    ("LQD",                        "LQD",       "g1"),  # 투자등급 회사채
+    ("UUP",                        "UUP",       "g1"),  # 달러 인덱스 ETF
+    ("FXY",                        "FXY",       "g1"),  # 엔화 ETF
 
+    # 그룹 2: 미국 섹터 / 원자재 / 글로벌 지역
+    ("XLK",                        "XLK",       "g2"),  # 기술
+    ("XLF",                        "XLF",       "g2"),  # 금융
+    ("XLV",                        "XLV",       "g2"),  # 헬스케어
+    ("XLI",                        "XLI",       "g2"),  # 산업재
+    ("XLY",                        "XLY",       "g2"),  # 경기소비재
+    ("XLP",                        "XLP",       "g2"),  # 필수소비재
+    ("XLU",                        "XLU",       "g2"),  # 유틸리티
+    ("XLRE",                       "XLRE",      "g2"),  # 부동산
+    ("XLB",                        "XLB",       "g2"),  # 소재
+    ("USO",                        "USO",       "g2"),  # 원유
+    ("CPER",                       "CPER",      "g2"),  # 구리
+    ("COPX",                       "COPX",      "g2"),  # 구리 광산
+    ("DBA",                        "DBA",       "g2"),  # 농산물
+    ("URA",                        "URA",       "g2"),  # 우라늄/원전
+    ("SLV",                        "SLV",       "g2"),  # 은
+    ("EFA",                        "EFA",       "g2"),  # 선진국 ex-US
+    ("EEM",                        "EEM",       "g2"),  # 신흥국
+    ("EWJ",                        "EWJ",       "g2"),  # 일본
+    ("FXI",                        "FXI",       "g2"),  # 중국 대형주
+    ("INDA",                       "INDA",      "g2"),  # 인도
+    ("EWT",                        "EWT",       "g2"),  # 대만
+
+    # 그룹 3: 미국/글로벌 AI·기술주와 관련 ETF
+    ("SOL 미국테크TOP10",            "481190.KS", "g3"),
+    ("TIGER 미국필라델피아반도체나스닥", "381180.KS", "g3"),
+    ("KODEX 미국반도체",              "390390.KS", "g3"),
+    ("ACE 글로벌반도체TOP4 Plus",     "446770.KS", "g3"),
+    ("엔비디아",                      "NVDA",      "g3"),
+    ("알파벳",                        "GOOGL",     "g3"),
+    ("애플",                          "AAPL",      "g3"),
+    ("마이크로소프트",                 "MSFT",      "g3"),
+    ("아마존",                        "AMZN",      "g3"),
+    ("메타",                          "META",      "g3"),
+    ("브로드컴",                      "AVGO",      "g3"),
+    ("테슬라",                        "TSLA",      "g3"),
+    ("넷플릭스",                      "NFLX",      "g3"),
+    ("팔란티어",                      "PLTR",      "g3"),
+    ("시스코",                        "CSCO",      "g3"),
+
+    # 그룹 4: 한국 대표지수 / 반도체
+    ("KODEX 200",                    "069500.KS", "g4"),
+    ("KODEX 코스닥150",               "229200.KS", "g4"),
+    ("KODEX 반도체",                  "091160.KS", "g4"),
+    ("KODEX AI반도체",                "395160.KS", "g4"),
+    ("KODEX AI반도체핵심장비",          "471990.KS", "g4"),
+    ("TIGER 반도체TOP10",             "396500.KS", "g4"),
+    ("삼성전자",                      "005930.KS", "g4"),
+    ("SK하이닉스",                    "000660.KS", "g4"),
+    ("한미반도체",                    "042700.KS", "g4"),
+    ("리노공업",                      "058470.KS", "g4"),
+
+    # 그룹 5: 한국 주요 섹터 / 테마
+    ("KODEX 자동차",                  "091180.KS", "g5"),
+    ("KODEX 은행",                    "091170.KS", "g5"),
+    ("KODEX 2차전지산업",              "305720.KS", "g5"),
+    ("KODEX 헬스케어",                "266420.KS", "g5"),
+    ("KODEX 조선TOP10",               "0115D0.KS", "g5"),
+    ("HD현대중공업",                   "329180.KS", "g5"),
+    ("삼성중공업",                     "010140.KS", "g5"),
+    ("한화오션",                       "042660.KS", "g5"),
+    ("KODEX 방산TOP10",               "0080G0.KS", "g5"),
+    ("한화에어로스페이스",              "012450.KS", "g5"),
+    ("현대로템",                       "064350.KS", "g5"),
+    ("LIG넥스원",                      "079550.KS", "g5"),
+    ("KODEX 금융고배당TOP10",          "498410.KS", "g5"),
+    ("TIGER 소프트웨어",               "157490.KS", "g5"),
+    ("KODEX IT",                      "266370.KS", "g5"),
+    ("TIGER 미디어컨텐츠",             "228810.KS", "g5"),
+    ("KODEX 로봇액티브",               "445290.KS", "g5"),
+]
 WINDOWS: list[int] = list(range(10, 201, 10))  # 10~200, 10일 간격
 N_BUCKETS: int = 20
 KST: timezone = timezone(timedelta(hours=9))
@@ -241,7 +293,7 @@ def build_weekly_records(df: pd.DataFrame) -> list[dict[str, Any]]:
         {
             "date": str(dt.date()),
             "price": round(float(row["close"]), 2),
-            "score": row["score"],
+            "score": None if pd.isna(row["score"]) else float(row["score"]),
         }
         for dt, row in weekly.iterrows()
     ]
@@ -375,7 +427,7 @@ def main() -> None:
             failed.append(name)
 
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
-        json.dump(result, f, ensure_ascii=False)
+        json.dump(result, f, ensure_ascii=False, allow_nan=False)
 
     # detail_data/ 생성
     os.makedirs(DETAIL_DIR, exist_ok=True)
@@ -391,7 +443,7 @@ def main() -> None:
             detail["_meta"] = {"updated_at": run_time}
             out_path = os.path.join(DETAIL_DIR, f"{ticker}.json")
             with open(out_path, "w", encoding="utf-8") as f:
-                json.dump(detail, f, ensure_ascii=False)
+                json.dump(detail, f, ensure_ascii=False, allow_nan=False)
             print(f"  ✅ {name} → {out_path}")
         except Exception as e:
             print(f"  [ERROR] detail {name}: {e}")
