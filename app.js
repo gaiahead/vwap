@@ -369,43 +369,80 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     // summary 제거
   }
 
-  // ─── Cards ─────────────────────────────────────────────
+  // ─── Excel-style Market Monitor ─────────────────────────
   const groupsEl = document.getElementById('groups');
+  const GROUP_LABELS = {
+    g1: '매크로·시장폭·크레딧',
+    g2: '미국 섹터·원자재·글로벌',
+    g3: 'AI·글로벌 기술주',
+    g4: '한국 지수·반도체',
+    g5: '한국 섹터·테마'
+  };
+
+  function getNorm(name, window){
+    const item = data[name]?.vwap_structure?.find(v => v.window === window);
+    return item?.norm ?? null;
+  }
+
+  function fmtVal(v, digits=2){ return v == null ? '–' : v.toFixed(digits); }
 
   function renderCards(){
     groupsEl.innerHTML='';
+    const table = document.createElement('table');
+    table.className = 'asset-table';
+    table.innerHTML = `
+      <thead>
+        <tr>
+          <th class="col-name">종목</th>
+          <th>티커</th>
+          <th>VMS</th>
+          <th>10/200</th>
+          <th>20/200</th>
+          <th>50/200</th>
+          <th>100/200</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    `;
+    const tbody = table.querySelector('tbody');
+
     GROUP_ORDER.forEach(g=>{
       const names = namesByGroup[g];
       if(!names?.length) return;
-      const div = document.createElement('div');
-      div.className='group';
+
+      const groupRow = document.createElement('tr');
+      groupRow.className = 'asset-group-row';
+      groupRow.innerHTML = `<td colspan="7">${GROUP_LABELS[g] || g} <span>${names.length}개</span></td>`;
+      tbody.appendChild(groupRow);
+
       names.forEach(name=>{
+        const ticker = data[name]?.ticker;
         const isActive = name === currentDetailName;
-        const v10      = get10d(name);
         const vmsResult = calcVMS(name);
         const vmsValue = vmsResult?.vms ?? null;
         const color = vmsValue != null ? getVmsColor(vmsValue) : '#64748b';
-        const btn = document.createElement('div');
-        btn.className='asset-btn'+(isActive?' detail-active':'');
-        btn.style.setProperty('--c',color);
-        btn.innerHTML=`
-          <div class="indicator"></div>
-          <div class="name">${name}</div>
-          <div class="metric-label">VMS</div>
-          <div class="val" style="color:${color}">${vmsValue!=null?(vmsValue * 100).toFixed(2):'–'}</div>
-          <div class="legacy-val">10d/200d ${v10!=null?v10.toFixed(2):'–'}</div>
+        const tr = document.createElement('tr');
+        tr.className = 'asset-row' + (isActive ? ' detail-active' : '');
+        tr.style.setProperty('--c', color);
+        tr.innerHTML = `
+          <td class="asset-name"><span class="row-indicator"></span>${name}</td>
+          <td class="ticker">${ticker || '–'}</td>
+          <td class="num vms-num" style="color:${color}">${vmsValue!=null?(vmsValue * 100).toFixed(2):'–'}</td>
+          <td class="num">${fmtVal(getNorm(name,10))}</td>
+          <td class="num">${fmtVal(getNorm(name,20))}</td>
+          <td class="num">${fmtVal(getNorm(name,50))}</td>
+          <td class="num">${fmtVal(getNorm(name,100))}</td>
         `;
-        btn.addEventListener('click',()=>{
-          const ticker = data[name]?.ticker;
+        tr.addEventListener('click',()=>{
           if(!ticker) return;
           currentVpPeriod = '10d';
           location.hash = encodeURIComponent(ticker);
           fetchDetail(ticker, name);
         });
-        div.appendChild(btn);
+        tbody.appendChild(tr);
       });
-      groupsEl.appendChild(div);
     });
+    groupsEl.appendChild(table);
   }
 
   renderCards();
