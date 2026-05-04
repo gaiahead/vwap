@@ -299,6 +299,49 @@ def build_weekly_records(df: pd.DataFrame) -> list[dict[str, Any]]:
     ]
 
 
+def build_vwap_momentum_matrix(df: pd.DataFrame) -> dict[str, Any]:
+    """VWAP 기간 구조의 100셀 모멘텀 행렬을 생성."""
+    vwap_by_window: dict[int, float] = {}
+    for window in WINDOWS:
+        if len(df) >= window:
+            vwap_by_window[window] = compute_vwap(df.iloc[-window:])
+
+    momentum_decay = 0.75
+    cells: list[dict[str, Any]] = []
+    row_scores: list[float] = []
+    weights = [10 * momentum_decay**i for i in range(10)]
+    total_weight = sum(weights)
+    weighted_sum = 0.0
+
+    for i in range(10):
+        endpoint = (i + 1) * 10
+        cell_weighted_sum = 0.0
+        cell_total_weight = 0.0
+        for j in range(1, 11):
+            start = endpoint + j * 10
+            if endpoint not in vwap_by_window or start not in vwap_by_window:
+                continue
+            cell_momentum = (vwap_by_window[endpoint] / vwap_by_window[start]) ** (1 / j) - 1
+            cell_weight = 10 * momentum_decay ** (j - 1)  # +10d 비교 가중 높음
+            cells.append({
+                "endpoint": endpoint,
+                "start": start,
+                "score": round(cell_momentum, 6),
+            })
+            cell_weighted_sum += cell_weight * cell_momentum
+            cell_total_weight += cell_weight
+        row_score = cell_weighted_sum / cell_total_weight if cell_total_weight > 0 else 0.0
+        row_scores.append(round(row_score, 6))
+        weighted_sum += weights[i] * row_score
+
+    momentum = weighted_sum / total_weight if total_weight > 0 else 0.0
+    return {
+        "cells": cells,
+        "row_scores": row_scores,
+        "momentum": round(momentum, 6),
+    }
+
+
 def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any]:
     """detail.html용 상세 데이터 생성."""
     # ohlcv: 최근 200일 + vwap_10d 롤링
@@ -327,54 +370,12 @@ def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any
                 "vwap": round(vwap_val, 4),
             }
 
-    # vms_matrix: vwap_map에서 100셀 계산 (복리 방식)
-    vmap: dict[int, float] = {}
-    for w in WINDOWS:
-        if len(df) >= w:
-            vmap[w] = compute_vwap(df.iloc[-w:])
-
-    vms_decay = 0.75
-    cells: list[dict[str, Any]] = []
-    row_scores: list[float] = []
-    weights = [10 * vms_decay**i for i in range(10)]
-    total_weight = sum(weights)
-    weighted_sum = 0.0
-
-    for i in range(10):
-        endpoint = (i + 1) * 10
-        cell_weighted_sum = 0.0
-        cell_total_w = 0.0
-        for j in range(1, 11):
-            start = endpoint + j * 10
-            if endpoint not in vmap or start not in vmap:
-                continue
-            cell_score = (vmap[endpoint] / vmap[start]) ** (1 / j) - 1
-            cw = 10 * vms_decay ** (j - 1)  # +10d 가중 높음
-            cells.append({
-                "endpoint": endpoint,
-                "start": start,
-                "score": round(cell_score, 6),
-            })
-            cell_weighted_sum += cw * cell_score
-            cell_total_w += cw
-        rs = cell_weighted_sum / cell_total_w if cell_total_w > 0 else 0.0
-        row_scores.append(round(rs, 6))
-        weighted_sum += weights[i] * rs
-
-    vms_val = weighted_sum / total_weight if total_weight > 0 else 0.0
-
-    vms_matrix = {
-        "cells": cells,
-        "row_scores": row_scores,
-        "vms": round(vms_val, 6),
-    }
-
     return {
         "name": name,
         "ticker": ticker,
         "ohlcv": ohlcv,
         "volume_profile": volume_profile,
-        "vms_matrix": vms_matrix,
+        "vwap_momentum_matrix": build_vwap_momentum_matrix(df),
         "latest_price": round(float(df["close"].iloc[-1]), 2),
     }
 

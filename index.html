@@ -6,7 +6,7 @@
   <title>VWAP 추세 모니터</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
-  <link rel="stylesheet" href="style.css?v=vms-top-20260503"/>
+  <link rel="stylesheet" href="style.css?v=momentum-20260504"/>
 </head>
 <body>
 
@@ -15,19 +15,19 @@
   <p>Volume Weighted Average Price · <span id="updated"></span></p>
 </header>
 
-<div class="section-box vms-monitor" id="vms-section" style="display:none">
-  <div class="panel-title">📐 VMS Market Monitor</div>
-  <div class="vms-monitor-sub">VMS List를 상단 대표 표로 사용합니다. 행 클릭 시 종목 상세 차트가 열립니다.</div>
-  <div class="vms-table-wrap"><table class="vms-table">
+<div class="section-box momentum-monitor" id="momentum-section" style="display:none">
+  <div class="panel-title">📐 VWAP Momentum Market Monitor</div>
+  <div class="momentum-monitor-sub">모멘텀 표를 상단 대표 모니터로 사용합니다. 행 클릭 시 종목 상세 차트가 열립니다.</div>
+  <div class="momentum-table-wrap"><table class="momentum-table">
     <thead>
       <tr>
         <th>종목</th>
-        <th>VMS</th>
+        <th>모멘텀</th>
         <th>10d</th><th>20d</th><th>30d</th><th>40d</th><th>50d</th>
         <th>60d</th><th>70d</th><th>80d</th><th>90d</th><th>100d</th>
       </tr>
     </thead>
-    <tbody id="vms-body"></tbody>
+    <tbody id="momentum-body"></tbody>
   </table></div>
 </div>
 
@@ -71,20 +71,20 @@
     </div>
     <!-- Panel C -->
     <div class="panel-box" style="margin-top:16px">
-      <div class="panel-title">VMS Matrix</div>
-      <div id="vms-matrix"></div>
+      <div class="panel-title">VWAP Momentum Matrix</div>
+      <div id="momentum-matrix"></div>
     </div>
   </div>
 </div>
 
 <div class="section-box">
-  <div class="panel-title">VMS 설명</div>
+  <div class="panel-title">모멘텀 설명</div>
   <div style="font-size:0.75rem;color:#64748b;margin-bottom:10px">
-    VMS = Σ(가중치 × 행 점수) / Σ(가중치) &nbsp;|&nbsp; 지수 감소 0.75
+    VWAP Momentum = Σ(가중치 × 행 모멘텀) / Σ(가중치) &nbsp;|&nbsp; 지수 감소 0.75
   </div>
   <div style="font-size:0.73rem;color:#64748b;margin-bottom:12px">
     10d당 복리 성장률 = (endpoint_vwap / start_vwap)^(1/j) - 1 &nbsp;|&nbsp;
-    행 점수 = 셀 점수의 평균
+    행 모멘텀 = 셀 모멘텀의 평균
   </div>
   <table style="border-collapse:collapse;font-size:0.72rem;width:100%;max-width:700px">
     <thead>
@@ -95,10 +95,10 @@
         <th style="padding:4px 12px;text-align:left;color:#475569;border-bottom:1px solid #e2e8f0;padding-left:16px">시작점 범위</th>
       </tr>
     </thead>
-    <tbody id="vms-weight-table"></tbody>
+    <tbody id="momentum-weight-table"></tbody>
   </table>
 </div>
 
-<script src="app.js?v=vms-top-20260503"></script>
+<script src="app.js?v=momentum-20260504"></script>
 </body>
 </html>

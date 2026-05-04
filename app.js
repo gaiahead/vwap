@@ -1,4 +1,4 @@
-function getVmsColor(s) {
+function getMomentumColor(s) {
   if (s >= 0.03)  return '#16a34a';   // 3%+ → 녹 (밝은 테마용)
   if (s >= 0.01)  return '#475569';   // 1%+ → 회
   if (s >= 0)     return '#64748b';   // 0%+ → 어두운 회
@@ -15,46 +15,23 @@ let currentVpPeriod = '10d';
 let currentDetailName = null;
 const detailCache = {};
 
-function rankColor(t){
-  if(t>=0.5){
-    const s=(t-0.5)*2;
-    return `rgb(${Math.round(107+(34-107)*s)},${Math.round(114+(197-114)*s)},${Math.round(128+(94-128)*s)})`;
-  } else {
-    const s=t*2;
-    return `rgb(${Math.round(239+(107-239)*s)},${Math.round(68+(114-68)*s)},${Math.round(68+(128-68)*s)})`;
-  }
-}
-
-function calcColors(names, data){
-  const vals = names.map(n=>data[n]?.vwap_structure?.[0]?.norm??0);
-  const min=Math.min(...vals), max=Math.max(...vals), range=max-min||1;
-  const colors={};
-  names.forEach((n,i)=>{ colors[n]=rankColor((vals[i]-min)/range); });
-  return colors;
-}
-
 fetch('trend_data.json').then(r=>r.json()).then(data=>{
-  const allNames = Object.keys(data).filter(k=>k!=='_meta');
-  const namesByGroup = {};
-  GROUP_ORDER.forEach(g=>{ namesByGroup[g]=[]; });
-  allNames.forEach(n=>{ const g=data[n].group; if(namesByGroup[g]) namesByGroup[g].push(n); });
+  const allNames = Object.keys(data).filter(k => k !== '_meta');
 
   document.getElementById('updated').textContent =
-    (data._meta?.updated_at||'')+' 기준';
+    (data._meta?.updated_at || '') + ' 기준';
 
-  function get10d(name){ return data[name]?.vwap_structure?.[0]?.norm??null; }
+  // ─── VWAP Momentum 계산 ──────────────────────────────────────────
+  const MOMENTUM_DECAY = 0.75;
 
-  // ─── VMS 계산 ──────────────────────────────────────────
-  const VMS_DECAY = 0.75;
-
-  function calcVMS(name) {
+  function calcVwapMomentum(name) {
     const vs = data[name]?.vwap_structure;
     if (!vs) return null;
     const vmap = {};
     vs.forEach(v => { vmap[v.window] = v.vwap; });
     if (!vmap[10] || !vmap[200]) return null;
 
-    const weights = Array.from({length:10}, (_,i) => 10 * Math.pow(VMS_DECAY, i));
+    const weights = Array.from({length:10}, (_,i) => 10 * Math.pow(MOMENTUM_DECAY, i));
     const totalW = weights.reduce((a,b)=>a+b, 0);
 
     let weightedSum = 0;
@@ -67,7 +44,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
         const start = endpoint + j*10;
         if (!vmap[start]) continue;
         const cell = Math.pow(vmap[endpoint] / vmap[start], 1/j) - 1;
-        const cw = 10 * Math.pow(VMS_DECAY, j-1);  // +10d 가중 높음
+        const cw = 10 * Math.pow(MOMENTUM_DECAY, j-1);  // +10d 가중 높음
         cellWeightedSum += cw * cell;
         cellTotalW += cw;
       }
@@ -76,35 +53,35 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       weightedSum += weights[i] * rowScore;
     }
 
-    return { vms: weightedSum/totalW, rowScores };
+    return { momentum: weightedSum/totalW, rowScores };
   }
 
-  function renderVMS() {
+  function renderMomentum() {
     const targets = ['삼성전자','SK하이닉스','한미반도체','리노공업'];
-    const hasVMS = targets.some(n => data[n]);
-    if (!hasVMS) return;
+    const hasMomentumTargets = targets.some(n => data[n]);
+    if (!hasMomentumTargets) return;
 
-    document.getElementById('vms-section').style.display = '';
-    const tbody = document.getElementById('vms-body');
+    document.getElementById('momentum-section').style.display = '';
+    const tbody = document.getElementById('momentum-body');
     tbody.innerHTML = '';
 
     const rows = allNames
-      .map(n => ({ name: n, result: calcVMS(n) }))
+      .map(n => ({ name: n, result: calcVwapMomentum(n) }))
       .filter(r => r.result !== null)
-      .sort((a,b) => b.result.vms - a.result.vms);
+      .sort((a,b) => b.result.momentum - a.result.momentum);
 
     rows.forEach(({name, result}) => {
-      const {vms, rowScores} = result;
+      const {momentum, rowScores} = result;
       const ticker = data[name]?.ticker;
-      const vmsColor = getVmsColor(vms);
+      const momentumColor = getMomentumColor(momentum);
       const tr = document.createElement('tr');
-      tr.className = 'vms-row' + (name === currentDetailName ? ' detail-active' : '');
-      tr.style.setProperty('--c', vmsColor);
+      tr.className = 'momentum-row' + (name === currentDetailName ? ' detail-active' : '');
+      tr.style.setProperty('--c', momentumColor);
       const cells = [
         `<td><span class="row-indicator"></span>${name}</td>`,
-        `<td style="color:${vmsColor};font-weight:800">${(vms * 100).toFixed(2)}</td>`,
+        `<td style="color:${momentumColor};font-weight:800">${(momentum * 100).toFixed(2)}</td>`,
         ...rowScores.map(s => {
-          return `<td style="color:${getVmsColor(s)}">${(s * 100).toFixed(2)}</td>`;
+          return `<td style="color:${getMomentumColor(s)}">${(s * 100).toFixed(2)}</td>`;
         })
       ];
       tr.innerHTML = cells.join('');
@@ -127,13 +104,13 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     detailSection.style.display = 'none';
     currentDetailName = null;
     location.hash = '';
-    renderVMS();
+    renderMomentum();
   });
 
   async function fetchDetail(ticker, name) {
     detailSection.style.display = '';
     currentDetailName = name;
-    renderVMS();
+    renderMomentum();
 
     if (detailCache[ticker]) {
       renderDetail(detailCache[ticker]);
@@ -173,8 +150,8 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
         <div style="position:relative;height:440px"><canvas id="chart-vp"></canvas></div>
       </div>
       <div class="panel-box" style="margin-top:16px">
-        <div class="panel-title">VMS Matrix</div>
-        <div id="vms-matrix"></div>
+        <div class="panel-title">VWAP Momentum Matrix</div>
+        <div id="momentum-matrix"></div>
       </div>
     `;
   }
@@ -197,7 +174,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     detailTitle.textContent = detailData.name;
     renderPriceChart(detailData);
     renderVpChart(detailData, currentVpPeriod);
-    renderVMSMatrix(detailData);
+    renderMomentumMatrix(detailData);
     detailSection.scrollIntoView({behavior:'smooth', block:'start'});
   }
 
@@ -304,10 +281,10 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     vpChart = new Chart(document.getElementById('chart-vp'), config);
   }
 
-  // ─── Panel C: VMS Matrix ──────────────────────────────
-  function renderVMSMatrix(detailData) {
-    const vms = detailData.vms_matrix;
-    const container = document.getElementById('vms-matrix');
+  // ─── Panel C: VWAP Momentum Matrix ──────────────────────────────
+  function renderMomentumMatrix(detailData) {
+    const momentumMatrix = detailData.vwap_momentum_matrix;
+    const container = document.getElementById('momentum-matrix');
     container.innerHTML = '';
 
     const decay = 0.75;
@@ -315,17 +292,17 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     const maxW = Math.max(...weights);
 
     const cellMap = {};
-    vms.cells.forEach(c => { cellMap[`${c.endpoint}_${c.start}`] = c; });
+    momentumMatrix.cells.forEach(c => { cellMap[`${c.endpoint}_${c.start}`] = c; });
 
     const wrap = document.createElement('div');
-    wrap.className = 'vms-grid-wrap';
+    wrap.className = 'momentum-grid-wrap';
     const grid = document.createElement('div');
-    grid.className = 'vms-grid';
+    grid.className = 'momentum-grid';
 
     grid.innerHTML = `
       <div class="hdr"></div>
       <div class="hdr">EP</div>
-      <div class="hdr">Score</div>
+      <div class="hdr">Momentum</div>
       ${Array.from({length:10}, (_,j) => `<div class="hdr">+${(j+1)*10}d</div>`).join('')}
     `;
 
@@ -346,9 +323,9 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
 
       const rsCell = document.createElement('div');
       rsCell.className = 'row-score';
-      const rs = vms.row_scores[i];
+      const rs = momentumMatrix.row_scores[i];
       rsCell.textContent = (rs * 100).toFixed(2);
-      rsCell.style.color = getVmsColor(rs);
+      rsCell.style.color = getMomentumColor(rs);
       grid.appendChild(rsCell);
 
       for (let j = 1; j <= 10; j++) {
@@ -359,12 +336,12 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
 
         if (d) {
           const score = d.score != null ? d.score : 0;
-          cell.className = 'vms-cell';
+          cell.className = 'momentum-cell';
           cell.style.backgroundColor = '#f8fafc';
-          cell.style.color = getVmsColor(score);
+          cell.style.color = getMomentumColor(score);
           cell.textContent = (score * 100).toFixed(2);
         } else {
-          cell.className = 'vms-cell empty';
+          cell.className = 'momentum-cell empty';
           cell.textContent = '·';
         }
         grid.appendChild(cell);
@@ -379,10 +356,9 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
   }
 
   // ─── Legacy card renderer removed ───────────────────────
-  function renderCards(){ renderVMS(); }
+  function renderCards(){ renderMomentum(); }
 
-  renderVMS();
-  renderVMS();
+  renderMomentum();
 
   // ─── URL hash → auto open ──────────────────────────────
   function handleHash() {
@@ -394,12 +370,12 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
   handleHash();
 });
 
-// VMS 가중치 테이블
+// VWAP Momentum 가중치 테이블
 (function(){
   const decay = 0.75;
   const weights = Array.from({length:10}, (_,i) => +(10 * Math.pow(decay, i)).toFixed(4));
   const total = weights.reduce((a,b)=>a+b,0);
-  const tbody = document.getElementById('vms-weight-table');
+  const tbody = document.getElementById('momentum-weight-table');
   weights.forEach((w, i) => {
     const ep = (i+1)*10;
     const pct = (w/total*100).toFixed(2);
