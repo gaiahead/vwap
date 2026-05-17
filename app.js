@@ -14,7 +14,7 @@ let vpChart = null;
 let currentVpPeriod = '20d';
 let currentDetailName = null;
 const detailCache = {};
-const DATA_VERSION = 'recent-200-vwap1d-valuation-20260517';
+const DATA_VERSION = 'recent-200-vwap5-markers-20260517';
 
 fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json()).then(data=>{
   const allNames = Object.keys(data).filter(k => k !== '_meta');
@@ -183,8 +183,8 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     const vwap5 = ohlcv.map(d => d.vwap_5d);
     const vwap20 = ohlcv.map(d => d.vwap_20d);
     const signalMap = new Map((detailData.strategy_signal?.signals || []).map(sig => [sig.date, sig]));
-    const buyPoints = labels.map((date, i) => signalMap.get(date)?.type === 'BUY' ? closes[i] : null);
-    const sellPoints = labels.map((date, i) => signalMap.get(date)?.type === 'SELL' ? closes[i] : null);
+    const buyPoints = labels.map((date, i) => signalMap.get(date)?.type === 'BUY' ? vwap5[i] : null);
+    const sellPoints = labels.map((date, i) => signalMap.get(date)?.type === 'SELL' ? vwap5[i] : null);
 
     const vp = detailData.volume_profile;
     const vwap200 = vp?.['200d']?.vwap ?? null;
