@@ -14,7 +14,7 @@ let vpChart = null;
 let currentVpPeriod = '20d';
 let currentDetailName = null;
 const detailCache = {};
-const DATA_VERSION = 'recent-200-vwap1d-20260517';
+const DATA_VERSION = 'recent-200-vwap-lines-20260517';
 
 fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json()).then(data=>{
   const allNames = Object.keys(data).filter(k => k !== '_meta');
@@ -140,7 +140,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       .join('');
     return `
       <div class="panel-box">
-        <div class="panel-title">VWAP Lines · 5/20</div>
+        <div class="panel-title">VWAP Lines · 5/20/200</div>
         <div style="position:relative;height:440px"><canvas id="chart-price"></canvas></div>
       </div>
       <div class="panel-box" style="margin-top:16px">
@@ -187,6 +187,17 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     const sellPoints = labels.map((date, i) => signalMap.get(date)?.type === 'SELL' ? closes[i] : null);
 
     const vp = detailData.volume_profile;
+    const vwap200 = vp?.['200d']?.vwap ?? null;
+    const vwap200Line = labels.map(() => vwap200);
+    const legendOrder = ['BUY', 'SELL', 'VWAP 5', 'VWAP 20', 'VWAP 200', 'Close'];
+    const legendKey = label => {
+      if (label === 'BUY') return 'BUY';
+      if (label === 'SELL') return 'SELL';
+      if (label.startsWith('VWAP 5')) return 'VWAP 5';
+      if (label.startsWith('VWAP 20')) return 'VWAP 20';
+      if (label.startsWith('VWAP 200')) return 'VWAP 200';
+      return label;
+    };
     const annotations = {};
 
     const config = {
@@ -194,18 +205,19 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       data: {
         labels,
         datasets: [
-          {label: 'Close', data: closes, borderColor: '#64748b', borderWidth: 1, pointRadius: 0, tension: 0.1, fill: false, order: 5},
-          {label: 'VWAP 5d', data: vwap5, borderColor: '#2563eb', borderWidth: 2.2, borderDash: [4, 2], pointRadius: 0, tension: 0.2, fill: false, order: 4},
-          {label: 'VWAP 20d · Sell line', data: vwap20, borderColor: '#ea580c', borderWidth: 2.2, borderDash: [6, 3], pointRadius: 0, tension: 0.2, fill: false, order: 3},
-          {label: 'BUY', data: buyPoints, type: 'line', showLine: false, pointStyle: 'triangle', pointRadius: 6, pointBackgroundColor: '#16a34a', pointBorderColor: '#166534', order: 1},
-          {label: 'SELL', data: sellPoints, type: 'line', showLine: false, pointStyle: 'rectRot', pointRadius: 6, pointBackgroundColor: '#dc2626', pointBorderColor: '#991b1b', order: 1}
+          {label: 'BUY', data: buyPoints, type: 'line', showLine: false, pointStyle: 'triangle', pointRadius: 7, pointBackgroundColor: '#16a34a', pointBorderColor: '#166534', pointBorderWidth: 1.5, order: 1},
+          {label: 'SELL', data: sellPoints, type: 'line', showLine: false, pointStyle: 'triangle', pointRotation: 180, pointRadius: 7, pointBackgroundColor: '#dc2626', pointBorderColor: '#991b1b', pointBorderWidth: 1.5, order: 1},
+          {label: 'VWAP 5', data: vwap5, borderColor: '#dc2626', borderWidth: 2.2, borderDash: [5, 3], pointRadius: 0, tension: 0.2, fill: false, order: 3},
+          {label: 'VWAP 20', data: vwap20, borderColor: '#16a34a', borderWidth: 2.2, borderDash: [5, 3], pointRadius: 0, tension: 0.2, fill: false, order: 4},
+          {label: 'VWAP 200', data: vwap200Line, borderColor: '#2563eb', borderWidth: 2, borderDash: [5, 3], pointRadius: 0, tension: 0, fill: false, order: 5},
+          {label: 'Close', data: closes, borderColor: '#64748b', borderWidth: 1, pointRadius: 0, tension: 0.1, fill: false, order: 6}
         ]
       },
       options: {
         responsive: true, maintainAspectRatio: false, animation: {duration: 200},
         interaction: {mode: 'index', intersect: false},
         plugins: {
-          legend: {display: true, labels: {color: '#334155', font: {size: 10}, boxWidth: 12, padding: 10}},
+          legend: {display: true, labels: {color: '#334155', font: {size: 10}, boxWidth: 12, padding: 10, usePointStyle: true, sort: (a, b) => legendOrder.indexOf(legendKey(a.text)) - legendOrder.indexOf(legendKey(b.text))}},
           annotation: {annotations},
           tooltip: {callbacks: {label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y?.toLocaleString(undefined, {maximumFractionDigits: 2})}`}}
         },
