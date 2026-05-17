@@ -6,7 +6,7 @@
   <title>VWAP 추세 모니터</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
-  <link rel="stylesheet" href="style.css?v=recent-200-top-signal-layout-20260517"/>
+  <link rel="stylesheet" href="style.css?v=recent-200-sortable-table-20260517"/>
 </head>
 <body>
 
@@ -21,16 +21,16 @@
   <div class="momentum-table-wrap"><table class="momentum-table">
     <thead>
       <tr>
-        <th>종목</th>
-        <th>최근 변화</th>
-        <th>5/20 수익률</th>
-        <th>5/200 수익률</th>
-        <th>당기 보유일</th>
-        <th>당기 수익률</th>
-        <th>200일 전략 수익률</th>
-        <th>200일 보유 수익률</th>
-        <th>200일 전략 MDD</th>
-        <th>200일 보유 MDD</th>
+        <th data-sort="name">종목</th>
+        <th data-sort="last_signal_date">최근 변화</th>
+        <th data-sort="vwap_5_20_return_pct">5/20 수익률</th>
+        <th data-sort="vwap_5_200_return_pct">5/200 수익률</th>
+        <th data-sort="holding_days">당기 보유일</th>
+        <th data-sort="current_trade_return_pct">당기 수익률</th>
+        <th data-sort="strategy_return_pct">200일 전략 수익률</th>
+        <th data-sort="buy_hold_return_pct">200일 보유 수익률</th>
+        <th data-sort="strategy_mdd_pct">200일 전략 MDD</th>
+        <th data-sort="buy_hold_mdd_pct">200일 보유 MDD</th>
       </tr>
     </thead>
     <tbody id="momentum-body"></tbody>
@@ -45,6 +45,6 @@
   <div id="detail-content"></div>
 </div>
 
-<script src="app.js?v=recent-200-top-signal-layout-20260517"></script>
+<script src="app.js?v=recent-200-sortable-table-20260517"></script>
 </body>
 </html>

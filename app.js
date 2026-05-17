@@ -14,7 +14,7 @@ let vpChart = null;
 let currentVpPeriod = '20d';
 let currentDetailName = null;
 const detailCache = {};
-const DATA_VERSION = 'recent-200-top-signal-layout-20260517';
+const DATA_VERSION = 'recent-200-sortable-table-20260517';
 
 fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json()).then(data=>{
   const allNames = Object.keys(data).filter(k => k !== '_meta');
@@ -47,6 +47,66 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     return '#64748b';
   }
 
+  const sortFields = {
+    name: r => r.name,
+    last_signal_date: r => r.strategy.latest?.last_signal_date || '',
+    vwap_5_20_return_pct: r => r.strategy.latest?.vwap_5_20_return_pct,
+    vwap_5_200_return_pct: r => r.strategy.latest?.vwap_5_200_return_pct,
+    holding_days: r => r.strategy.latest?.holding_days,
+    current_trade_return_pct: r => r.strategy.latest?.current_trade_return_pct,
+    strategy_return_pct: r => r.strategy.backtest?.rolling_200d?.strategy_return_pct,
+    buy_hold_return_pct: r => r.strategy.backtest?.rolling_200d?.buy_hold_return_pct,
+    strategy_mdd_pct: r => r.strategy.backtest?.rolling_200d?.strategy_mdd_pct,
+    buy_hold_mdd_pct: r => r.strategy.backtest?.rolling_200d?.buy_hold_mdd_pct
+  };
+  const numericSortFields = new Set([
+    'vwap_5_20_return_pct', 'vwap_5_200_return_pct', 'holding_days',
+    'current_trade_return_pct', 'strategy_return_pct', 'buy_hold_return_pct',
+    'strategy_mdd_pct', 'buy_hold_mdd_pct'
+  ]);
+  let sortState = { key: 'current_trade_return_pct', dir: 'desc' };
+
+  function compareRows(a, b) {
+    const getter = sortFields[sortState.key] || sortFields.current_trade_return_pct;
+    const av = getter(a);
+    const bv = getter(b);
+    const dir = sortState.dir === 'asc' ? 1 : -1;
+    if (numericSortFields.has(sortState.key)) {
+      const an = av == null || Number.isNaN(Number(av)) ? -Infinity : Number(av);
+      const bn = bv == null || Number.isNaN(Number(bv)) ? -Infinity : Number(bv);
+      if (an !== bn) return (an - bn) * dir;
+    } else {
+      const cmp = String(av ?? '').localeCompare(String(bv ?? ''), 'ko-KR', { numeric: true });
+      if (cmp !== 0) return cmp * dir;
+    }
+    return a.name.localeCompare(b.name, 'ko-KR');
+  }
+
+  function updateSortHeaders() {
+    document.querySelectorAll('.momentum-table th[data-sort]').forEach(th => {
+      const active = th.dataset.sort === sortState.key;
+      th.classList.toggle('sort-active', active);
+      th.dataset.sortDir = active ? sortState.dir : '';
+      th.setAttribute('aria-sort', active ? (sortState.dir === 'asc' ? 'ascending' : 'descending') : 'none');
+    });
+  }
+
+  document.querySelectorAll('.momentum-table th[data-sort]').forEach(th => {
+    th.tabIndex = 0;
+    th.addEventListener('click', () => {
+      const key = th.dataset.sort;
+      sortState = sortState.key === key
+        ? { key, dir: sortState.dir === 'desc' ? 'asc' : 'desc' }
+        : { key, dir: numericSortFields.has(key) ? 'desc' : 'asc' };
+      renderMomentum();
+    });
+    th.addEventListener('keydown', e => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      th.click();
+    });
+  });
+
   function renderMomentum() {
     const targets = ['삼성전자','SK하이닉스','한미반도체','리노공업'];
     const hasMomentumTargets = targets.some(n => data[n]);
@@ -59,7 +119,8 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     const rows = allNames
       .map(n => ({ name: n, strategy: data[n]?.strategy_signal }))
       .filter(r => r.strategy?.available)
-      .sort((a,b) => (b.strategy.latest?.vwap_5_200_return_pct ?? -9999) - (a.strategy.latest?.vwap_5_200_return_pct ?? -9999));
+      .sort(compareRows);
+    updateSortHeaders();
 
     rows.forEach(({name, strategy}) => {
       const ticker = data[name]?.ticker;
