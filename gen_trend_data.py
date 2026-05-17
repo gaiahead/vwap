@@ -137,7 +137,7 @@ ASSETS: list[AssetTuple] = [
     ("TIGER 미디어컨텐츠",             "228810.KS", "g5"),
     ("KODEX 로봇액티브",               "445290.KS", "g5"),
 ]
-WINDOWS: list[int] = list(range(10, 201, 10))  # 10~200, 10일 간격
+WINDOWS: list[int] = [5, 20, 200]  # 상단 판단/상세 VP용 핵심 VWAP
 N_BUCKETS: int = 20
 KST: timezone = timezone(timedelta(hours=9))
 DATA_START: str = "2020-01-01"
@@ -289,18 +289,20 @@ def calc_max_drawdown(equity: list[float]) -> float | None:
 
 
 def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
-    """공통 VWAP 5/20 전략 상태와 간단 백테스트 요약.
+    """공통 VWAP 5/20 전략 상태와 5/20·5/200 수익률 요약.
 
     신호: 당일 종가 확정 후 판단. 백테스트 체결: 다음 거래일 시가, 편도 수수료 0.03%.
-    VWAP5는 전략 신호와 5/20 모멘텀 표기용으로만 계산하며, VWAP Momentum Matrix에는 넣지 않는다.
+    상단 판단용 VWAP는 5, 20, 200만 계산한다.
     """
-    if len(df) < 25:
+    if len(df) < 205:
         return {"available": False, "reason": "insufficient_history"}
 
     work = df.copy()
     work["vwap_5d"] = compute_proxy_vwap_series(work, 5)
     work["vwap_20d"] = compute_proxy_vwap_series(work, 20)
-    work["vwap_5_20_momentum"] = work["vwap_5d"] / work["vwap_20d"] - 1
+    work["vwap_200d"] = compute_proxy_vwap_series(work, 200)
+    work["vwap_5_20_return"] = work["vwap_5d"] / work["vwap_20d"] - 1
+    work["vwap_5_200_return"] = work["vwap_5d"] / work["vwap_200d"] - 1
 
     fee = 0.0003
     cash = 1.0
@@ -391,7 +393,8 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
                         "execution_date": execution_dt,
                         "type": "BUY",
                         "price": round(execution_open, 4),
-                        "vwap_5_20_momentum_pct": safe_round(float(prev["vwap_5_20_momentum"]) * 100, 2),
+                        "vwap_5_20_return_pct": safe_round(float(prev["vwap_5_20_return"]) * 100, 2),
+                        "vwap_5_200_return_pct": safe_round(float(prev["vwap_5_200_return"]) * 100, 2) if not pd.isna(prev["vwap_5_200_return"]) else None,
                     })
                 elif in_position and sell_cond:
                     exit_price = execution_open
@@ -413,7 +416,8 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
                         "execution_date": execution_dt,
                         "type": "SELL",
                         "price": round(exit_price, 4),
-                        "vwap_5_20_momentum_pct": safe_round(float(prev["vwap_5_20_momentum"]) * 100, 2),
+                        "vwap_5_20_return_pct": safe_round(float(prev["vwap_5_20_return"]) * 100, 2),
+                        "vwap_5_200_return_pct": safe_round(float(prev["vwap_5_200_return"]) * 100, 2) if not pd.isna(prev["vwap_5_200_return"]) else None,
                     })
                     entry_price = None
                     entry_date = None
@@ -430,8 +434,11 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
     latest = work.iloc[-1]
     v5 = safe_round(latest["vwap_5d"])
     v20 = safe_round(latest["vwap_20d"])
-    momentum_ratio = None if pd.isna(latest["vwap_5_20_momentum"]) else float(latest["vwap_5_20_momentum"])
-    momentum_pct = safe_round(momentum_ratio * 100 if momentum_ratio is not None else None, 2)
+    v200 = safe_round(latest["vwap_200d"])
+    ret_5_20_ratio = None if pd.isna(latest["vwap_5_20_return"]) else float(latest["vwap_5_20_return"])
+    ret_5_200_ratio = None if pd.isna(latest["vwap_5_200_return"]) else float(latest["vwap_5_200_return"])
+    ret_5_20_pct = safe_round(ret_5_20_ratio * 100 if ret_5_20_ratio is not None else None, 2)
+    ret_5_200_pct = safe_round(ret_5_200_ratio * 100 if ret_5_200_ratio is not None else None, 2)
     latest_date = str(work.index[-1].date())
     buy_now = v5 is not None and v20 is not None and v5 > v20
     sell_now = v5 is not None and v20 is not None and v5 < v20
@@ -462,8 +469,10 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
         "rules": {"buy": "VWAP5 > VWAP20", "sell": "VWAP5 < VWAP20", "fee_one_way_pct": 0.03},
         "latest": {
             "date": latest_date,
-            "vwap5": v5, "vwap20": v20,
-            "vwap_5_20_momentum_pct": momentum_pct,
+            "vwap5": v5, "vwap20": v20, "vwap200": v200,
+            "vwap_5_20_return_pct": ret_5_20_pct,
+            "vwap_5_200_return_pct": ret_5_200_pct,
+            "vwap_5_20_momentum_pct": ret_5_20_pct,
             "alignment": alignment, "in_position": in_position, "action": action,
             "last_signal": last_signal, "last_signal_date": last_signal_date,
             "holding_days": holding_days,
@@ -601,13 +610,14 @@ def build_vwap_momentum_matrix(df: pd.DataFrame) -> dict[str, Any]:
 
 
 def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any]:
-    """detail.html용 상세 데이터 생성."""
-    # ohlcv: 최근 200일 + 전략용 VWAP 5/20 롤링
-    tail = df.iloc[-200:].copy()
-    vwap5_series = compute_proxy_vwap_series(tail, window=5)
-    vwap20_series = compute_proxy_vwap_series(tail, window=20)
+    """상세 데이터 생성: VWAP 5/20/200 중심."""
+    work = df.copy()
+    work["vwap_5d"] = compute_proxy_vwap_series(work, window=5)
+    work["vwap_20d"] = compute_proxy_vwap_series(work, window=20)
+    work["vwap_200d"] = compute_proxy_vwap_series(work, window=200)
+    tail = work.iloc[-200:].copy()
     ohlcv = []
-    for i, (dt, row) in enumerate(tail.iterrows()):
+    for _i, (dt, row) in enumerate(tail.iterrows()):
         rec: dict[str, Any] = {
             "date": str(dt.date()),
             "open": round(float(row["open"]), 4),
@@ -615,14 +625,14 @@ def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any
             "low": round(float(row["low"]), 4),
             "close": round(float(row["close"]), 4),
             "volume": int(row["volume"]),
+            "vwap_5d": safe_round(row["vwap_5d"]),
+            "vwap_20d": safe_round(row["vwap_20d"]),
+            "vwap_200d": safe_round(row["vwap_200d"]),
         }
-        rec["vwap_5d"] = safe_round(vwap5_series[i])
-        rec["vwap_20d"] = safe_round(vwap20_series[i])
         ohlcv.append(rec)
 
-    # volume_profile: 10d~200d (20개 전체)
     volume_profile: dict[str, Any] = {}
-    for period in range(10, 201, 10):
+    for period in WINDOWS:
         if len(df) >= period:
             vwap_val, buckets = compute_vwap_with_profile(df.iloc[-period:])
             volume_profile[f"{period}d"] = {
@@ -635,7 +645,6 @@ def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any
         "ticker": ticker,
         "ohlcv": ohlcv,
         "volume_profile": volume_profile,
-        "vwap_momentum_matrix": build_vwap_momentum_matrix(df),
         "strategy_signal": build_strategy_signal(df),
         "latest_price": round(float(df["close"].iloc[-1]), 2),
     }
@@ -659,8 +668,8 @@ def process_asset(
     vwap_structure, _ = build_vwap_structure(df)
     records = build_weekly_records(df)
 
-    s = vwap_structure
-    print(f"    200d={s[-1].get('norm')} / 10d={s[0].get('norm')}")
+    s = {item["window"]: item for item in vwap_structure}
+    print(f"    5/200={s.get(5, {}).get('norm')} / 20/200={s.get(20, {}).get('norm')}")
 
     return {
         "ticker": ticker,

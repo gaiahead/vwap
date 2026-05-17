@@ -6,7 +6,7 @@
   <title>VWAP 추세 모니터</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
-  <link rel="stylesheet" href="style.css?v=strategy-520-top-200d-20260517-2"/>
+  <link rel="stylesheet" href="style.css?v=simple-5-20-200-20260517"/>
 </head>
 <body>
 
@@ -16,19 +16,21 @@
 </header>
 
 <div class="section-box momentum-monitor" id="momentum-section" style="display:none">
-  <div class="panel-title">📐 VWAP Momentum Market Monitor</div>
-  <div class="momentum-monitor-sub">모멘텀 표를 상단 대표 모니터로 사용합니다. 행 클릭 시 종목 상세 차트가 열립니다.</div>
+  <div class="panel-title">📐 VWAP 5 / 20 / 200 MONITOR</div>
+  <div class="momentum-monitor-sub">5/20은 단기 전략 신호, 5/200은 장기 추세 강도입니다. 행 클릭 시 종목 상세 차트가 열립니다.</div>
   <div class="momentum-table-wrap"><table class="momentum-table">
     <thead>
       <tr>
         <th>종목</th>
-        <th>모멘텀</th>
         <th>신호</th>
-        <th>5/20 모멘텀</th>
-        <th>보유일</th>
+        <th>5/20 수익률</th>
+        <th>5/200 수익률</th>
+        <th>당기 보유일</th>
         <th>당기 수익률</th>
-        <th>200일 수익률</th>
-        <th>200일 MDD</th>
+        <th>200일 전략 수익률</th>
+        <th>200일 보유 수익률</th>
+        <th>200일 전략 MDD</th>
+        <th>200일 보유 MDD</th>
         <th>최근 변화</th>
       </tr>
     </thead>
@@ -41,69 +43,9 @@
     <h2 id="detail-title">Loading...</h2>
     <button class="close-btn" id="detail-close">✕</button>
   </div>
-  <div id="detail-content">
-    <!-- Panel A -->
-    <div class="panel-box">
-      <div class="panel-title">VWAP Lines</div>
-      <div style="position:relative;height:440px"><canvas id="chart-price"></canvas></div>
-    </div>
-    <!-- Panel B -->
-    <div class="panel-box" style="margin-top:16px">
-      <div class="panel-title">Volume Profile</div>
-      <div class="vp-tabs" id="vp-tabs">
-        <button class="vp-tab active" data-period="10d">10d</button>
-        <button class="vp-tab" data-period="20d">20d</button>
-        <button class="vp-tab" data-period="30d">30d</button>
-        <button class="vp-tab" data-period="40d">40d</button>
-        <button class="vp-tab" data-period="50d">50d</button>
-        <button class="vp-tab" data-period="60d">60d</button>
-        <button class="vp-tab" data-period="70d">70d</button>
-        <button class="vp-tab" data-period="80d">80d</button>
-        <button class="vp-tab" data-period="90d">90d</button>
-        <button class="vp-tab" data-period="100d">100d</button>
-        <button class="vp-tab" data-period="110d">110d</button>
-        <button class="vp-tab" data-period="120d">120d</button>
-        <button class="vp-tab" data-period="130d">130d</button>
-        <button class="vp-tab" data-period="140d">140d</button>
-        <button class="vp-tab" data-period="150d">150d</button>
-        <button class="vp-tab" data-period="160d">160d</button>
-        <button class="vp-tab" data-period="170d">170d</button>
-        <button class="vp-tab" data-period="180d">180d</button>
-        <button class="vp-tab" data-period="190d">190d</button>
-        <button class="vp-tab" data-period="200d">200d</button>
-      </div>
-      <div style="position:relative;height:440px"><canvas id="chart-vp"></canvas></div>
-    </div>
-    <!-- Panel C -->
-    <div class="panel-box" style="margin-top:16px">
-      <div class="panel-title">VWAP Momentum Matrix</div>
-      <div id="momentum-matrix"></div>
-    </div>
-  </div>
+  <div id="detail-content"></div>
 </div>
 
-<div class="section-box">
-  <div class="panel-title">모멘텀 설명</div>
-  <div style="font-size:0.75rem;color:#64748b;margin-bottom:10px">
-    VWAP Momentum = Σ(가중치 × 행 모멘텀) / Σ(가중치) &nbsp;|&nbsp; 지수 감소 0.75
-  </div>
-  <div style="font-size:0.73rem;color:#64748b;margin-bottom:12px">
-    10d당 복리 성장률 = (endpoint_vwap / start_vwap)^(1/j) - 1 &nbsp;|&nbsp;
-    행 모멘텀 = 셀 모멘텀의 평균
-  </div>
-  <table style="border-collapse:collapse;font-size:0.72rem;width:100%;max-width:700px">
-    <thead>
-      <tr>
-        <th style="padding:4px 12px;text-align:left;color:#475569;border-bottom:1px solid #e2e8f0">Endpoint</th>
-        <th style="padding:4px 12px;text-align:right;color:#475569;border-bottom:1px solid #e2e8f0">가중치</th>
-        <th style="padding:4px 12px;text-align:right;color:#475569;border-bottom:1px solid #e2e8f0">비중</th>
-        <th style="padding:4px 12px;text-align:left;color:#475569;border-bottom:1px solid #e2e8f0;padding-left:16px">시작점 범위</th>
-      </tr>
-    </thead>
-    <tbody id="momentum-weight-table"></tbody>
-  </table>
-</div>
-
-<script src="app.js?v=strategy-520-top-200d-20260517-2"></script>
+<script src="app.js?v=simple-5-20-200-20260517"></script>
 </body>
 </html>
