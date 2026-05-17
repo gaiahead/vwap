@@ -316,6 +316,53 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
     daily_returns: list[float] = []
     prev_equity = 1.0
     position_days = 0
+    def calc_window_stats(window: int = 200) -> dict[str, Any]:
+        """최근 window 거래일 기준 5/20 전략과 단순보유의 수익률/MDD."""
+        if len(work) < max(25, window):
+            return {
+                "window_days": window,
+                "strategy_return_pct": None,
+                "buy_hold_return_pct": None,
+                "strategy_mdd_pct": None,
+                "buy_hold_mdd_pct": None,
+            }
+
+        sub = work.iloc[-window:].copy()
+        w_cash = 1.0
+        w_shares = 0.0
+        w_in_position = False
+        w_equity_curve: list[float] = []
+        bh_base_open = float(sub["open"].iloc[0])
+        bh_equity_curve: list[float] = []
+
+        for i in range(len(sub)):
+            row = sub.iloc[i]
+            if i > 0:
+                prev = sub.iloc[i - 1]
+                v5_prev, v20_prev = prev["vwap_5d"], prev["vwap_20d"]
+                if not pd.isna(v5_prev) and not pd.isna(v20_prev):
+                    execution_open = float(row["open"])
+                    if not w_in_position and float(v5_prev) > float(v20_prev):
+                        w_shares = w_cash * (1 - fee) / execution_open
+                        w_cash = 0.0
+                        w_in_position = True
+                    elif w_in_position and float(v5_prev) < float(v20_prev):
+                        w_cash = w_shares * execution_open * (1 - fee)
+                        w_shares = 0.0
+                        w_in_position = False
+
+            current_close = float(row["close"])
+            w_equity_curve.append(w_shares * current_close if w_in_position else w_cash)
+            bh_equity_curve.append(current_close / bh_base_open if bh_base_open else 1.0)
+
+        return {
+            "window_days": window,
+            "strategy_return_pct": safe_round((w_equity_curve[-1] - 1) * 100 if w_equity_curve else None, 2),
+            "buy_hold_return_pct": safe_round((bh_equity_curve[-1] - 1) * 100 if bh_equity_curve else None, 2),
+            "strategy_mdd_pct": safe_round(calc_max_drawdown(w_equity_curve), 2),
+            "buy_hold_mdd_pct": safe_round(calc_max_drawdown(bh_equity_curve), 2),
+        }
+
 
     for i in range(len(work)):
         row = work.iloc[i]
@@ -433,6 +480,7 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
             "exposure_pct": safe_round(position_days / len(work) * 100 if len(work) else None, 2),
             "avg_holding_days": safe_round(avg_holding_days, 1),
             "max_holding_days": max_holding_days,
+            "rolling_200d": calc_window_stats(200),
         },
         "signals": signals[-80:],
     }

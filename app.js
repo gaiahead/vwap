@@ -60,6 +60,15 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
   function fmtPct(v) { return v == null ? '–' : `${v > 0 ? '+' : ''}${Number(v).toFixed(2)}%`; }
   function fmtRate(v) { return v == null ? '–' : `${Number(v).toFixed(2)}%`; }
   function fmtDays(v) { return v == null ? '–' : Number(v).toFixed(1).replace(/\.0$/, ''); }
+  function fmtStrategyVsHold(strategyVal, holdVal) {
+    return `전략 ${fmtPct(strategyVal)} / 보유 ${fmtPct(holdVal)}`;
+  }
+  function dualStatColor(strategyVal, holdVal, isMdd=false) {
+    const value = strategyVal ?? holdVal;
+    if (value == null) return '#64748b';
+    if (isMdd) return value <= -20 ? '#dc2626' : '#16a34a';
+    return value >= 0 ? '#16a34a' : '#dc2626';
+  }
   function getStrategyStateClass(strategy) {
     const latest = strategy?.latest;
     if (!latest) return 'neutral';
@@ -97,20 +106,20 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       const momentumColor = getMomentumColor(momentum);
       const stateClass = getStrategyStateClass(strategy);
       const signalText = getSignalText(strategy);
+      const rolling200 = strategy?.backtest?.rolling_200d || {};
       const tr = document.createElement('tr');
       tr.className = 'momentum-row' + (name === currentDetailName ? ' detail-active' : '');
       tr.style.setProperty('--c', momentumColor);
       const cells = [
         `<td><span class="row-indicator"></span>${name}</td>`,
         `<td style="color:${momentumColor};font-weight:800">${(momentum * 100).toFixed(2)}</td>`,
-        `<td><span class="strategy-badge ${stateClass}">${latest.action || '–'}</span></td>`,
-        `<td style="color:${signalColor(signalText)};font-weight:800">${signalText}</td>`,
+        `<td style="color:${signalColor(signalText)};font-weight:800"><span class="strategy-badge ${stateClass}">${signalText}</span></td>`,
         `<td style="color:${(latest.vwap_5_20_momentum_pct ?? 0) >= 0 ? '#16a34a' : '#dc2626'};font-weight:800">${fmtPct(latest.vwap_5_20_momentum_pct)}</td>`,
-        `<td>${latest.alignment || '–'}</td>`,
         `<td>${latest.holding_days ?? '–'}</td>`,
         `<td style="color:${(latest.current_trade_return_pct ?? 0) >= 0 ? '#16a34a' : '#dc2626'};font-weight:800">${fmtPct(latest.current_trade_return_pct)}</td>`,
-        `<td>${latest.last_signal || '–'} ${latest.last_signal_date ? latest.last_signal_date.slice(5) : ''}</td>`,
-        `<td>열기 ›</td>`
+        `<td class="dual-stat" style="color:${dualStatColor(rolling200.strategy_return_pct, rolling200.buy_hold_return_pct)}">${fmtStrategyVsHold(rolling200.strategy_return_pct, rolling200.buy_hold_return_pct)}</td>`,
+        `<td class="dual-stat" style="color:${dualStatColor(rolling200.strategy_mdd_pct, rolling200.buy_hold_mdd_pct, true)}">${fmtStrategyVsHold(rolling200.strategy_mdd_pct, rolling200.buy_hold_mdd_pct)}</td>`,
+        `<td>${latest.last_signal || '–'} ${latest.last_signal_date ? latest.last_signal_date.slice(5) : ''}</td>`
       ];
       tr.innerHTML = cells.join('');
       tr.addEventListener('click', () => {
