@@ -138,10 +138,10 @@ ASSETS: list[AssetTuple] = [
     ("KODEX 로봇액티브",               "445290.KS", "g5"),
 ]
 WINDOWS: list[int] = [5, 20, 200]  # 상단 판단/상세 VP용 핵심 VWAP
+LOOKBACK_TRADING_DAYS: int = 200
+DOWNLOAD_CALENDAR_DAYS: int = 450  # 최근 200거래일 확보용 여유 다운로드
 N_BUCKETS: int = 20
 KST: timezone = timezone(timedelta(hours=9))
-DATA_START: str = "2020-01-01"
-WEEKLY_CUTOFF: date = date(2025, 1, 6)
 EXCLUDE_DATES: frozenset[str] = frozenset({"2025-12-31", "2025-12-30", "2025-12-29"})
 OUTPUT_PATH: str = "trend_data.json"
 DETAIL_DIR: str = "detail_data"
@@ -289,15 +289,15 @@ def calc_max_drawdown(equity: list[float]) -> float | None:
 
 
 def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
-    """공통 VWAP 5/20 전략 상태와 5/20·5/200 수익률 요약.
+    """최근 200거래일 기준 VWAP 5/20 전략과 5/200 위치 요약.
 
     신호: 당일 종가 확정 후 판단. 백테스트 체결: 신호 다음 거래일 1일 VWAP proxy, 편도 수수료 0.03%.
-    상단 판단용 VWAP는 5, 20, 200만 계산한다.
+    `VWAP200`은 최신 5/200 수익률 계산용 기준값이며 상세 차트 이동선으로는 그리지 않는다.
     """
-    if len(df) < 205:
-        return {"available": False, "reason": "insufficient_history"}
+    if len(df) < LOOKBACK_TRADING_DAYS:
+        return {"available": False, "reason": "insufficient_recent_history"}
 
-    work = df.copy()
+    work = df.tail(LOOKBACK_TRADING_DAYS).copy()
     work["vwap_1d"] = ((work["high"] + work["low"] + work["close"]) / 3).astype(float)
     work["vwap_5d"] = compute_proxy_vwap_series(work, 5)
     work["vwap_20d"] = compute_proxy_vwap_series(work, 20)
@@ -481,6 +481,7 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
             "current_trade_return_pct": safe_round(current_trade_return, 2),
         },
         "backtest": {
+            "period": f"recent_{LOOKBACK_TRADING_DAYS}_trading_days",
             "start_date": str(work.index[0].date()), "end_date": latest_date,
             "strategy_return_pct": safe_round(strategy_return, 2),
             "buy_hold_return_pct": safe_round(bh_return, 2),
@@ -500,17 +501,19 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
 # 종목별 데이터 처리
 # ──────────────────────────────────────────────────────────
 def download_ohlcv(ticker: str, end_date: str) -> pd.DataFrame:
-    """yfinance에서 OHLCV 데이터 다운로드."""
+    """최근 200거래일 확보에 필요한 OHLCV만 다운로드해 최종 200거래일로 제한."""
+    end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+    start_date = (end_dt - timedelta(days=DOWNLOAD_CALENDAR_DAYS)).strftime("%Y-%m-%d")
     raw = yf.download(
         ticker,
-        start=DATA_START,
+        start=start_date,
         end=end_date,
         interval="1d",
         auto_adjust=True,
         progress=False,
     )
     raw.columns = [c[0].lower() for c in raw.columns]
-    return raw[["open", "high", "low", "close", "volume"]].dropna().copy()
+    return raw[["open", "high", "low", "close", "volume"]].dropna().tail(LOOKBACK_TRADING_DAYS).copy()
 
 
 def build_vwap_structure(df: pd.DataFrame) -> tuple[list[dict[str, Any]], float | None]:
@@ -537,86 +540,20 @@ def build_vwap_structure(df: pd.DataFrame) -> tuple[list[dict[str, Any]], float 
     return structure, base_vwap
 
 
-def build_weekly_records(df: pd.DataFrame) -> list[dict[str, Any]]:
-    """주간 시계열 레코드 생성."""
-    df = df.copy()
-    df["vwap"] = compute_proxy_vwap_series(df, window=20)
-    df["vwap_prev5"] = pd.Series(df["vwap"].values, index=df.index).shift(5)
-    df["weekly_chg"] = (df["vwap"] - df["vwap_prev5"]) / df["vwap_prev5"] * 100
-    df["week"] = df.index.isocalendar().week.values
-    df["year"] = df.index.year
-
-    weekly_idx = [grp.index[-1] for (_, _), grp in df.groupby(["year", "week"])]
-    weekly = df.loc[weekly_idx].copy()
-    weekly["score"] = strength_score(weekly["weekly_chg"].tolist())
-    weekly = weekly[
-        [
-            date.fromisoformat(str(d.date())) >= WEEKLY_CUTOFF
-            and str(d.date()) not in EXCLUDE_DATES
-            for d in weekly.index
-        ]
-    ]
-
+def build_recent_records(df: pd.DataFrame) -> list[dict[str, Any]]:
+    """최근 200거래일 close 기반 미니 레코드. 현재 UI에서는 보조/호환 필드다."""
     return [
-        {
-            "date": str(dt.date()),
-            "price": round(float(row["close"]), 2),
-            "score": None if pd.isna(row["score"]) else float(row["score"]),
-        }
-        for dt, row in weekly.iterrows()
+        {"date": str(dt.date()), "price": round(float(row["close"]), 2)}
+        for dt, row in df.tail(LOOKBACK_TRADING_DAYS).iterrows()
     ]
-
-
-def build_vwap_momentum_matrix(df: pd.DataFrame) -> dict[str, Any]:
-    """VWAP 기간 구조의 100셀 모멘텀 행렬을 생성."""
-    vwap_by_window: dict[int, float] = {}
-    for window in WINDOWS:
-        if len(df) >= window:
-            vwap_by_window[window] = compute_vwap(df.iloc[-window:])
-
-    momentum_decay = 0.75
-    cells: list[dict[str, Any]] = []
-    row_scores: list[float] = []
-    weights = [10 * momentum_decay**i for i in range(10)]
-    total_weight = sum(weights)
-    weighted_sum = 0.0
-
-    for i in range(10):
-        endpoint = (i + 1) * 10
-        cell_weighted_sum = 0.0
-        cell_total_weight = 0.0
-        for j in range(1, 11):
-            start = endpoint + j * 10
-            if endpoint not in vwap_by_window or start not in vwap_by_window:
-                continue
-            cell_momentum = (vwap_by_window[endpoint] / vwap_by_window[start]) ** (1 / j) - 1
-            cell_weight = 10 * momentum_decay ** (j - 1)  # +10d 비교 가중 높음
-            cells.append({
-                "endpoint": endpoint,
-                "start": start,
-                "score": round(cell_momentum, 6),
-            })
-            cell_weighted_sum += cell_weight * cell_momentum
-            cell_total_weight += cell_weight
-        row_score = cell_weighted_sum / cell_total_weight if cell_total_weight > 0 else 0.0
-        row_scores.append(round(row_score, 6))
-        weighted_sum += weights[i] * row_score
-
-    momentum = weighted_sum / total_weight if total_weight > 0 else 0.0
-    return {
-        "cells": cells,
-        "row_scores": row_scores,
-        "momentum": round(momentum, 6),
-    }
 
 
 def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any]:
-    """상세 데이터 생성: VWAP 5/20/200 중심."""
-    work = df.copy()
+    """상세 데이터 생성: 최근 200거래일, VWAP line은 5/20만 표시."""
+    work = df.tail(LOOKBACK_TRADING_DAYS).copy()
     work["vwap_5d"] = compute_proxy_vwap_series(work, window=5)
     work["vwap_20d"] = compute_proxy_vwap_series(work, window=20)
-    work["vwap_200d"] = compute_proxy_vwap_series(work, window=200)
-    tail = work.iloc[-200:].copy()
+    tail = work.copy()
     ohlcv = []
     for _i, (dt, row) in enumerate(tail.iterrows()):
         rec: dict[str, Any] = {
@@ -629,14 +566,13 @@ def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any
             "vwap_1d": safe_round((float(row["high"]) + float(row["low"]) + float(row["close"])) / 3),
             "vwap_5d": safe_round(row["vwap_5d"]),
             "vwap_20d": safe_round(row["vwap_20d"]),
-            "vwap_200d": safe_round(row["vwap_200d"]),
         }
         ohlcv.append(rec)
 
     volume_profile: dict[str, Any] = {}
     for period in WINDOWS:
-        if len(df) >= period:
-            vwap_val, buckets = compute_vwap_with_profile(df.iloc[-period:])
+        if len(work) >= period:
+            vwap_val, buckets = compute_vwap_with_profile(work.iloc[-period:])
             volume_profile[f"{period}d"] = {
                 "buckets": buckets,
                 "vwap": round(vwap_val, 4),
@@ -648,6 +584,7 @@ def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any
         "ohlcv": ohlcv,
         "volume_profile": volume_profile,
         "strategy_signal": build_strategy_signal(df),
+        "lookback_trading_days": LOOKBACK_TRADING_DAYS,
         "latest_price": round(float(df["close"].iloc[-1]), 2),
     }
 
@@ -667,8 +604,9 @@ def process_asset(
         print(f"    [WARN] {name}: 데이터 없음")
         return None
 
+    df = df.tail(LOOKBACK_TRADING_DAYS).copy()
     vwap_structure, _ = build_vwap_structure(df)
-    records = build_weekly_records(df)
+    records = build_recent_records(df)
 
     s = {item["window"]: item for item in vwap_structure}
     print(f"    5/200={s.get(5, {}).get('norm')} / 20/200={s.get(20, {}).get('norm')}")
@@ -679,6 +617,7 @@ def process_asset(
         "records": records,
         "vwap_structure": vwap_structure,
         "strategy_signal": build_strategy_signal(df),
+        "lookback_trading_days": LOOKBACK_TRADING_DAYS,
         "latest_price": round(float(df["close"].iloc[-1]), 2),
     }
 
@@ -690,7 +629,7 @@ def main() -> None:
     run_time = datetime.now(KST).strftime("%Y-%m-%d %H:%M")
     end_date = datetime.now(KST).strftime("%Y-%m-%d")
 
-    result: dict[str, Any] = {"_meta": {"updated_at": run_time}}
+    result: dict[str, Any] = {"_meta": {"updated_at": run_time, "lookback_trading_days": LOOKBACK_TRADING_DAYS}}
     failed: list[str] = []
 
     for name, ticker, group in ASSETS:

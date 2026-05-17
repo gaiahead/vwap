@@ -14,7 +14,7 @@ let vpChart = null;
 let currentVpPeriod = '20d';
 let currentDetailName = null;
 const detailCache = {};
-const DATA_VERSION = 'simple-5-20-200-vwap1d-20260517';
+const DATA_VERSION = 'recent-200-vwap1d-20260517';
 
 fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json()).then(data=>{
   const allNames = Object.keys(data).filter(k => k !== '_meta');
@@ -140,7 +140,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       .join('');
     return `
       <div class="panel-box">
-        <div class="panel-title">VWAP Lines · 5/20/200</div>
+        <div class="panel-title">VWAP Lines · 5/20</div>
         <div style="position:relative;height:440px"><canvas id="chart-price"></canvas></div>
       </div>
       <div class="panel-box" style="margin-top:16px">
@@ -175,36 +175,6 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
   }
 
 
-  function renderStrategyCard(detailData) {
-    const container = document.getElementById('strategy-card');
-    if (!container) return;
-    const strategy = detailData.strategy_signal;
-    if (!strategy?.available) {
-      container.innerHTML = '<div class="strategy-muted">전략 계산 데이터가 부족합니다.</div>';
-      return;
-    }
-    const latest = strategy.latest;
-    const bt = strategy.backtest || {};
-    const cls = getStrategyStateClass(strategy);
-    container.innerHTML = `
-      <div class="strategy-grid">
-        <div class="strategy-main ${cls}">
-          <div class="strategy-label">현재 행동</div>
-          <div class="strategy-action">${latest.action}</div>
-          <div class="strategy-rule">매수 5&gt;20 · 매도 5&lt;20</div>
-        </div>
-        <div><div class="strategy-label">5/20 수익률</div><div class="strategy-value ${latest.vwap_5_20_return_pct >= 0 ? 'pos' : 'neg'}">${fmtPct(latest.vwap_5_20_return_pct)}</div></div>
-        <div><div class="strategy-label">5/200 수익률</div><div class="strategy-value ${latest.vwap_5_200_return_pct >= 0 ? 'pos' : 'neg'}">${fmtPct(latest.vwap_5_200_return_pct)}</div></div>
-        <div><div class="strategy-label">당기 보유일</div><div class="strategy-value">${latest.holding_days ?? '–'}</div></div>
-        <div><div class="strategy-label">당기 수익률</div><div class="strategy-value ${latest.current_trade_return_pct >= 0 ? 'pos' : 'neg'}">${fmtPct(latest.current_trade_return_pct)}</div></div>
-        <div><div class="strategy-label">최근 신호</div><div class="strategy-value">${latest.last_signal || '–'} ${latest.last_signal_date || ''}</div></div>
-        <div><div class="strategy-label">백테스트</div><div class="strategy-value">전략 ${fmtPct(bt.strategy_return_pct)} / 보유 ${fmtPct(bt.buy_hold_return_pct)}</div></div>
-        <div><div class="strategy-label">MDD · 승률</div><div class="strategy-value">${fmtPct(bt.max_drawdown_pct)} · ${fmtRate(bt.win_rate_pct)}</div></div>
-        <div><div class="strategy-label">노출 · 평균보유</div><div class="strategy-value">${fmtRate(bt.exposure_pct)} · ${fmtDays(bt.avg_holding_days)}일</div></div>
-      </div>
-    `;
-  }
-
   // ─── Panel A: Price + VWAP ─────────────────────────────
   function renderPriceChart(detailData) {
     const ohlcv = detailData.ohlcv;
@@ -212,23 +182,12 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     const closes = ohlcv.map(d => d.close);
     const vwap5 = ohlcv.map(d => d.vwap_5d);
     const vwap20 = ohlcv.map(d => d.vwap_20d);
-    const vwap200 = ohlcv.map(d => d.vwap_200d);
     const signalMap = new Map((detailData.strategy_signal?.signals || []).map(sig => [sig.date, sig]));
     const buyPoints = labels.map((date, i) => signalMap.get(date)?.type === 'BUY' ? closes[i] : null);
     const sellPoints = labels.map((date, i) => signalMap.get(date)?.type === 'SELL' ? closes[i] : null);
 
     const vp = detailData.volume_profile;
     const annotations = {};
-
-    const v200 = vp['200d']?.vwap;
-    if (v200 != null) {
-      annotations['vwap_200d'] = {
-        type: 'line', yMin: v200, yMax: v200,
-        borderColor: '#64748b', borderWidth: 1.5, borderDash: [6, 3],
-        label: {display: true, content: `VWAP 200d: ${v200.toLocaleString()}`, position: 'start',
-          color: '#334155', backgroundColor: 'rgba(255,255,255,0.9)', font: {size: 9, weight: 'bold'}, padding: {x: 4, y: 2}}
-      };
-    }
 
     const config = {
       type: 'line',
@@ -238,7 +197,6 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
           {label: 'Close', data: closes, borderColor: '#64748b', borderWidth: 1, pointRadius: 0, tension: 0.1, fill: false, order: 5},
           {label: 'VWAP 5d', data: vwap5, borderColor: '#2563eb', borderWidth: 2.2, borderDash: [4, 2], pointRadius: 0, tension: 0.2, fill: false, order: 4},
           {label: 'VWAP 20d · Sell line', data: vwap20, borderColor: '#ea580c', borderWidth: 2.2, borderDash: [6, 3], pointRadius: 0, tension: 0.2, fill: false, order: 3},
-          {label: 'VWAP 200d', data: vwap200, borderColor: '#7c3aed', borderWidth: 1.8, borderDash: [8, 4], pointRadius: 0, tension: 0.2, fill: false, order: 2},
           {label: 'BUY', data: buyPoints, type: 'line', showLine: false, pointStyle: 'triangle', pointRadius: 6, pointBackgroundColor: '#16a34a', pointBorderColor: '#166534', order: 1},
           {label: 'SELL', data: sellPoints, type: 'line', showLine: false, pointStyle: 'rectRot', pointRadius: 6, pointBackgroundColor: '#dc2626', pointBorderColor: '#991b1b', order: 1}
         ]
