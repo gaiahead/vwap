@@ -14,7 +14,7 @@ let vpChart = null;
 let currentVpPeriod = '20d';
 let currentDetailName = null;
 const detailCache = {};
-const DATA_VERSION = 'simple-5-20-200-20260517';
+const DATA_VERSION = 'simple-5-20-200-vwap1d-20260517';
 
 fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json()).then(data=>{
   const allNames = Object.keys(data).filter(k => k !== '_meta');
@@ -139,11 +139,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       .map(p => `<button class="vp-tab${p===currentVpPeriod?' active':''}" data-period="${p}">${p}</button>`)
       .join('');
     return `
-      <div class="panel-box strategy-panel">
-        <div class="panel-title">Strategy Signal · VWAP 5/20/200</div>
-        <div id="strategy-card"></div>
-      </div>
-      <div class="panel-box" style="margin-top:16px">
+      <div class="panel-box">
         <div class="panel-title">VWAP Lines · 5/20/200</div>
         <div style="position:relative;height:440px"><canvas id="chart-price"></canvas></div>
       </div>
@@ -173,7 +169,6 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
 
   function renderDetail(detailData) {
     detailTitle.textContent = detailData.name;
-    renderStrategyCard(detailData);
     renderPriceChart(detailData);
     renderVpChart(detailData, currentVpPeriod);
     detailSection.scrollIntoView({behavior:'smooth', block:'start'});

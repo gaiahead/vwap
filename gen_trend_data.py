@@ -291,13 +291,14 @@ def calc_max_drawdown(equity: list[float]) -> float | None:
 def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
     """공통 VWAP 5/20 전략 상태와 5/20·5/200 수익률 요약.
 
-    신호: 당일 종가 확정 후 판단. 백테스트 체결: 다음 거래일 시가, 편도 수수료 0.03%.
+    신호: 당일 종가 확정 후 판단. 백테스트 체결: 신호 다음 거래일 1일 VWAP proxy, 편도 수수료 0.03%.
     상단 판단용 VWAP는 5, 20, 200만 계산한다.
     """
     if len(df) < 205:
         return {"available": False, "reason": "insufficient_history"}
 
     work = df.copy()
+    work["vwap_1d"] = ((work["high"] + work["low"] + work["close"]) / 3).astype(float)
     work["vwap_5d"] = compute_proxy_vwap_series(work, 5)
     work["vwap_20d"] = compute_proxy_vwap_series(work, 20)
     work["vwap_200d"] = compute_proxy_vwap_series(work, 200)
@@ -334,7 +335,7 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
         w_shares = 0.0
         w_in_position = False
         w_equity_curve: list[float] = []
-        bh_base_open = float(sub["open"].iloc[0])
+        bh_base_price = float(sub["vwap_1d"].iloc[0])
         bh_equity_curve: list[float] = []
 
         for i in range(len(sub)):
@@ -343,19 +344,19 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
                 prev = sub.iloc[i - 1]
                 v5_prev, v20_prev = prev["vwap_5d"], prev["vwap_20d"]
                 if not pd.isna(v5_prev) and not pd.isna(v20_prev):
-                    execution_open = float(row["open"])
+                    execution_price = float(row["vwap_1d"])
                     if not w_in_position and float(v5_prev) > float(v20_prev):
-                        w_shares = w_cash * (1 - fee) / execution_open
+                        w_shares = w_cash * (1 - fee) / execution_price
                         w_cash = 0.0
                         w_in_position = True
                     elif w_in_position and float(v5_prev) < float(v20_prev):
-                        w_cash = w_shares * execution_open * (1 - fee)
+                        w_cash = w_shares * execution_price * (1 - fee)
                         w_shares = 0.0
                         w_in_position = False
 
             current_close = float(row["close"])
             w_equity_curve.append(w_shares * current_close if w_in_position else w_cash)
-            bh_equity_curve.append(current_close / bh_base_open if bh_base_open else 1.0)
+            bh_equity_curve.append(current_close / bh_base_price if bh_base_price else 1.0)
 
         return {
             "window_days": window,
@@ -376,15 +377,15 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
             if not pd.isna(v5_prev) and not pd.isna(v20_prev):
                 dt = str(work.index[i - 1].date())
                 execution_dt = str(work.index[i].date())
-                execution_open = float(row["open"])
+                execution_price = float(row["vwap_1d"])
                 buy_cond = float(v5_prev) > float(v20_prev)
                 sell_cond = float(v5_prev) < float(v20_prev)
 
                 if not in_position and buy_cond:
-                    shares = cash * (1 - fee) / execution_open
+                    shares = cash * (1 - fee) / execution_price
                     cash = 0.0
                     in_position = True
-                    entry_price = execution_open
+                    entry_price = execution_price
                     entry_date = execution_dt
                     last_signal = "BUY"
                     last_signal_date = dt
@@ -392,12 +393,12 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
                         "date": dt,
                         "execution_date": execution_dt,
                         "type": "BUY",
-                        "price": round(execution_open, 4),
+                        "price": round(execution_price, 4),
                         "vwap_5_20_return_pct": safe_round(float(prev["vwap_5_20_return"]) * 100, 2),
                         "vwap_5_200_return_pct": safe_round(float(prev["vwap_5_200_return"]) * 100, 2) if not pd.isna(prev["vwap_5_200_return"]) else None,
                     })
                 elif in_position and sell_cond:
-                    exit_price = execution_open
+                    exit_price = execution_price
                     cash = shares * exit_price * (1 - fee)
                     shares = 0.0
                     in_position = False
@@ -450,7 +451,7 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
         holding_days = len(work.loc[pd.Timestamp(entry_date):])
 
     strategy_return = (final_equity - 1) * 100
-    bh_return = pct_change(float(work["open"].iloc[0]), final_close)
+    bh_return = pct_change(float(work["vwap_1d"].iloc[0]), final_close)
     wins = [t for t in trades if t.get("return_pct") is not None and t["return_pct"] > 0]
     avg_holding_days = None
     max_holding_days = None
@@ -466,7 +467,7 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
     return {
         "available": True,
         "strategy": "VWAP 5/20",
-        "rules": {"buy": "VWAP5 > VWAP20", "sell": "VWAP5 < VWAP20", "fee_one_way_pct": 0.03},
+        "rules": {"buy": "VWAP5 > VWAP20", "sell": "VWAP5 < VWAP20", "execution": "next_day_vwap_1d_proxy", "fee_one_way_pct": 0.03},
         "latest": {
             "date": latest_date,
             "vwap5": v5, "vwap20": v20, "vwap200": v200,
@@ -625,6 +626,7 @@ def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any
             "low": round(float(row["low"]), 4),
             "close": round(float(row["close"]), 4),
             "volume": int(row["volume"]),
+            "vwap_1d": safe_round((float(row["high"]) + float(row["low"]) + float(row["close"])) / 3),
             "vwap_5d": safe_round(row["vwap_5d"]),
             "vwap_20d": safe_round(row["vwap_20d"]),
             "vwap_200d": safe_round(row["vwap_200d"]),
