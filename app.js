@@ -14,7 +14,7 @@ let vpChart = null;
 let currentVpPeriod = '20d';
 let currentDetailName = null;
 const detailCache = {};
-const DATA_VERSION = 'recent-200-vwap5-markers-20260517';
+const DATA_VERSION = 'recent-200-top-signal-layout-20260517';
 
 fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json()).then(data=>{
   const allNames = Object.keys(data).filter(k => k !== '_meta');
@@ -73,7 +73,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       tr.style.setProperty('--c', trendColor);
       const cells = [
         `<td><span class="row-indicator"></span>${name}</td>`,
-        `<td style="color:${signalColor(signalText)};font-weight:800"><span class="strategy-badge ${stateClass}">${signalText}</span></td>`,
+        `<td class="recent-signal" style="color:${signalColor(latest.last_signal || signalText)};font-weight:800">${latest.last_signal || '–'} ${latest.last_signal_date ? latest.last_signal_date.slice(5) : ''}</td>`,
         `<td style="color:${statColor(latest.vwap_5_20_return_pct)};font-weight:800">${fmtPct(latest.vwap_5_20_return_pct)}</td>`,
         `<td style="color:${statColor(latest.vwap_5_200_return_pct)};font-weight:800">${fmtPct(latest.vwap_5_200_return_pct)}</td>`,
         `<td>${latest.holding_days ?? '–'}</td>`,
@@ -81,8 +81,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
         `<td style="color:${statColor(rolling200.strategy_return_pct)};font-weight:800">${fmtPct(rolling200.strategy_return_pct)}</td>`,
         `<td style="color:${statColor(rolling200.buy_hold_return_pct)};font-weight:800">${fmtPct(rolling200.buy_hold_return_pct)}</td>`,
         `<td style="color:${statColor(rolling200.strategy_mdd_pct, true)};font-weight:800">${fmtPct(rolling200.strategy_mdd_pct)}</td>`,
-        `<td style="color:${statColor(rolling200.buy_hold_mdd_pct, true)};font-weight:800">${fmtPct(rolling200.buy_hold_mdd_pct)}</td>`,
-        `<td>${latest.last_signal || '–'} ${latest.last_signal_date ? latest.last_signal_date.slice(5) : ''}</td>`
+        `<td style="color:${statColor(rolling200.buy_hold_mdd_pct, true)};font-weight:800">${fmtPct(rolling200.buy_hold_mdd_pct)}</td>`
       ];
       tr.innerHTML = cells.join('');
       tr.addEventListener('click', () => {

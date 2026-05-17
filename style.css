@@ -9,13 +9,19 @@ header p{font-size:0.74rem;color:#64748b;margin-top:4px}
 .momentum-title{font-size:0.72rem;font-weight:700;color:#64748b;letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px}
 .momentum-monitor-sub{font-size:0.73rem;color:#64748b;line-height:1.45;margin:-4px 0 10px}
 .momentum-table-wrap{overflow:auto;-webkit-overflow-scrolling:touch;max-height:560px;border:1px solid #e2e8f0;border-radius:12px;background:#ffffff}
-.momentum-table{width:100%;border-collapse:separate;border-spacing:0;font-size:0.8rem;min-width:1320px}
-.momentum-table th{position:sticky;top:0;z-index:3;padding:8px 10px;text-align:right;font-size:0.65rem;font-weight:800;color:#475569;letter-spacing:.04em;background:#eff6ff;border-bottom:1px solid #cbd5e1}
+.momentum-table{width:100%;border-collapse:separate;border-spacing:0;font-size:0.8rem;min-width:1120px;table-layout:fixed}
+.momentum-table th{position:sticky;top:0;z-index:3;padding:9px 8px;text-align:center;font-size:0.65rem;font-weight:800;color:#475569;letter-spacing:.02em;line-height:1.15;white-space:nowrap;background:#eff6ff;border-bottom:1px solid #cbd5e1;vertical-align:middle}
 .momentum-table th:first-child{text-align:left;border-radius:8px 0 0 8px}
 .momentum-table th:last-child{border-radius:0 8px 8px 0}
-.momentum-table td{padding:8px 10px;text-align:right;color:#334155;border-top:1px solid #e2e8f0;vertical-align:middle;font-variant-numeric:tabular-nums;font-feature-settings:"tnum";background:#ffffff}
+.momentum-table td{padding:8px 8px;text-align:right;color:#334155;border-top:1px solid #e2e8f0;vertical-align:middle;font-variant-numeric:tabular-nums;font-feature-settings:"tnum";background:#ffffff;white-space:nowrap}
+.momentum-table th:nth-child(1),.momentum-table td:nth-child(1){width:160px}
+.momentum-table th:nth-child(2),.momentum-table td:nth-child(2){width:84px;text-align:center}
+.momentum-table th:nth-child(3),.momentum-table td:nth-child(3),.momentum-table th:nth-child(4),.momentum-table td:nth-child(4){width:96px}
+.momentum-table th:nth-child(5),.momentum-table td:nth-child(5){width:80px;text-align:center}
+.momentum-table th:nth-child(6),.momentum-table td:nth-child(6){width:90px}
+.momentum-table th:nth-child(n+7),.momentum-table td:nth-child(n+7){width:118px}
 .momentum-table td:not(:first-child){font-family:'SF Mono','Consolas','Menlo',monospace;font-size:0.78rem}
-.momentum-table td:first-child{text-align:left;font-weight:800;color:#1e293b;white-space:nowrap}
+.momentum-table td:first-child{text-align:left;font-weight:800;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .momentum-table .dual-stat{white-space:nowrap;font-weight:800;font-size:.72rem}
 .momentum-row{cursor:pointer;transition:background .15s}
 .momentum-row:hover td{background:#eef6ff}
@@ -79,4 +85,4 @@ header p{font-size:0.74rem;color:#64748b;margin-top:4px}
 .strategy-rule{font-size:.72rem;color:#64748b;line-height:1.35}
 .strategy-value{font-size:.86rem;font-weight:800;color:#1e293b;line-height:1.35}
 .strategy-value.pos{color:#16a34a}.strategy-value.neg{color:#dc2626}.strategy-muted{font-size:.8rem;color:#64748b}
-@media(max-width:900px){.strategy-grid{grid-template-columns:1fr 1fr}.strategy-main{grid-column:1/-1}.momentum-table{min-width:1280px}}
+@media(max-width:900px){.strategy-grid{grid-template-columns:1fr 1fr}.strategy-main{grid-column:1/-1}.momentum-table{min-width:1120px}}
