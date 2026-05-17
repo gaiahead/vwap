@@ -63,22 +63,16 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
   function getStrategyStateClass(strategy) {
     const latest = strategy?.latest;
     if (!latest) return 'neutral';
-    if (latest.in_position && latest.action !== '매도 신호') return 'hold';
-    if (latest.action === '매수 신호') return 'buy';
-    if (latest.action === '매도 신호') return 'sell';
-    return 'cash';
+    return latest.action === '매수' ? 'buy' : 'sell';
   }
   function getSignalText(strategy) {
     const latest = strategy?.latest;
     if (!latest) return '–';
-    if (latest.action === '매수 신호') return 'BUY';
-    if (latest.action === '매도 신호') return 'SELL';
-    return latest.in_position ? 'HOLD' : 'WAIT';
+    return latest.action === '매수' ? 'BUY' : 'SELL';
   }
   function signalColor(type) {
     if (type === 'BUY') return '#16a34a';
     if (type === 'SELL') return '#dc2626';
-    if (type === 'HOLD') return '#2563eb';
     return '#64748b';
   }
 

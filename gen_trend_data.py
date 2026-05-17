@@ -389,7 +389,7 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
     buy_now = v5 is not None and v20 is not None and v5 > v20
     sell_now = v5 is not None and v20 is not None and v5 < v20
     alignment = "N/A" if None in (v5, v20) else ("5 > 20" if v5 > v20 else "5 < 20" if v5 < v20 else "5 = 20")
-    action = "보유 유지" if in_position and not sell_now else "매도 신호" if in_position and sell_now else "매수 대기" if not in_position and not buy_now else "매수 신호"
+    action = "매수" if buy_now else "매도"
     current_trade_return = pct_change(entry_price, final_close) if in_position and entry_price is not None else None
     holding_days = None
     if in_position and entry_date:
