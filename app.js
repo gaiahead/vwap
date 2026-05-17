@@ -59,6 +59,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
 
   function fmtPct(v) { return v == null ? '–' : `${v > 0 ? '+' : ''}${Number(v).toFixed(2)}%`; }
   function fmtRate(v) { return v == null ? '–' : `${Number(v).toFixed(2)}%`; }
+  function fmtDays(v) { return v == null ? '–' : Number(v).toFixed(1).replace(/\.0$/, ''); }
   function getStrategyStateClass(strategy) {
     const latest = strategy?.latest;
     if (!latest) return 'neutral';
@@ -110,6 +111,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
         `<td style="color:${momentumColor};font-weight:800">${(momentum * 100).toFixed(2)}</td>`,
         `<td><span class="strategy-badge ${stateClass}">${latest.action || '–'}</span></td>`,
         `<td style="color:${signalColor(signalText)};font-weight:800">${signalText}</td>`,
+        `<td style="color:${(latest.vwap_5_20_momentum_pct ?? 0) >= 0 ? '#16a34a' : '#dc2626'};font-weight:800">${fmtPct(latest.vwap_5_20_momentum_pct)}</td>`,
         `<td>${latest.alignment || '–'}</td>`,
         `<td>${latest.holding_days ?? '–'}</td>`,
         `<td style="color:${(latest.current_trade_return_pct ?? 0) >= 0 ? '#16a34a' : '#dc2626'};font-weight:800">${fmtPct(latest.current_trade_return_pct)}</td>`,
@@ -173,11 +175,11 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
       .join('');
     return `
       <div class="panel-box strategy-panel">
-        <div class="panel-title">Strategy Signal · VWAP 10/20/40</div>
+        <div class="panel-title">Strategy Signal · VWAP 5/20</div>
         <div id="strategy-card"></div>
       </div>
       <div class="panel-box" style="margin-top:16px">
-        <div class="panel-title">VWAP Lines · 10/20/40</div>
+        <div class="panel-title">VWAP Lines · 5/20</div>
         <div style="position:relative;height:440px"><canvas id="chart-price"></canvas></div>
       </div>
       <div class="panel-box" style="margin-top:16px">
@@ -232,14 +234,16 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
         <div class="strategy-main ${cls}">
           <div class="strategy-label">현재 행동</div>
           <div class="strategy-action">${latest.action}</div>
-          <div class="strategy-rule">매수 10&gt;20&gt;40 · 매도 10&lt;20</div>
+          <div class="strategy-rule">매수 5&gt;20 · 매도 5&lt;20</div>
         </div>
-        <div><div class="strategy-label">10/20/40 배열</div><div class="strategy-value">${latest.alignment}</div></div>
+        <div><div class="strategy-label">5/20 배열</div><div class="strategy-value">${latest.alignment}</div></div>
+        <div><div class="strategy-label">5/20 모멘텀</div><div class="strategy-value ${latest.vwap_5_20_momentum_pct >= 0 ? 'pos' : 'neg'}">${fmtPct(latest.vwap_5_20_momentum_pct)}</div></div>
         <div><div class="strategy-label">보유일</div><div class="strategy-value">${latest.holding_days ?? '–'}</div></div>
         <div><div class="strategy-label">현재 거래 수익률</div><div class="strategy-value ${latest.current_trade_return_pct >= 0 ? 'pos' : 'neg'}">${fmtPct(latest.current_trade_return_pct)}</div></div>
         <div><div class="strategy-label">최근 신호</div><div class="strategy-value">${latest.last_signal || '–'} ${latest.last_signal_date || ''}</div></div>
         <div><div class="strategy-label">백테스트</div><div class="strategy-value">전략 ${fmtPct(bt.strategy_return_pct)} / 보유 ${fmtPct(bt.buy_hold_return_pct)}</div></div>
         <div><div class="strategy-label">MDD · 승률</div><div class="strategy-value">${fmtPct(bt.max_drawdown_pct)} · ${fmtRate(bt.win_rate_pct)}</div></div>
+        <div><div class="strategy-label">노출 · 평균보유</div><div class="strategy-value">${fmtRate(bt.exposure_pct)} · ${fmtDays(bt.avg_holding_days)}일</div></div>
       </div>
     `;
   }
@@ -249,9 +253,8 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     const ohlcv = detailData.ohlcv;
     const labels = ohlcv.map(d => d.date);
     const closes = ohlcv.map(d => d.close);
-    const vwap10 = ohlcv.map(d => d.vwap_10d);
+    const vwap5 = ohlcv.map(d => d.vwap_5d);
     const vwap20 = ohlcv.map(d => d.vwap_20d);
-    const vwap40 = ohlcv.map(d => d.vwap_40d);
     const signalMap = new Map((detailData.strategy_signal?.signals || []).map(sig => [sig.date, sig]));
     const buyPoints = labels.map((date, i) => signalMap.get(date)?.type === 'BUY' ? closes[i] : null);
     const sellPoints = labels.map((date, i) => signalMap.get(date)?.type === 'SELL' ? closes[i] : null);
@@ -275,9 +278,8 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
         labels,
         datasets: [
           {label: 'Close', data: closes, borderColor: '#64748b', borderWidth: 1, pointRadius: 0, tension: 0.1, fill: false, order: 5},
-          {label: 'VWAP 10d', data: vwap10, borderColor: '#2563eb', borderWidth: 2, borderDash: [4, 2], pointRadius: 0, tension: 0.2, fill: false, order: 4},
-          {label: 'VWAP 20d · Sell line', data: vwap20, borderColor: '#ea580c', borderWidth: 2, borderDash: [6, 3], pointRadius: 0, tension: 0.2, fill: false, order: 3},
-          {label: 'VWAP 40d', data: vwap40, borderColor: '#16a34a', borderWidth: 1.8, borderDash: [2, 2], pointRadius: 0, tension: 0.2, fill: false, order: 2},
+          {label: 'VWAP 5d', data: vwap5, borderColor: '#2563eb', borderWidth: 2.2, borderDash: [4, 2], pointRadius: 0, tension: 0.2, fill: false, order: 4},
+          {label: 'VWAP 20d · Sell line', data: vwap20, borderColor: '#ea580c', borderWidth: 2.2, borderDash: [6, 3], pointRadius: 0, tension: 0.2, fill: false, order: 3},
           {label: 'BUY', data: buyPoints, type: 'line', showLine: false, pointStyle: 'triangle', pointRadius: 6, pointBackgroundColor: '#16a34a', pointBorderColor: '#166534', order: 1},
           {label: 'SELL', data: sellPoints, type: 'line', showLine: false, pointStyle: 'rectRot', pointRadius: 6, pointBackgroundColor: '#dc2626', pointBorderColor: '#991b1b', order: 1}
         ]

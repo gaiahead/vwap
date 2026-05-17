@@ -289,17 +289,18 @@ def calc_max_drawdown(equity: list[float]) -> float | None:
 
 
 def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
-    """공통 VWAP 10/20/40 전략 상태와 간단 백테스트 요약.
+    """공통 VWAP 5/20 전략 상태와 간단 백테스트 요약.
 
     신호: 당일 종가 확정 후 판단. 백테스트 체결: 다음 거래일 시가, 편도 수수료 0.03%.
+    VWAP5는 전략 신호와 5/20 모멘텀 표기용으로만 계산하며, VWAP Momentum Matrix에는 넣지 않는다.
     """
-    if len(df) < 45:
+    if len(df) < 25:
         return {"available": False, "reason": "insufficient_history"}
 
     work = df.copy()
-    work["vwap_10d"] = compute_proxy_vwap_series(work, 10)
+    work["vwap_5d"] = compute_proxy_vwap_series(work, 5)
     work["vwap_20d"] = compute_proxy_vwap_series(work, 20)
-    work["vwap_40d"] = compute_proxy_vwap_series(work, 40)
+    work["vwap_5_20_momentum"] = work["vwap_5d"] / work["vwap_20d"] - 1
 
     fee = 0.0003
     cash = 1.0
@@ -312,62 +313,82 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
     trades: list[dict[str, Any]] = []
     signals: list[dict[str, Any]] = []
     equity_curve: list[float] = []
+    daily_returns: list[float] = []
+    prev_equity = 1.0
+    position_days = 0
 
     for i in range(len(work)):
         row = work.iloc[i]
         current_close = float(row["close"])
-        equity_curve.append(shares * current_close if in_position else cash)
-        if i >= len(work) - 1:
-            continue
 
-        v10, v20, v40 = row["vwap_10d"], row["vwap_20d"], row["vwap_40d"]
-        if pd.isna(v10) or pd.isna(v20) or pd.isna(v40):
-            continue
+        if i > 0:
+            prev = work.iloc[i - 1]
+            v5_prev, v20_prev = prev["vwap_5d"], prev["vwap_20d"]
+            if not pd.isna(v5_prev) and not pd.isna(v20_prev):
+                dt = str(work.index[i - 1].date())
+                execution_dt = str(work.index[i].date())
+                execution_open = float(row["open"])
+                buy_cond = float(v5_prev) > float(v20_prev)
+                sell_cond = float(v5_prev) < float(v20_prev)
 
-        dt = str(work.index[i].date())
-        next_dt = str(work.index[i + 1].date())
-        next_open = float(work.iloc[i + 1]["open"])
-        buy_cond = float(v10) > float(v20) > float(v40)
-        sell_cond = float(v10) < float(v20)
+                if not in_position and buy_cond:
+                    shares = cash * (1 - fee) / execution_open
+                    cash = 0.0
+                    in_position = True
+                    entry_price = execution_open
+                    entry_date = execution_dt
+                    last_signal = "BUY"
+                    last_signal_date = dt
+                    signals.append({
+                        "date": dt,
+                        "execution_date": execution_dt,
+                        "type": "BUY",
+                        "price": round(execution_open, 4),
+                        "vwap_5_20_momentum_pct": safe_round(float(prev["vwap_5_20_momentum"]) * 100, 2),
+                    })
+                elif in_position and sell_cond:
+                    exit_price = execution_open
+                    cash = shares * exit_price * (1 - fee)
+                    shares = 0.0
+                    in_position = False
+                    last_signal = "SELL"
+                    last_signal_date = dt
+                    ret = pct_change(entry_price, exit_price) if entry_price is not None else None
+                    trades.append({
+                        "entry_date": entry_date,
+                        "exit_date": execution_dt,
+                        "entry_price": safe_round(entry_price),
+                        "exit_price": round(exit_price, 4),
+                        "return_pct": safe_round(ret, 2),
+                    })
+                    signals.append({
+                        "date": dt,
+                        "execution_date": execution_dt,
+                        "type": "SELL",
+                        "price": round(exit_price, 4),
+                        "vwap_5_20_momentum_pct": safe_round(float(prev["vwap_5_20_momentum"]) * 100, 2),
+                    })
+                    entry_price = None
+                    entry_date = None
 
-        if not in_position and buy_cond:
-            shares = cash * (1 - fee) / next_open
-            cash = 0.0
-            in_position = True
-            entry_price = next_open
-            entry_date = next_dt
-            last_signal = "BUY"
-            last_signal_date = dt
-            signals.append({"date": dt, "execution_date": next_dt, "type": "BUY", "price": round(next_open, 4)})
-        elif in_position and sell_cond:
-            exit_price = next_open
-            cash = shares * exit_price * (1 - fee)
-            shares = 0.0
-            in_position = False
-            last_signal = "SELL"
-            last_signal_date = dt
-            ret = pct_change(entry_price, exit_price) if entry_price is not None else None
-            trades.append({
-                "entry_date": entry_date,
-                "exit_date": next_dt,
-                "entry_price": safe_round(entry_price),
-                "exit_price": round(exit_price, 4),
-                "return_pct": safe_round(ret, 2),
-            })
-            signals.append({"date": dt, "execution_date": next_dt, "type": "SELL", "price": round(exit_price, 4)})
-            entry_price = None
-            entry_date = None
+        if in_position:
+            position_days += 1
+        current_equity = shares * current_close if in_position else cash
+        equity_curve.append(current_equity)
+        daily_returns.append(current_equity / prev_equity - 1 if equity_curve else 0.0)
+        prev_equity = current_equity
 
     final_close = float(work["close"].iloc[-1])
     final_equity = shares * final_close if in_position else cash
     latest = work.iloc[-1]
-    v10 = safe_round(latest["vwap_10d"])
+    v5 = safe_round(latest["vwap_5d"])
     v20 = safe_round(latest["vwap_20d"])
-    v40 = safe_round(latest["vwap_40d"])
+    momentum_ratio = None if pd.isna(latest["vwap_5_20_momentum"]) else float(latest["vwap_5_20_momentum"])
+    momentum_pct = safe_round(momentum_ratio * 100 if momentum_ratio is not None else None, 2)
     latest_date = str(work.index[-1].date())
-    buy_now = v10 is not None and v20 is not None and v40 is not None and v10 > v20 > v40
-    sell_now = v10 is not None and v20 is not None and v10 < v20
-    alignment = "N/A" if None in (v10, v20, v40) else ("10 > 20 > 40" if v10 > v20 > v40 else "10 < 20 < 40" if v10 < v20 < v40 else "mixed")
+    buy_now = v5 is not None and v20 is not None and v5 > v20
+    sell_now = v5 is not None and v20 is not None and v5 < v20
+    alignment = "N/A" if None in (v5, v20) else ("5 > 20" if v5 > v20 else "5 < 20" if v5 < v20 else "5 = 20")
     action = "보유 유지" if in_position and not sell_now else "매도 신호" if in_position and sell_now else "매수 대기" if not in_position and not buy_now else "매수 신호"
     current_trade_return = pct_change(entry_price, final_close) if in_position and entry_price is not None else None
     holding_days = None
@@ -377,14 +398,25 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
     strategy_return = (final_equity - 1) * 100
     bh_return = pct_change(float(work["open"].iloc[0]), final_close)
     wins = [t for t in trades if t.get("return_pct") is not None and t["return_pct"] > 0]
+    avg_holding_days = None
+    max_holding_days = None
+    if trades:
+        hold_lengths = []
+        for trade in trades:
+            if trade.get("entry_date") and trade.get("exit_date"):
+                hold_lengths.append(len(work.loc[pd.Timestamp(trade["entry_date"]):pd.Timestamp(trade["exit_date"])]))
+        if hold_lengths:
+            avg_holding_days = sum(hold_lengths) / len(hold_lengths)
+            max_holding_days = max(hold_lengths)
 
     return {
         "available": True,
-        "strategy": "VWAP 10/20/40",
-        "rules": {"buy": "VWAP10 > VWAP20 > VWAP40", "sell": "VWAP10 < VWAP20", "fee_one_way_pct": 0.03},
+        "strategy": "VWAP 5/20",
+        "rules": {"buy": "VWAP5 > VWAP20", "sell": "VWAP5 < VWAP20", "fee_one_way_pct": 0.03},
         "latest": {
             "date": latest_date,
-            "vwap10": v10, "vwap20": v20, "vwap40": v40,
+            "vwap5": v5, "vwap20": v20,
+            "vwap_5_20_momentum_pct": momentum_pct,
             "alignment": alignment, "in_position": in_position, "action": action,
             "last_signal": last_signal, "last_signal_date": last_signal_date,
             "holding_days": holding_days,
@@ -398,6 +430,9 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
             "max_drawdown_pct": safe_round(calc_max_drawdown(equity_curve), 2),
             "trades": len(trades),
             "win_rate_pct": safe_round(len(wins) / len(trades) * 100 if trades else None, 2),
+            "exposure_pct": safe_round(position_days / len(work) * 100 if len(work) else None, 2),
+            "avg_holding_days": safe_round(avg_holding_days, 1),
+            "max_holding_days": max_holding_days,
         },
         "signals": signals[-80:],
     }
@@ -519,11 +554,10 @@ def build_vwap_momentum_matrix(df: pd.DataFrame) -> dict[str, Any]:
 
 def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any]:
     """detail.html용 상세 데이터 생성."""
-    # ohlcv: 최근 200일 + 전략용 VWAP 10/20/40 롤링
+    # ohlcv: 최근 200일 + 전략용 VWAP 5/20 롤링
     tail = df.iloc[-200:].copy()
-    vwap10_series = compute_proxy_vwap_series(tail, window=10)
+    vwap5_series = compute_proxy_vwap_series(tail, window=5)
     vwap20_series = compute_proxy_vwap_series(tail, window=20)
-    vwap40_series = compute_proxy_vwap_series(tail, window=40)
     ohlcv = []
     for i, (dt, row) in enumerate(tail.iterrows()):
         rec: dict[str, Any] = {
@@ -534,9 +568,8 @@ def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any
             "close": round(float(row["close"]), 4),
             "volume": int(row["volume"]),
         }
-        rec["vwap_10d"] = safe_round(vwap10_series[i])
+        rec["vwap_5d"] = safe_round(vwap5_series[i])
         rec["vwap_20d"] = safe_round(vwap20_series[i])
-        rec["vwap_40d"] = safe_round(vwap40_series[i])
         ohlcv.append(rec)
 
     # volume_profile: 10d~200d (20개 전체)
