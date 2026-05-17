@@ -292,7 +292,7 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
     """최근 200거래일 기준 VWAP 5/20 전략과 5/200 위치 요약.
 
     신호: 당일 종가 확정 후 판단. 백테스트 체결: 신호 다음 거래일 1일 VWAP proxy, 편도 수수료 0.03%.
-    `VWAP200`은 최신 5/200 수익률 계산용 기준값이며 상세 차트 이동선으로는 그리지 않는다.
+    `VWAP200`은 최신 5/200 수익률 계산용 기준값이며 상세 차트에는 수평 기준선으로만 표시한다.
     """
     if len(df) < LOOKBACK_TRADING_DAYS:
         return {"available": False, "reason": "insufficient_recent_history"}
@@ -340,11 +340,12 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
 
         for i in range(len(sub)):
             row = sub.iloc[i]
+            valuation_price = float(row["vwap_1d"])
             if i > 0:
                 prev = sub.iloc[i - 1]
                 v5_prev, v20_prev = prev["vwap_5d"], prev["vwap_20d"]
                 if not pd.isna(v5_prev) and not pd.isna(v20_prev):
-                    execution_price = float(row["vwap_1d"])
+                    execution_price = valuation_price
                     if not w_in_position and float(v5_prev) > float(v20_prev):
                         w_shares = w_cash * (1 - fee) / execution_price
                         w_cash = 0.0
@@ -354,9 +355,8 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
                         w_shares = 0.0
                         w_in_position = False
 
-            current_close = float(row["close"])
-            w_equity_curve.append(w_shares * current_close if w_in_position else w_cash)
-            bh_equity_curve.append(current_close / bh_base_price if bh_base_price else 1.0)
+            w_equity_curve.append(w_shares * valuation_price if w_in_position else w_cash)
+            bh_equity_curve.append(valuation_price / bh_base_price if bh_base_price else 1.0)
 
         return {
             "window_days": window,
@@ -369,7 +369,6 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
 
     for i in range(len(work)):
         row = work.iloc[i]
-        current_close = float(row["close"])
 
         if i > 0:
             prev = work.iloc[i - 1]
@@ -425,13 +424,14 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
 
         if in_position:
             position_days += 1
-        current_equity = shares * current_close if in_position else cash
+        valuation_price = float(row["vwap_1d"])
+        current_equity = shares * valuation_price if in_position else cash
         equity_curve.append(current_equity)
         daily_returns.append(current_equity / prev_equity - 1 if equity_curve else 0.0)
         prev_equity = current_equity
 
-    final_close = float(work["close"].iloc[-1])
-    final_equity = shares * final_close if in_position else cash
+    final_vwap_1d = float(work["vwap_1d"].iloc[-1])
+    final_equity = shares * final_vwap_1d if in_position else cash
     latest = work.iloc[-1]
     v5 = safe_round(latest["vwap_5d"])
     v20 = safe_round(latest["vwap_20d"])
@@ -445,13 +445,13 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
     sell_now = v5 is not None and v20 is not None and v5 < v20
     alignment = "N/A" if None in (v5, v20) else ("5 > 20" if v5 > v20 else "5 < 20" if v5 < v20 else "5 = 20")
     action = "매수" if buy_now else "매도"
-    current_trade_return = pct_change(entry_price, final_close) if in_position and entry_price is not None else None
+    current_trade_return = pct_change(entry_price, final_vwap_1d) if in_position and entry_price is not None else None
     holding_days = None
     if in_position and entry_date:
         holding_days = len(work.loc[pd.Timestamp(entry_date):])
 
     strategy_return = (final_equity - 1) * 100
-    bh_return = pct_change(float(work["vwap_1d"].iloc[0]), final_close)
+    bh_return = pct_change(float(work["vwap_1d"].iloc[0]), final_vwap_1d)
     wins = [t for t in trades if t.get("return_pct") is not None and t["return_pct"] > 0]
     avg_holding_days = None
     max_holding_days = None
@@ -467,7 +467,14 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
     return {
         "available": True,
         "strategy": "VWAP 5/20",
-        "rules": {"buy": "VWAP5 > VWAP20", "sell": "VWAP5 < VWAP20", "execution": "next_day_vwap_1d_proxy", "fee_one_way_pct": 0.03},
+        "rules": {
+            "buy": "VWAP5 > VWAP20",
+            "sell": "VWAP5 < VWAP20",
+            "execution": "next_day_vwap_1d_proxy",
+            "valuation": "vwap_1d_proxy",
+            "buy_hold_return": "last_vwap_1d_proxy / first_vwap_1d_proxy - 1",
+            "fee_one_way_pct": 0.03,
+        },
         "latest": {
             "date": latest_date,
             "vwap5": v5, "vwap20": v20, "vwap200": v200,
