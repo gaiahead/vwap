@@ -140,7 +140,7 @@ ASSETS: list[AssetTuple] = [
 WINDOWS: list[int] = list(range(10, 201, 10))  # 10~200, 10일 간격
 N_BUCKETS: int = 20
 KST: timezone = timezone(timedelta(hours=9))
-DATA_START: str = "2023-01-01"
+DATA_START: str = "2020-01-01"
 WEEKLY_CUTOFF: date = date(2025, 1, 6)
 EXCLUDE_DATES: frozenset[str] = frozenset({"2025-12-31", "2025-12-30", "2025-12-29"})
 OUTPUT_PATH: str = "trend_data.json"
@@ -231,6 +231,18 @@ def compute_vwap_series(df: pd.DataFrame, window: int = 20) -> list[float | None
     return vwaps
 
 
+def compute_proxy_vwap_series(df: pd.DataFrame, window: int) -> list[float | None]:
+    """백테스트/전략 신호용 빠른 일봉 VWAP proxy.
+
+    대표가격 = (High + Low + Close) / 3, n일 VWAP = Σ(대표가격×거래량)/Σ거래량.
+    """
+    typical = (df["high"] + df["low"] + df["close"]) / 3
+    pv = typical * df["volume"]
+    denom = df["volume"].rolling(window).sum()
+    series = pv.rolling(window).sum() / denom
+    return [None if pd.isna(v) else float(v) for v in series.tolist()]
+
+
 def strength_score(arr: list[float | None], norm_window: int = 52) -> list[float | None]:
     """백분위 기반 강도 점수 (-100 ~ +100)."""
     scores: list[float | None] = []
@@ -250,6 +262,145 @@ def strength_score(arr: list[float | None], norm_window: int = 52) -> list[float
         pct = sum(1 for x in window_vals if x <= v) / len(window_vals)
         scores.append(round((pct * 2 - 1) * 100, 1))
     return scores
+
+
+def safe_round(value: float | None, digits: int = 4) -> float | None:
+    if value is None or (isinstance(value, float) and np.isnan(value)):
+        return None
+    return round(float(value), digits)
+
+
+def pct_change(start: float | None, end: float | None) -> float | None:
+    if start is None or end is None or start == 0:
+        return None
+    return (end / start - 1) * 100
+
+
+def calc_max_drawdown(equity: list[float]) -> float | None:
+    if not equity:
+        return None
+    peak = equity[0]
+    max_dd = 0.0
+    for value in equity:
+        peak = max(peak, value)
+        if peak > 0:
+            max_dd = min(max_dd, value / peak - 1)
+    return max_dd * 100
+
+
+def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
+    """공통 VWAP 10/20/40 전략 상태와 간단 백테스트 요약.
+
+    신호: 당일 종가 확정 후 판단. 백테스트 체결: 다음 거래일 시가, 편도 수수료 0.03%.
+    """
+    if len(df) < 45:
+        return {"available": False, "reason": "insufficient_history"}
+
+    work = df.copy()
+    work["vwap_10d"] = compute_proxy_vwap_series(work, 10)
+    work["vwap_20d"] = compute_proxy_vwap_series(work, 20)
+    work["vwap_40d"] = compute_proxy_vwap_series(work, 40)
+
+    fee = 0.0003
+    cash = 1.0
+    shares = 0.0
+    in_position = False
+    entry_price: float | None = None
+    entry_date: str | None = None
+    last_signal = "WAIT"
+    last_signal_date: str | None = None
+    trades: list[dict[str, Any]] = []
+    signals: list[dict[str, Any]] = []
+    equity_curve: list[float] = []
+
+    for i in range(len(work)):
+        row = work.iloc[i]
+        current_close = float(row["close"])
+        equity_curve.append(shares * current_close if in_position else cash)
+        if i >= len(work) - 1:
+            continue
+
+        v10, v20, v40 = row["vwap_10d"], row["vwap_20d"], row["vwap_40d"]
+        if pd.isna(v10) or pd.isna(v20) or pd.isna(v40):
+            continue
+
+        dt = str(work.index[i].date())
+        next_dt = str(work.index[i + 1].date())
+        next_open = float(work.iloc[i + 1]["open"])
+        buy_cond = float(v10) > float(v20) > float(v40)
+        sell_cond = float(v10) < float(v20)
+
+        if not in_position and buy_cond:
+            shares = cash * (1 - fee) / next_open
+            cash = 0.0
+            in_position = True
+            entry_price = next_open
+            entry_date = next_dt
+            last_signal = "BUY"
+            last_signal_date = dt
+            signals.append({"date": dt, "execution_date": next_dt, "type": "BUY", "price": round(next_open, 4)})
+        elif in_position and sell_cond:
+            exit_price = next_open
+            cash = shares * exit_price * (1 - fee)
+            shares = 0.0
+            in_position = False
+            last_signal = "SELL"
+            last_signal_date = dt
+            ret = pct_change(entry_price, exit_price) if entry_price is not None else None
+            trades.append({
+                "entry_date": entry_date,
+                "exit_date": next_dt,
+                "entry_price": safe_round(entry_price),
+                "exit_price": round(exit_price, 4),
+                "return_pct": safe_round(ret, 2),
+            })
+            signals.append({"date": dt, "execution_date": next_dt, "type": "SELL", "price": round(exit_price, 4)})
+            entry_price = None
+            entry_date = None
+
+    final_close = float(work["close"].iloc[-1])
+    final_equity = shares * final_close if in_position else cash
+    latest = work.iloc[-1]
+    v10 = safe_round(latest["vwap_10d"])
+    v20 = safe_round(latest["vwap_20d"])
+    v40 = safe_round(latest["vwap_40d"])
+    latest_date = str(work.index[-1].date())
+    buy_now = v10 is not None and v20 is not None and v40 is not None and v10 > v20 > v40
+    sell_now = v10 is not None and v20 is not None and v10 < v20
+    alignment = "N/A" if None in (v10, v20, v40) else ("10 > 20 > 40" if v10 > v20 > v40 else "10 < 20 < 40" if v10 < v20 < v40 else "mixed")
+    action = "보유 유지" if in_position and not sell_now else "매도 신호" if in_position and sell_now else "매수 대기" if not in_position and not buy_now else "매수 신호"
+    current_trade_return = pct_change(entry_price, final_close) if in_position and entry_price is not None else None
+    holding_days = None
+    if in_position and entry_date:
+        holding_days = len(work.loc[pd.Timestamp(entry_date):])
+
+    strategy_return = (final_equity - 1) * 100
+    bh_return = pct_change(float(work["open"].iloc[0]), final_close)
+    wins = [t for t in trades if t.get("return_pct") is not None and t["return_pct"] > 0]
+
+    return {
+        "available": True,
+        "strategy": "VWAP 10/20/40",
+        "rules": {"buy": "VWAP10 > VWAP20 > VWAP40", "sell": "VWAP10 < VWAP20", "fee_one_way_pct": 0.03},
+        "latest": {
+            "date": latest_date,
+            "vwap10": v10, "vwap20": v20, "vwap40": v40,
+            "alignment": alignment, "in_position": in_position, "action": action,
+            "last_signal": last_signal, "last_signal_date": last_signal_date,
+            "holding_days": holding_days,
+            "entry_date": entry_date, "entry_price": safe_round(entry_price),
+            "current_trade_return_pct": safe_round(current_trade_return, 2),
+        },
+        "backtest": {
+            "start_date": str(work.index[0].date()), "end_date": latest_date,
+            "strategy_return_pct": safe_round(strategy_return, 2),
+            "buy_hold_return_pct": safe_round(bh_return, 2),
+            "max_drawdown_pct": safe_round(calc_max_drawdown(equity_curve), 2),
+            "trades": len(trades),
+            "win_rate_pct": safe_round(len(wins) / len(trades) * 100 if trades else None, 2),
+        },
+        "signals": signals[-80:],
+    }
 
 
 # ──────────────────────────────────────────────────────────
@@ -296,7 +447,7 @@ def build_vwap_structure(df: pd.DataFrame) -> tuple[list[dict[str, Any]], float 
 def build_weekly_records(df: pd.DataFrame) -> list[dict[str, Any]]:
     """주간 시계열 레코드 생성."""
     df = df.copy()
-    df["vwap"] = compute_vwap_series(df, window=20)
+    df["vwap"] = compute_proxy_vwap_series(df, window=20)
     df["vwap_prev5"] = pd.Series(df["vwap"].values, index=df.index).shift(5)
     df["weekly_chg"] = (df["vwap"] - df["vwap_prev5"]) / df["vwap_prev5"] * 100
     df["week"] = df.index.isocalendar().week.values
@@ -368,9 +519,11 @@ def build_vwap_momentum_matrix(df: pd.DataFrame) -> dict[str, Any]:
 
 def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any]:
     """detail.html용 상세 데이터 생성."""
-    # ohlcv: 최근 200일 + vwap_10d 롤링
+    # ohlcv: 최근 200일 + 전략용 VWAP 10/20/40 롤링
     tail = df.iloc[-200:].copy()
-    vwap_series = compute_vwap_series(tail, window=10)
+    vwap10_series = compute_proxy_vwap_series(tail, window=10)
+    vwap20_series = compute_proxy_vwap_series(tail, window=20)
+    vwap40_series = compute_proxy_vwap_series(tail, window=40)
     ohlcv = []
     for i, (dt, row) in enumerate(tail.iterrows()):
         rec: dict[str, Any] = {
@@ -381,7 +534,9 @@ def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any
             "close": round(float(row["close"]), 4),
             "volume": int(row["volume"]),
         }
-        rec["vwap_10d"] = round(vwap_series[i], 4) if vwap_series[i] is not None else None
+        rec["vwap_10d"] = safe_round(vwap10_series[i])
+        rec["vwap_20d"] = safe_round(vwap20_series[i])
+        rec["vwap_40d"] = safe_round(vwap40_series[i])
         ohlcv.append(rec)
 
     # volume_profile: 10d~200d (20개 전체)
@@ -400,6 +555,7 @@ def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any
         "ohlcv": ohlcv,
         "volume_profile": volume_profile,
         "vwap_momentum_matrix": build_vwap_momentum_matrix(df),
+        "strategy_signal": build_strategy_signal(df),
         "latest_price": round(float(df["close"].iloc[-1]), 2),
     }
 
@@ -430,6 +586,7 @@ def process_asset(
         "group": group,
         "records": records,
         "vwap_structure": vwap_structure,
+        "strategy_signal": build_strategy_signal(df),
         "latest_price": round(float(df["close"].iloc[-1]), 2),
     }
 

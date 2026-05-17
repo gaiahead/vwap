@@ -9,7 +9,7 @@ header p{font-size:0.74rem;color:#64748b;margin-top:4px}
 .momentum-title{font-size:0.72rem;font-weight:700;color:#64748b;letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px}
 .momentum-monitor-sub{font-size:0.73rem;color:#64748b;line-height:1.45;margin:-4px 0 10px}
 .momentum-table-wrap{overflow:auto;-webkit-overflow-scrolling:touch;max-height:560px;border:1px solid #e2e8f0;border-radius:12px;background:#ffffff}
-.momentum-table{width:100%;border-collapse:separate;border-spacing:0;font-size:0.8rem;min-width:760px}
+.momentum-table{width:100%;border-collapse:separate;border-spacing:0;font-size:0.8rem;min-width:1040px}
 .momentum-table th{position:sticky;top:0;z-index:3;padding:8px 10px;text-align:right;font-size:0.65rem;font-weight:800;color:#475569;letter-spacing:.04em;background:#eff6ff;border-bottom:1px solid #cbd5e1}
 .momentum-table th:first-child{text-align:left;border-radius:8px 0 0 8px}
 .momentum-table th:last-child{border-radius:0 8px 8px 0}
@@ -59,3 +59,23 @@ header p{font-size:0.74rem;color:#64748b;margin-top:4px}
 @media(max-width:768px){
   .momentum-grid{font-size:0.55rem;grid-template-columns:30px 45px 40px repeat(10,1fr)}
 }
+
+/* Strategy signal */
+.strategy-badge{display:inline-flex;align-items:center;justify-content:center;min-width:64px;border-radius:999px;padding:3px 8px;font-size:.68rem;font-weight:800;border:1px solid transparent;white-space:nowrap}
+.strategy-badge.hold{background:#dbeafe;color:#1d4ed8;border-color:#93c5fd}
+.strategy-badge.buy{background:#dcfce7;color:#166534;border-color:#86efac}
+.strategy-badge.sell{background:#fee2e2;color:#991b1b;border-color:#fecaca}
+.strategy-badge.cash,.strategy-badge.neutral{background:#f1f5f9;color:#475569;border-color:#cbd5e1}
+.strategy-grid{display:grid;grid-template-columns:1.35fr repeat(3,1fr);gap:10px;align-items:stretch}
+.strategy-grid>div{border:1px solid #e2e8f0;border-radius:12px;background:#f8fafc;padding:12px}
+.strategy-main{background:#eff6ff!important}
+.strategy-main.hold{border-color:#93c5fd;background:#eff6ff!important}
+.strategy-main.buy{border-color:#86efac;background:#f0fdf4!important}
+.strategy-main.sell{border-color:#fecaca;background:#fef2f2!important}
+.strategy-main.cash{border-color:#cbd5e1;background:#f8fafc!important}
+.strategy-label{font-size:.66rem;font-weight:800;color:#64748b;letter-spacing:.04em;text-transform:uppercase;margin-bottom:6px}
+.strategy-action{font-size:1.15rem;font-weight:900;color:#0f172a;margin-bottom:4px}
+.strategy-rule{font-size:.72rem;color:#64748b;line-height:1.35}
+.strategy-value{font-size:.86rem;font-weight:800;color:#1e293b;line-height:1.35}
+.strategy-value.pos{color:#16a34a}.strategy-value.neg{color:#dc2626}.strategy-muted{font-size:.8rem;color:#64748b}
+@media(max-width:900px){.strategy-grid{grid-template-columns:1fr 1fr}.strategy-main{grid-column:1/-1}.momentum-table{min-width:980px}}
