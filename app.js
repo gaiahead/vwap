@@ -14,8 +14,9 @@ let vpChart = null;
 let currentVpPeriod = '10d';
 let currentDetailName = null;
 const detailCache = {};
+const DATA_VERSION = 'top-200d-20260517-2';
 
-fetch('trend_data.json').then(r=>r.json()).then(data=>{
+fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json()).then(data=>{
   const allNames = Object.keys(data).filter(k => k !== '_meta');
 
   document.getElementById('updated').textContent =
@@ -158,7 +159,7 @@ fetch('trend_data.json').then(r=>r.json()).then(data=>{
     detailTitle.textContent = name;
 
     try {
-      const resp = await fetch(`detail_data/${encodeURIComponent(ticker)}.json`);
+      const resp = await fetch(`detail_data/${encodeURIComponent(ticker)}.json?v=${DATA_VERSION}`, { cache: 'no-store' });
       if (!resp.ok) throw new Error('not found');
       const json = await resp.json();
       detailCache[ticker] = json;
