@@ -6,14 +6,17 @@ trend_data.json으로 출력한다.
 
 from __future__ import annotations
 
+import ast
 import json
 import os
+import re
 import sys
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import numpy as np
 import pandas as pd
+import requests
 import yfinance as yf
 from scipy.stats import norm
 
@@ -511,20 +514,93 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
 # ──────────────────────────────────────────────────────────
 # 종목별 데이터 처리
 # ──────────────────────────────────────────────────────────
+def fetch_naver_daily_ohlcv(symbol: str, target_date: date) -> dict[str, Any] | None:
+    """Naver siseJson daily endpoint에서 KRX 당일 OHLCV 한 건을 가져온다."""
+    ymd = target_date.strftime("%Y%m%d")
+    url = "https://api.finance.naver.com/siseJson.naver"
+    params = {
+        "symbol": symbol,
+        "requestType": "1",
+        "startTime": ymd,
+        "endTime": ymd,
+        "timeframe": "day",
+    }
+    resp = requests.get(url, params=params, headers={"User-Agent": "Mozilla/5.0"}, timeout=10)
+    resp.raise_for_status()
+
+    rows: list[list[Any]] = []
+    for match in re.finditer(r"\[[^\[\]]+\]", resp.text):
+        try:
+            row = ast.literal_eval(match.group(0))
+        except (SyntaxError, ValueError):
+            continue
+        if isinstance(row, list) and row and str(row[0]).isdigit():
+            rows.append(row)
+
+    if not rows:
+        return None
+
+    row = rows[-1]
+    if str(row[0]) != ymd:
+        return None
+    return {
+        "date": target_date,
+        "open": float(row[1]),
+        "high": float(row[2]),
+        "low": float(row[3]),
+        "close": float(row[4]),
+        "volume": int(row[5]),
+    }
+
+
+def maybe_patch_krx_today(df: pd.DataFrame, ticker: str, today: date) -> pd.DataFrame:
+    """Yahoo가 당일 KRX 데이터를 아직 주지 않을 때 Naver 일봉으로 최신 행을 보강한다."""
+    if not (ticker.endswith(".KS") or ticker.endswith(".KQ")):
+        return df
+    if df.empty:
+        return df
+
+    symbol = ticker.split(".", 1)[0]
+    latest_date = df.index[-1].date()
+    if latest_date >= today:
+        return df
+
+    try:
+        today_row = fetch_naver_daily_ohlcv(symbol, today)
+    except Exception as e:
+        print(f"    [WARN] {ticker}: Naver 당일 데이터 보강 실패: {e}")
+        return df
+    if today_row is None:
+        return df
+
+    patched = df.copy()
+    patched.loc[pd.Timestamp(today_row["date"]), ["open", "high", "low", "close", "volume"]] = [
+        today_row["open"], today_row["high"], today_row["low"], today_row["close"], today_row["volume"]
+    ]
+    patched = patched.sort_index().tail(LOOKBACK_TRADING_DAYS).copy()
+    patched.attrs["krx_today_patched"] = True
+    patched.attrs["krx_today_source"] = "naver_siseJson"
+    patched.attrs["krx_today_date"] = today.isoformat()
+    return patched
+
+
 def download_ohlcv(ticker: str, end_date: str) -> pd.DataFrame:
     """최근 200거래일 확보에 필요한 OHLCV만 다운로드해 최종 200거래일로 제한."""
     end_dt = datetime.strptime(end_date, "%Y-%m-%d")
     start_date = (end_dt - timedelta(days=DOWNLOAD_CALENDAR_DAYS)).strftime("%Y-%m-%d")
+    # yfinance의 end는 배타적이라 다음 날짜를 넘겨준다. 그래도 KRX 당일이 없으면 Naver로 보강한다.
+    yf_end_date = (end_dt + timedelta(days=1)).strftime("%Y-%m-%d")
     raw = yf.download(
         ticker,
         start=start_date,
-        end=end_date,
+        end=yf_end_date,
         interval="1d",
         auto_adjust=True,
         progress=False,
     )
     raw.columns = [c[0].lower() for c in raw.columns]
-    return raw[["open", "high", "low", "close", "volume"]].dropna().tail(LOOKBACK_TRADING_DAYS).copy()
+    df = raw[["open", "high", "low", "close", "volume"]].dropna().tail(LOOKBACK_TRADING_DAYS).copy()
+    return maybe_patch_krx_today(df, ticker, end_dt.date())
 
 
 def build_vwap_structure(df: pd.DataFrame) -> tuple[list[dict[str, Any]], float | None]:
@@ -622,7 +698,7 @@ def process_asset(
     s = {item["window"]: item for item in vwap_structure}
     print(f"    5/200={s.get(5, {}).get('norm')} / 20/200={s.get(20, {}).get('norm')}")
 
-    return {
+    asset_result = {
         "ticker": ticker,
         "group": group,
         "records": records,
@@ -631,6 +707,12 @@ def process_asset(
         "lookback_trading_days": LOOKBACK_TRADING_DAYS,
         "latest_price": round(float(df["close"].iloc[-1]), 2),
     }
+    if df.attrs.get("krx_today_patched"):
+        asset_result["data_source"] = {
+            "latest_krx_daily": df.attrs.get("krx_today_source"),
+            "latest_krx_date": df.attrs.get("krx_today_date"),
+        }
+    return asset_result
 
 
 # ──────────────────────────────────────────────────────────
@@ -651,6 +733,16 @@ def main() -> None:
             failed.append(name)
 
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
+        krx_patched_assets = [
+            name for name, data in result.items()
+            if not name.startswith("_") and isinstance(data, dict) and data.get("data_source", {}).get("latest_krx_daily") == "naver_siseJson"
+        ]
+        if krx_patched_assets:
+            result["_meta"].update({
+                "krx_today_source": "naver_siseJson",
+                "krx_today_date": end_date,
+                "krx_today_patched_count": len(krx_patched_assets),
+            })
         json.dump(result, f, ensure_ascii=False, allow_nan=False)
 
     # detail_data/ 생성
@@ -665,6 +757,11 @@ def main() -> None:
                 continue
             detail = build_detail_data(name, ticker, df)
             detail["_meta"] = {"updated_at": run_time}
+            if df.attrs.get("krx_today_patched"):
+                detail["_meta"].update({
+                    "krx_today_source": df.attrs.get("krx_today_source"),
+                    "krx_today_date": df.attrs.get("krx_today_date"),
+                })
             out_path = os.path.join(DETAIL_DIR, f"{ticker}.json")
             with open(out_path, "w", encoding="utf-8") as f:
                 json.dump(detail, f, ensure_ascii=False, allow_nan=False)
