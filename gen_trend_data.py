@@ -41,6 +41,7 @@ ASSETS: list[AssetTuple] = [
     ("Exxon Mobil",                "XOM",       "g1"),
     ("Shell",                      "SHEL",      "g1"),
     ("SLB",                        "SLB",       "g1"),
+    ("UPRO",                       "UPRO",      "g1"),  # S&P500 3배 레버리지
     ("RSP",                        "RSP",       "g1"),  # S&P500 동일가중
     ("IWM",                        "IWM",       "g1"),  # 러셀2000
     ("IEF",                        "IEF",       "g1"),  # 미국 7-10년 국채
@@ -69,6 +70,8 @@ ASSETS: list[AssetTuple] = [
     ("XLRE",                       "XLRE",      "g2"),  # 부동산
     ("XLB",                        "XLB",       "g2"),  # 소재
     ("USO",                        "USO",       "g2"),  # 원유
+    ("UCO",                        "UCO",       "g2"),  # 원유 2배 레버리지
+    ("NUGT",                       "NUGT",      "g2"),  # 금광주 2배 레버리지
     ("CPER",                       "CPER",      "g2"),  # 구리
     ("COPX",                       "COPX",      "g2"),  # 구리 광산
     ("DBA",                        "DBA",       "g2"),  # 농산물
@@ -82,6 +85,9 @@ ASSETS: list[AssetTuple] = [
     ("EWT",                        "EWT",       "g2"),  # 대만
 
     # 그룹 3: 미국/글로벌 AI·기술주와 관련 ETF
+    ("TQQQ",                       "TQQQ",      "g3"),  # 나스닥100 3배 레버리지
+    ("SOXL",                       "SOXL",      "g3"),  # 반도체 3배 레버리지
+    ("TECL",                       "TECL",      "g3"),  # 기술섹터 3배 레버리지
     ("SOL 미국테크TOP10",            "481190.KS", "g3"),
     ("TIGER 미국필라델피아반도체나스닥", "381180.KS", "g3"),
     ("KODEX 미국반도체",              "390390.KS", "g3"),
