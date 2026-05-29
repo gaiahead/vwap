@@ -14,7 +14,7 @@ let vpChart = null;
 let currentVpPeriod = '20d';
 let currentDetailName = null;
 const detailCache = {};
-const DATA_VERSION = 'tcai-20260529';
+const DATA_VERSION = 'snow-sort520-20260529';
 
 fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json()).then(data=>{
   const allNames = Object.keys(data).filter(k => k !== '_meta');
@@ -64,7 +64,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     'current_trade_return_pct', 'strategy_return_pct', 'buy_hold_return_pct',
     'strategy_mdd_pct', 'buy_hold_mdd_pct'
   ]);
-  let sortState = { key: 'current_trade_return_pct', dir: 'desc' };
+  let sortState = { key: 'vwap_5_20_return_pct', dir: 'desc' };
 
   function compareRows(a, b) {
     const getter = sortFields[sortState.key] || sortFields.current_trade_return_pct;
