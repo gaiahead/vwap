@@ -96,6 +96,7 @@ ASSETS: list[AssetTuple] = [
     ("엔비디아",                      "NVDA",      "g3"),
     ("ASML",                        "ASML",      "g3"),
     ("TSMC",                        "TSM",       "g3"),
+    ("Dell Technologies",           "DELL",      "g3"),
     ("알파벳",                        "GOOGL",     "g3"),
     ("애플",                          "AAPL",      "g3"),
     ("마이크로소프트",                 "MSFT",      "g3"),
