@@ -36,7 +36,9 @@ header p{font-size:0.74rem;color:#64748b;margin-top:4px}
 /* Detail section */
 .detail-section{border-top:1px solid #dbe6f3;padding:20px 28px 0}
 .detail-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
-.detail-header h2{font-size:1rem;font-weight:700;color:#0f172a}
+.detail-title-wrap{min-width:0}
+.detail-header h2{font-size:1rem;font-weight:700;color:#0f172a;line-height:1.25}
+.detail-symbol{font-size:.72rem;font-weight:700;color:#64748b;margin-top:3px;letter-spacing:.01em}
 .close-btn{background:#ffffff;border:1px solid #cbd5e1;border-radius:6px;color:#475569;cursor:pointer;padding:4px 10px;font-size:0.8rem;font-family:inherit;transition:all .2s}
 .close-btn:hover{background:#eff6ff;color:#0f172a;border-color:#93c5fd}
 .loading{text-align:center;padding:40px;color:#64748b}

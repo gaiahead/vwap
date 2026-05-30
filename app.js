@@ -8,6 +8,65 @@ function getMomentumColor(s) {
 
 const GRID='#e2e8f0', TICK='#64748b';
 const GROUP_ORDER = ['g1','g2','g3','g4','g5'];
+const DETAIL_NAME_OVERRIDES = {
+  TLT: 'iShares 20+ Year Treasury Bond ETF',
+  GLD: 'SPDR Gold Shares',
+  IBIT: 'iShares Bitcoin Trust ETF',
+  SPY: 'State Street SPDR S&P 500 ETF Trust',
+  QQQ: 'Invesco QQQ Trust',
+  SCHD: 'Schwab U.S. Dividend Equity ETF',
+  XLE: 'State Street Energy Select Sector SPDR ETF',
+  GUNR: 'FlexShares Morningstar Global Upstream Natural Resources Index Fund',
+  IXC: 'iShares Global Energy ETF',
+  XOP: 'State Street SPDR S&P Oil & Gas Exploration & Production ETF',
+  OIH: 'VanEck Oil Services ETF',
+  SLB: 'SLB N.V.',
+  UPRO: 'ProShares UltraPro S&P500',
+  RSP: 'Invesco S&P 500 Equal Weight ETF',
+  IWM: 'iShares Russell 2000 ETF',
+  IEF: 'iShares 7-10 Year Treasury Bond ETF',
+  SHY: 'iShares 1-3 Year Treasury Bond ETF',
+  TIP: 'iShares TIPS Bond ETF',
+  HYG: 'iShares iBoxx $ High Yield Corporate Bond ETF',
+  LQD: 'iShares iBoxx $ Investment Grade Corporate Bond ETF',
+  UUP: 'Invesco DB US Dollar Index Bullish Fund',
+  FXY: 'Invesco CurrencyShares Japanese Yen Trust',
+  XLK: 'State Street Technology Select Sector SPDR ETF',
+  ITA: 'iShares U.S. Aerospace & Defense ETF',
+  XAR: 'State Street SPDR S&P Aerospace & Defense ETF',
+  RTX: 'RTX Corporation',
+  XLF: 'State Street Financial Select Sector SPDR ETF',
+  XLV: 'State Street Health Care Select Sector SPDR ETF',
+  XLI: 'State Street Industrial Select Sector SPDR ETF',
+  XLY: 'State Street Consumer Discretionary Select Sector SPDR ETF',
+  XLP: 'State Street Consumer Staples Select Sector SPDR ETF',
+  XLU: 'State Street Utilities Select Sector SPDR ETF',
+  XLRE: 'State Street Real Estate Select Sector SPDR ETF',
+  XLB: 'State Street Materials Select Sector SPDR ETF',
+  USO: 'United States Oil Fund, LP',
+  UCO: 'ProShares Ultra Bloomberg Crude Oil',
+  NUGT: 'Direxion Daily Gold Miners Index Bull 2X Shares',
+  CPER: 'United States Copper Index Fund, LP',
+  COPX: 'Global X Copper Miners ETF',
+  DBA: 'Invesco DB Agriculture Fund',
+  URA: 'Global X Uranium ETF',
+  SLV: 'iShares Silver Trust',
+  EFA: 'iShares MSCI EAFE ETF',
+  EEM: 'iShares MSCI Emerging Markets ETF',
+  EWJ: 'iShares MSCI Japan ETF',
+  FXI: 'iShares China Large-Cap ETF',
+  INDA: 'iShares MSCI India ETF',
+  EWT: 'iShares MSCI Taiwan ETF',
+  TQQQ: 'ProShares UltraPro QQQ',
+  SOXL: 'Direxion Daily Semiconductor Bull 3X Shares',
+  TECL: 'Direxion Daily Technology Bull 3X Shares',
+  ASML: 'ASML Holding N.V.',
+  TCAI: 'Tortoise AI Infrastructure ETF',
+  PANW: 'Palo Alto Networks, Inc.',
+  FTNT: 'Fortinet, Inc.',
+  DDOG: 'Datadog, Inc.',
+  CRWD: 'CrowdStrike Holdings, Inc.'
+};
 
 let priceChart = null;
 let vpChart = null;
@@ -159,6 +218,17 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
   const detailSection = document.getElementById('detail-section');
   const detailContent = document.getElementById('detail-content');
   const detailTitle = document.getElementById('detail-title');
+  const detailSymbol = document.getElementById('detail-symbol');
+
+  function getDetailDisplayName(ticker, name, detailData=null) {
+    return DETAIL_NAME_OVERRIDES[ticker] || detailData?.name || name || ticker;
+  }
+
+  function setDetailHeader(ticker, name, detailData=null) {
+    const displayName = getDetailDisplayName(ticker, name, detailData);
+    detailTitle.textContent = displayName;
+    detailSymbol.textContent = ticker && ticker !== displayName ? ticker : '';
+  }
 
   document.getElementById('detail-close').addEventListener('click', () => {
     detailSection.style.display = 'none';
@@ -173,12 +243,12 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     renderMomentum();
 
     if (detailCache[ticker]) {
-      renderDetail(detailCache[ticker]);
+      renderDetail(detailCache[ticker], ticker, name);
       return;
     }
 
     detailContent.innerHTML = '<div class="loading">Loading...</div>';
-    detailTitle.textContent = name;
+    setDetailHeader(ticker, name);
 
     try {
       const resp = await fetch(`detail_data/${encodeURIComponent(ticker)}.json?v=${DATA_VERSION}`, { cache: 'no-store' });
@@ -188,7 +258,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       // Restore panel HTML after loading spinner
       detailContent.innerHTML = buildPanelHTML();
       initVpTabs();
-      renderDetail(json);
+      renderDetail(json, ticker, name);
     } catch {
       detailContent.innerHTML = '<div class="loading">Data not available</div>';
     }
@@ -227,8 +297,8 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
   // Initial VP tab handler (for static HTML case)
   initVpTabs();
 
-  function renderDetail(detailData) {
-    detailTitle.textContent = detailData.name;
+  function renderDetail(detailData, ticker=detailData.ticker, name=detailData.name) {
+    setDetailHeader(ticker, name, detailData);
     renderPriceChart(detailData);
     renderVpChart(detailData, currentVpPeriod);
     detailSection.scrollIntoView({behavior:'smooth', block:'start'});

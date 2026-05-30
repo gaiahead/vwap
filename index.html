@@ -6,7 +6,7 @@
   <title>VWAP 추세 모니터</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
-  <link rel="stylesheet" href="style.css?v=cyber-ai-20260529"/>
+  <link rel="stylesheet" href="style.css?v=detail-names-20260530"/>
 </head>
 <body>
 
@@ -39,12 +39,15 @@
 
 <div class="detail-section" id="detail-section" style="display:none">
   <div class="detail-header">
-    <h2 id="detail-title">Loading...</h2>
+    <div class="detail-title-wrap">
+      <h2 id="detail-title">Loading...</h2>
+      <div class="detail-symbol" id="detail-symbol"></div>
+    </div>
     <button class="close-btn" id="detail-close">✕</button>
   </div>
   <div id="detail-content"></div>
 </div>
 
-<script src="app.js?v=cyber-ai-20260529"></script>
+<script src="app.js?v=detail-names-20260530"></script>
 </body>
 </html>
