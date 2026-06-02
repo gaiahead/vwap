@@ -1,13 +1,31 @@
-function getMomentumColor(s) {
-  if (s >= 0.03)  return '#16a34a';   // 3%+ → 녹 (밝은 테마용)
-  if (s >= 0.01)  return '#475569';   // 1%+ → 회
-  if (s >= 0)     return '#64748b';   // 0%+ → 어두운 회
-  if (s >= -0.01) return '#ea580c';   // -1%~0 → 주황
-  return '#dc2626';                   // -1% 미만 → 적
-}
+const DATA_VERSION = 'refactor-20260602';
+const GRID = '#e2e8f0';
+const TICK = '#64748b';
+const COLOR = {
+  positive: '#16a34a',
+  negative: '#dc2626',
+  muted: '#64748b',
+  neutral: '#475569',
+  blue: '#2563eb'
+};
+const DEFAULT_SORT = { key: 'vwap_5_20_return_pct', dir: 'desc' };
+const VP_PERIODS = ['5d', '20d', '200d'];
+const PRICE_DATASET_ORDER = ['BUY', 'SELL', 'VWAP 5', 'VWAP 20', 'VWAP 200', 'Close'];
 
-const GRID='#e2e8f0', TICK='#64748b';
-const GROUP_ORDER = ['g1','g2','g3','g4','g5'];
+const MOMENTUM_COLUMNS = [
+  { key: 'name', label: '종목', type: 'text', get: row => row.name },
+  { key: 'last_signal_date', label: '최근 변화', type: 'text', get: row => row.strategy.latest?.last_signal_date || '' },
+  { key: 'vwap_5_20_return_pct', label: '5/20 수익률', type: 'number', get: row => row.strategy.latest?.vwap_5_20_return_pct },
+  { key: 'vwap_5_200_return_pct', label: '5/200 수익률', type: 'number', get: row => row.strategy.latest?.vwap_5_200_return_pct },
+  { key: 'holding_days', label: '당기 보유일', type: 'number', get: row => row.strategy.latest?.holding_days },
+  { key: 'current_trade_return_pct', label: '당기 수익률', type: 'number', get: row => row.strategy.latest?.current_trade_return_pct },
+  { key: 'strategy_return_pct', label: '200일 전략 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.strategy_return_pct },
+  { key: 'buy_hold_return_pct', label: '200일 보유 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.buy_hold_return_pct },
+  { key: 'strategy_mdd_pct', label: '200일 전략 MDD', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.strategy_mdd_pct, isMdd: true },
+  { key: 'buy_hold_mdd_pct', label: '200일 보유 MDD', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.buy_hold_mdd_pct, isMdd: true }
+];
+const SORT_FIELDS = Object.fromEntries(MOMENTUM_COLUMNS.map(column => [column.key, column.get]));
+const NUMERIC_SORT_FIELDS = new Set(MOMENTUM_COLUMNS.filter(column => column.type === 'number').map(column => column.key));
 const DETAIL_NAME_OVERRIDES = {
   TLT: 'iShares 20+ Year Treasury Bond ETF',
   GLD: 'SPDR Gold Shares',
@@ -73,7 +91,6 @@ let vpChart = null;
 let currentVpPeriod = '20d';
 let currentDetailName = null;
 const detailCache = {};
-const DATA_VERSION = 'cyber-ai-20260529';
 
 fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json()).then(data=>{
   const allNames = Object.keys(data).filter(k => k !== '_meta');
@@ -83,54 +100,50 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
 
   // ─── Formatting helpers ──────────────────────────────────────────
   function fmtPct(v) { return v == null ? '–' : `${v > 0 ? '+' : ''}${Number(v).toFixed(2)}%`; }
-  function fmtRate(v) { return v == null ? '–' : `${Number(v).toFixed(2)}%`; }
-  function fmtDays(v) { return v == null ? '–' : Number(v).toFixed(1).replace(/\.0$/, ''); }
   function statColor(value, isMdd=false) {
-    if (value == null) return '#64748b';
-    if (isMdd) return value <= -20 ? '#dc2626' : '#16a34a';
-    return value >= 0 ? '#16a34a' : '#dc2626';
-  }
-  function getStrategyStateClass(strategy) {
-    const latest = strategy?.latest;
-    if (!latest) return 'neutral';
-    return latest.action === '매수' ? 'buy' : 'sell';
-  }
-  function getSignalText(strategy) {
-    const latest = strategy?.latest;
-    if (!latest) return '–';
-    return latest.action === '매수' ? 'BUY' : 'SELL';
+    if (value == null) return COLOR.muted;
+    if (isMdd) return value <= -20 ? COLOR.negative : COLOR.positive;
+    return value >= 0 ? COLOR.positive : COLOR.negative;
   }
   function signalColor(type) {
-    if (type === 'BUY') return '#16a34a';
-    if (type === 'SELL') return '#dc2626';
-    return '#64748b';
+    if (type === 'BUY') return COLOR.positive;
+    if (type === 'SELL') return COLOR.negative;
+    return COLOR.muted;
   }
 
-  const sortFields = {
-    name: r => r.name,
-    last_signal_date: r => r.strategy.latest?.last_signal_date || '',
-    vwap_5_20_return_pct: r => r.strategy.latest?.vwap_5_20_return_pct,
-    vwap_5_200_return_pct: r => r.strategy.latest?.vwap_5_200_return_pct,
-    holding_days: r => r.strategy.latest?.holding_days,
-    current_trade_return_pct: r => r.strategy.latest?.current_trade_return_pct,
-    strategy_return_pct: r => r.strategy.backtest?.rolling_200d?.strategy_return_pct,
-    buy_hold_return_pct: r => r.strategy.backtest?.rolling_200d?.buy_hold_return_pct,
-    strategy_mdd_pct: r => r.strategy.backtest?.rolling_200d?.strategy_mdd_pct,
-    buy_hold_mdd_pct: r => r.strategy.backtest?.rolling_200d?.buy_hold_mdd_pct
-  };
-  const numericSortFields = new Set([
-    'vwap_5_20_return_pct', 'vwap_5_200_return_pct', 'holding_days',
-    'current_trade_return_pct', 'strategy_return_pct', 'buy_hold_return_pct',
-    'strategy_mdd_pct', 'buy_hold_mdd_pct'
-  ]);
-  let sortState = { key: 'vwap_5_20_return_pct', dir: 'desc' };
+  function createCell(text, { className, color, weight } = {}) {
+    const td = document.createElement('td');
+    td.textContent = text;
+    if (className) td.className = className;
+    if (color) td.style.color = color;
+    if (weight) td.style.fontWeight = weight;
+    return td;
+  }
+
+  function createNameCell(name) {
+    const td = document.createElement('td');
+    const indicator = document.createElement('span');
+    indicator.className = 'row-indicator';
+    td.append(indicator, document.createTextNode(name));
+    return td;
+  }
+
+  function setLoading(text) {
+    detailContent.replaceChildren();
+    const loading = document.createElement('div');
+    loading.className = 'loading';
+    loading.textContent = text;
+    detailContent.appendChild(loading);
+  }
+
+  let sortState = { ...DEFAULT_SORT };
 
   function compareRows(a, b) {
-    const getter = sortFields[sortState.key] || sortFields.current_trade_return_pct;
+    const getter = SORT_FIELDS[sortState.key] || SORT_FIELDS.current_trade_return_pct;
     const av = getter(a);
     const bv = getter(b);
     const dir = sortState.dir === 'asc' ? 1 : -1;
-    if (numericSortFields.has(sortState.key)) {
+    if (NUMERIC_SORT_FIELDS.has(sortState.key)) {
       const an = av == null || Number.isNaN(Number(av)) ? -Infinity : Number(av);
       const bn = bv == null || Number.isNaN(Number(bv)) ? -Infinity : Number(bv);
       if (an !== bn) return (an - bn) * dir;
@@ -156,7 +169,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       const key = th.dataset.sort;
       sortState = sortState.key === key
         ? { key, dir: sortState.dir === 'desc' ? 'asc' : 'desc' }
-        : { key, dir: numericSortFields.has(key) ? 'desc' : 'asc' };
+        : { key, dir: NUMERIC_SORT_FIELDS.has(key) ? 'desc' : 'asc' };
       renderMomentum();
     });
     th.addEventListener('keydown', e => {
@@ -173,7 +186,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
 
     document.getElementById('momentum-section').style.display = '';
     const tbody = document.getElementById('momentum-body');
-    tbody.innerHTML = '';
+    tbody.replaceChildren();
 
     const rows = allNames
       .map(n => ({ name: n, strategy: data[n]?.strategy_signal }))
@@ -185,25 +198,25 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       const ticker = data[name]?.ticker;
       const latest = strategy?.latest || {};
       const trendColor = statColor(latest.vwap_5_200_return_pct);
-      const stateClass = getStrategyStateClass(strategy);
-      const signalText = getSignalText(strategy);
       const rolling200 = strategy?.backtest?.rolling_200d || {};
       const tr = document.createElement('tr');
       tr.className = 'momentum-row' + (name === currentDetailName ? ' detail-active' : '');
       tr.style.setProperty('--c', trendColor);
-      const cells = [
-        `<td><span class="row-indicator"></span>${name}</td>`,
-        `<td class="recent-signal" style="color:${signalColor(latest.last_signal || signalText)};font-weight:800">${latest.last_signal || '–'} ${latest.last_signal_date ? latest.last_signal_date.slice(5) : ''}</td>`,
-        `<td style="color:${statColor(latest.vwap_5_20_return_pct)};font-weight:800">${fmtPct(latest.vwap_5_20_return_pct)}</td>`,
-        `<td style="color:${statColor(latest.vwap_5_200_return_pct)};font-weight:800">${fmtPct(latest.vwap_5_200_return_pct)}</td>`,
-        `<td>${latest.holding_days ?? '–'}</td>`,
-        `<td style="color:${statColor(latest.current_trade_return_pct)};font-weight:800">${fmtPct(latest.current_trade_return_pct)}</td>`,
-        `<td style="color:${statColor(rolling200.strategy_return_pct)};font-weight:800">${fmtPct(rolling200.strategy_return_pct)}</td>`,
-        `<td style="color:${statColor(rolling200.buy_hold_return_pct)};font-weight:800">${fmtPct(rolling200.buy_hold_return_pct)}</td>`,
-        `<td style="color:${statColor(rolling200.strategy_mdd_pct, true)};font-weight:800">${fmtPct(rolling200.strategy_mdd_pct)}</td>`,
-        `<td style="color:${statColor(rolling200.buy_hold_mdd_pct, true)};font-weight:800">${fmtPct(rolling200.buy_hold_mdd_pct)}</td>`
-      ];
-      tr.innerHTML = cells.join('');
+      tr.append(
+        createNameCell(name),
+        createCell(
+          `${latest.last_signal || '–'} ${latest.last_signal_date ? latest.last_signal_date.slice(5) : ''}`,
+          { className: 'recent-signal', color: signalColor(latest.last_signal), weight: '800' }
+        ),
+        createCell(fmtPct(latest.vwap_5_20_return_pct), { color: statColor(latest.vwap_5_20_return_pct), weight: '800' }),
+        createCell(fmtPct(latest.vwap_5_200_return_pct), { color: statColor(latest.vwap_5_200_return_pct), weight: '800' }),
+        createCell(latest.holding_days ?? '–'),
+        createCell(fmtPct(latest.current_trade_return_pct), { color: statColor(latest.current_trade_return_pct), weight: '800' }),
+        createCell(fmtPct(rolling200.strategy_return_pct), { color: statColor(rolling200.strategy_return_pct), weight: '800' }),
+        createCell(fmtPct(rolling200.buy_hold_return_pct), { color: statColor(rolling200.buy_hold_return_pct), weight: '800' }),
+        createCell(fmtPct(rolling200.strategy_mdd_pct), { color: statColor(rolling200.strategy_mdd_pct, true), weight: '800' }),
+        createCell(fmtPct(rolling200.buy_hold_mdd_pct), { color: statColor(rolling200.buy_hold_mdd_pct, true), weight: '800' })
+      );
       tr.addEventListener('click', () => {
         if (!ticker) return;
         currentVpPeriod = '20d';
@@ -243,11 +256,15 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     renderMomentum();
 
     if (detailCache[ticker]) {
+      if (!document.getElementById('chart-price') || !document.getElementById('chart-vp')) {
+        renderDetailPanels();
+        initVpTabs();
+      }
       renderDetail(detailCache[ticker], ticker, name);
       return;
     }
 
-    detailContent.innerHTML = '<div class="loading">Loading...</div>';
+    setLoading('Loading...');
     setDetailHeader(ticker, name);
 
     try {
@@ -255,30 +272,46 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       if (!resp.ok) throw new Error('not found');
       const json = await resp.json();
       detailCache[ticker] = json;
-      // Restore panel HTML after loading spinner
-      detailContent.innerHTML = buildPanelHTML();
+      renderDetailPanels();
       initVpTabs();
       renderDetail(json, ticker, name);
     } catch {
-      detailContent.innerHTML = '<div class="loading">Data not available</div>';
+      setLoading('Data not available');
     }
   }
 
-  function buildPanelHTML() {
-    const vpButtons = ['5d','20d','200d']
-      .map(p => `<button class="vp-tab${p===currentVpPeriod?' active':''}" data-period="${p}">${p}</button>`)
-      .join('');
-    return `
-      <div class="panel-box">
-        <div class="panel-title">VWAP Lines · 5/20/200</div>
-        <div style="position:relative;height:440px"><canvas id="chart-price"></canvas></div>
-      </div>
-      <div class="panel-box" style="margin-top:16px">
-        <div class="panel-title">Volume Profile</div>
-        <div class="vp-tabs" id="vp-tabs">${vpButtons}</div>
-        <div style="position:relative;height:440px"><canvas id="chart-vp"></canvas></div>
-      </div>
-    `;
+  function createChartPanel(title, canvasId) {
+    const panel = document.createElement('div');
+    panel.className = 'panel-box';
+    const heading = document.createElement('div');
+    heading.className = 'panel-title';
+    heading.textContent = title;
+    const chartWrap = document.createElement('div');
+    chartWrap.className = 'chart-wrap';
+    const canvas = document.createElement('canvas');
+    canvas.id = canvasId;
+    chartWrap.appendChild(canvas);
+    panel.append(heading, chartWrap);
+    return panel;
+  }
+
+  function renderDetailPanels() {
+    const pricePanel = createChartPanel('VWAP Lines · 5/20/200', 'chart-price');
+    const vpPanel = createChartPanel('Volume Profile', 'chart-vp');
+    vpPanel.classList.add('volume-profile-panel');
+
+    const tabs = document.createElement('div');
+    tabs.className = 'vp-tabs';
+    tabs.id = 'vp-tabs';
+    VP_PERIODS.forEach(period => {
+      const button = document.createElement('button');
+      button.className = 'vp-tab' + (period === currentVpPeriod ? ' active' : '');
+      button.dataset.period = period;
+      button.textContent = period;
+      tabs.appendChild(button);
+    });
+    vpPanel.insertBefore(tabs, vpPanel.querySelector('.chart-wrap'));
+    detailContent.replaceChildren(pricePanel, vpPanel);
   }
 
   function initVpTabs() {
@@ -293,9 +326,6 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       if (ticker && detailCache[ticker]) renderVpChart(detailCache[ticker], currentVpPeriod);
     });
   }
-
-  // Initial VP tab handler (for static HTML case)
-  initVpTabs();
 
   function renderDetail(detailData, ticker=detailData.ticker, name=detailData.name) {
     setDetailHeader(ticker, name, detailData);
@@ -319,7 +349,6 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     const vp = detailData.volume_profile;
     const vwap200 = vp?.['200d']?.vwap ?? null;
     const vwap200Line = labels.map(() => vwap200);
-    const legendOrder = ['BUY', 'SELL', 'VWAP 5', 'VWAP 20', 'VWAP 200', 'Close'];
     const legendKey = label => {
       if (label === 'BUY') return 'BUY';
       if (label === 'SELL') return 'SELL';
@@ -347,7 +376,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
         responsive: true, maintainAspectRatio: false, animation: {duration: 200},
         interaction: {mode: 'index', intersect: false},
         plugins: {
-          legend: {display: true, labels: {color: '#334155', font: {size: 10}, boxWidth: 12, padding: 10, usePointStyle: true, sort: (a, b) => legendOrder.indexOf(legendKey(a.text)) - legendOrder.indexOf(legendKey(b.text))}},
+          legend: {display: true, labels: {color: '#334155', font: {size: 10}, boxWidth: 12, padding: 10, usePointStyle: true, sort: (a, b) => PRICE_DATASET_ORDER.indexOf(legendKey(a.text)) - PRICE_DATASET_ORDER.indexOf(legendKey(b.text))}},
           annotation: {annotations},
           tooltip: {callbacks: {label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y?.toLocaleString(undefined, {maximumFractionDigits: 2})}`}}
         },
@@ -376,7 +405,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     if (vwapIdx >= 0) {
       annotations.vwapLine = {
         type: 'line', scaleID: 'y', value: vwapIdx,
-        borderColor: '#2563eb', borderWidth: 2,
+        borderColor: COLOR.blue, borderWidth: 2,
         label: {display: true, content: `VWAP ${vp.vwap.toLocaleString()}`, color: '#1d4ed8',
           backgroundColor: 'rgba(255,255,255,0.9)', font: {size: 9}, position: 'end', padding: {x: 3, y: 1}}
       };
@@ -416,9 +445,6 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     if (vpChart) vpChart.destroy();
     vpChart = new Chart(document.getElementById('chart-vp'), config);
   }
-
-  // ─── Legacy card renderer removed ───────────────────────
-  function renderCards(){ renderMomentum(); }
 
   renderMomentum();
 
