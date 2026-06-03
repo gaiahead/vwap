@@ -12,7 +12,7 @@ import os
 import re
 import sys
 from datetime import date, datetime, timedelta, timezone
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -261,10 +261,12 @@ def compute_proxy_vwap_series(df: pd.DataFrame, window: int) -> list[float | Non
     """백테스트/전략 신호용 빠른 일봉 VWAP proxy.
 
     대표가격 = (High + Low + Close) / 3, n일 VWAP = Σ(대표가격×거래량)/Σ거래량.
+    거래량 합계가 0인 구간은 JSON에 NaN/Infinity가 새지 않도록 None으로 둔다.
     """
-    typical = (df["high"] + df["low"] + df["close"]) / 3
-    pv = typical * df["volume"]
-    denom = df["volume"].rolling(window).sum()
+    volume = cast(pd.Series, df["volume"])
+    typical = (cast(pd.Series, df["high"]) + cast(pd.Series, df["low"]) + cast(pd.Series, df["close"])) / 3
+    pv = typical * volume
+    denom = cast(pd.Series, volume.rolling(window).sum()).replace(0, np.nan)
     series = pv.rolling(window).sum() / denom
     return [None if pd.isna(v) else float(v) for v in series.tolist()]
 
@@ -290,16 +292,34 @@ def strength_score(arr: list[float | None], norm_window: int = 52) -> list[float
     return scores
 
 
-def safe_round(value: float | None, digits: int = 4) -> float | None:
-    if value is None or (isinstance(value, float) and np.isnan(value)):
+def is_missing(value: Any) -> bool:
+    """JSON 직렬화 전에 제거해야 할 None/NaN 계열 값인지 확인."""
+    if value is None:
+        return True
+    try:
+        return bool(pd.isna(value))
+    except (TypeError, ValueError):
+        return False
+
+
+def safe_round(value: Any, digits: int = 4) -> float | None:
+    if is_missing(value):
         return None
     return round(float(value), digits)
 
 
-def pct_change(start: float | None, end: float | None) -> float | None:
-    if start is None or end is None or start == 0:
+def pct_change(start: Any, end: Any) -> float | None:
+    if is_missing(start) or is_missing(end):
         return None
-    return (end / start - 1) * 100
+    start_float = float(start)
+    if start_float == 0:
+        return None
+    return (float(end) / start_float - 1) * 100
+
+
+def date_key(value: Any) -> str:
+    """DatetimeIndex/Hashable 값을 JSON용 YYYY-MM-DD 문자열로 변환."""
+    return str(pd.Timestamp(value).date())
 
 
 def calc_max_drawdown(equity: list[float]) -> float | None:
@@ -314,15 +334,25 @@ def calc_max_drawdown(equity: list[float]) -> float | None:
     return max_dd * 100
 
 
-def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
-    """최근 200거래일 기준 VWAP 5/20 전략과 5/200 위치 요약.
+STRATEGY_FEE_ONE_WAY = 0.0003
+STRATEGY_RULES: dict[str, Any] = {
+    "buy": "VWAP5 > VWAP20",
+    "sell": "VWAP5 < VWAP20",
+    "execution": "next_day_vwap_1d_proxy",
+    "valuation": "vwap_1d_proxy",
+    "buy_hold_return": "last_vwap_1d_proxy / first_vwap_1d_proxy - 1",
+    "fee_one_way_pct": 0.03,
+}
 
-    신호: 당일 종가 확정 후 판단. 백테스트 체결: 신호 다음 거래일 1일 VWAP proxy, 편도 수수료 0.03%.
-    `VWAP200`은 최신 5/200 수익률 계산용 기준값이며 상세 차트에는 수평 기준선으로만 표시한다.
+
+def prepare_strategy_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """최근 200거래일 기준 5/20/200 전략 계산 컬럼을 만든다.
+
+    비즈니스 기준:
+    - 평가 범위는 최근 200거래일만 사용한다.
+    - 1일 VWAP proxy = (High + Low + Close) / 3.
+    - 5/20 신호와 5/200 위치는 빠른 일봉 VWAP proxy의 롤링 VWAP로 계산한다.
     """
-    if len(df) < LOOKBACK_TRADING_DAYS:
-        return {"available": False, "reason": "insufficient_recent_history"}
-
     work = df.tail(LOOKBACK_TRADING_DAYS).copy()
     work["vwap_1d"] = ((work["high"] + work["low"] + work["close"]) / 3).astype(float)
     work["vwap_5d"] = compute_proxy_vwap_series(work, 5)
@@ -330,8 +360,40 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
     work["vwap_200d"] = compute_proxy_vwap_series(work, 200)
     work["vwap_5_20_return"] = work["vwap_5d"] / work["vwap_20d"] - 1
     work["vwap_5_200_return"] = work["vwap_5d"] / work["vwap_200d"] - 1
+    return work
 
-    fee = 0.0003
+
+def vwap_5_20_signal(vwap5: Any, vwap20: Any) -> str:
+    """확정된 VWAP5/VWAP20 배열을 BUY/SELL/WAIT로 변환."""
+    if is_missing(vwap5) or is_missing(vwap20):
+        return "WAIT"
+    if float(vwap5) > float(vwap20):
+        return "BUY"
+    if float(vwap5) < float(vwap20):
+        return "SELL"
+    return "WAIT"
+
+
+def make_signal_record(signal_date: str, execution_date: str, signal_type: str, execution_price: float, confirmed: pd.Series) -> dict[str, Any]:
+    """상단/상세 UI가 쓰는 최근 변화 레코드."""
+    ret_5_20 = confirmed.get("vwap_5_20_return")
+    ret_5_200 = confirmed.get("vwap_5_200_return")
+    return {
+        "date": signal_date,
+        "execution_date": execution_date,
+        "type": signal_type,
+        "price": round(execution_price, 4),
+        "vwap_5_20_return_pct": safe_round(float(ret_5_20) * 100 if not is_missing(ret_5_20) else None, 2),
+        "vwap_5_200_return_pct": safe_round(float(ret_5_200) * 100 if not is_missing(ret_5_200) else None, 2),
+    }
+
+
+def simulate_vwap_5_20_strategy(work: pd.DataFrame, record_signals: bool = True) -> dict[str, Any]:
+    """VWAP 5/20 전략을 최근 구간에서 시뮬레이션한다.
+
+    전일 확정된 VWAP5/VWAP20 신호를 다음 거래일의 1일 VWAP proxy 가격으로 체결한다.
+    반환값은 JSON 직렬화 가능한 dict로 유지해 trend/detail 생성 로직에서 공유한다.
+    """
     cash = 1.0
     shares = 0.0
     in_position = False
@@ -342,191 +404,181 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
     trades: list[dict[str, Any]] = []
     signals: list[dict[str, Any]] = []
     equity_curve: list[float] = []
-    daily_returns: list[float] = []
-    prev_equity = 1.0
     position_days = 0
-    def calc_window_stats(window: int = 200) -> dict[str, Any]:
-        """최근 window 거래일 기준 5/20 전략과 단순보유의 수익률/MDD."""
-        if len(work) < max(25, window):
-            return {
-                "window_days": window,
-                "strategy_return_pct": None,
-                "buy_hold_return_pct": None,
-                "strategy_mdd_pct": None,
-                "buy_hold_mdd_pct": None,
-            }
-
-        sub = work.iloc[-window:].copy()
-        w_cash = 1.0
-        w_shares = 0.0
-        w_in_position = False
-        w_equity_curve: list[float] = []
-        bh_base_price = float(sub["vwap_1d"].iloc[0])
-        bh_equity_curve: list[float] = []
-
-        for i in range(len(sub)):
-            row = sub.iloc[i]
-            valuation_price = float(row["vwap_1d"])
-            if i > 0:
-                prev = sub.iloc[i - 1]
-                v5_prev, v20_prev = prev["vwap_5d"], prev["vwap_20d"]
-                if not pd.isna(v5_prev) and not pd.isna(v20_prev):
-                    execution_price = valuation_price
-                    if not w_in_position and float(v5_prev) > float(v20_prev):
-                        w_shares = w_cash * (1 - fee) / execution_price
-                        w_cash = 0.0
-                        w_in_position = True
-                    elif w_in_position and float(v5_prev) < float(v20_prev):
-                        w_cash = w_shares * execution_price * (1 - fee)
-                        w_shares = 0.0
-                        w_in_position = False
-
-            w_equity_curve.append(w_shares * valuation_price if w_in_position else w_cash)
-            bh_equity_curve.append(valuation_price / bh_base_price if bh_base_price else 1.0)
-
-        return {
-            "window_days": window,
-            "strategy_return_pct": safe_round((w_equity_curve[-1] - 1) * 100 if w_equity_curve else None, 2),
-            "buy_hold_return_pct": safe_round((bh_equity_curve[-1] - 1) * 100 if bh_equity_curve else None, 2),
-            "strategy_mdd_pct": safe_round(calc_max_drawdown(w_equity_curve), 2),
-            "buy_hold_mdd_pct": safe_round(calc_max_drawdown(bh_equity_curve), 2),
-        }
-
 
     for i in range(len(work)):
         row = work.iloc[i]
+        valuation_price = float(row["vwap_1d"])
 
         if i > 0:
-            prev = work.iloc[i - 1]
-            v5_prev, v20_prev = prev["vwap_5d"], prev["vwap_20d"]
-            if not pd.isna(v5_prev) and not pd.isna(v20_prev):
-                dt = str(work.index[i - 1].date())
-                execution_dt = str(work.index[i].date())
-                execution_price = float(row["vwap_1d"])
-                buy_cond = float(v5_prev) > float(v20_prev)
-                sell_cond = float(v5_prev) < float(v20_prev)
+            confirmed = work.iloc[i - 1]
+            signal = vwap_5_20_signal(confirmed["vwap_5d"], confirmed["vwap_20d"])
+            signal_dt = date_key(work.index[i - 1])
+            execution_dt = date_key(work.index[i])
 
-                if not in_position and buy_cond:
-                    shares = cash * (1 - fee) / execution_price
-                    cash = 0.0
-                    in_position = True
-                    entry_price = execution_price
-                    entry_date = execution_dt
-                    last_signal = "BUY"
-                    last_signal_date = dt
-                    signals.append({
-                        "date": dt,
-                        "execution_date": execution_dt,
-                        "type": "BUY",
-                        "price": round(execution_price, 4),
-                        "vwap_5_20_return_pct": safe_round(float(prev["vwap_5_20_return"]) * 100, 2),
-                        "vwap_5_200_return_pct": safe_round(float(prev["vwap_5_200_return"]) * 100, 2) if not pd.isna(prev["vwap_5_200_return"]) else None,
-                    })
-                elif in_position and sell_cond:
-                    exit_price = execution_price
-                    cash = shares * exit_price * (1 - fee)
-                    shares = 0.0
-                    in_position = False
-                    last_signal = "SELL"
-                    last_signal_date = dt
-                    ret = pct_change(entry_price, exit_price) if entry_price is not None else None
-                    trades.append({
-                        "entry_date": entry_date,
-                        "exit_date": execution_dt,
-                        "entry_price": safe_round(entry_price),
-                        "exit_price": round(exit_price, 4),
-                        "return_pct": safe_round(ret, 2),
-                    })
-                    signals.append({
-                        "date": dt,
-                        "execution_date": execution_dt,
-                        "type": "SELL",
-                        "price": round(exit_price, 4),
-                        "vwap_5_20_return_pct": safe_round(float(prev["vwap_5_20_return"]) * 100, 2),
-                        "vwap_5_200_return_pct": safe_round(float(prev["vwap_5_200_return"]) * 100, 2) if not pd.isna(prev["vwap_5_200_return"]) else None,
-                    })
-                    entry_price = None
-                    entry_date = None
+            if not in_position and signal == "BUY":
+                shares = cash * (1 - STRATEGY_FEE_ONE_WAY) / valuation_price
+                cash = 0.0
+                in_position = True
+                entry_price = valuation_price
+                entry_date = execution_dt
+                last_signal = "BUY"
+                last_signal_date = signal_dt
+                if record_signals:
+                    signals.append(make_signal_record(signal_dt, execution_dt, "BUY", valuation_price, confirmed))
+            elif in_position and signal == "SELL":
+                exit_price = valuation_price
+                cash = shares * exit_price * (1 - STRATEGY_FEE_ONE_WAY)
+                shares = 0.0
+                in_position = False
+                last_signal = "SELL"
+                last_signal_date = signal_dt
+                ret = pct_change(entry_price, exit_price)
+                trades.append({
+                    "entry_date": entry_date,
+                    "exit_date": execution_dt,
+                    "entry_price": safe_round(entry_price),
+                    "exit_price": round(exit_price, 4),
+                    "return_pct": safe_round(ret, 2),
+                })
+                if record_signals:
+                    signals.append(make_signal_record(signal_dt, execution_dt, "SELL", exit_price, confirmed))
+                entry_price = None
+                entry_date = None
 
         if in_position:
             position_days += 1
-        valuation_price = float(row["vwap_1d"])
-        current_equity = shares * valuation_price if in_position else cash
-        equity_curve.append(current_equity)
-        daily_returns.append(current_equity / prev_equity - 1 if equity_curve else 0.0)
-        prev_equity = current_equity
+        equity_curve.append(shares * valuation_price if in_position else cash)
 
-    final_vwap_1d = float(work["vwap_1d"].iloc[-1])
-    final_equity = shares * final_vwap_1d if in_position else cash
+    final_price = float(work["vwap_1d"].iloc[-1]) if len(work) else 0.0
+    final_equity = shares * final_price if in_position else cash
+    return {
+        "cash": cash,
+        "shares": shares,
+        "in_position": in_position,
+        "entry_price": entry_price,
+        "entry_date": entry_date,
+        "last_signal": last_signal,
+        "last_signal_date": last_signal_date,
+        "trades": trades,
+        "signals": signals,
+        "equity_curve": equity_curve,
+        "position_days": position_days,
+        "final_equity": final_equity,
+    }
+
+
+def calc_trade_holding_stats(trades: list[dict[str, Any]], work: pd.DataFrame) -> tuple[float | None, int | None]:
+    hold_lengths: list[int] = []
+    for trade in trades:
+        if trade.get("entry_date") and trade.get("exit_date"):
+            hold_lengths.append(len(work.loc[pd.Timestamp(trade["entry_date"]):pd.Timestamp(trade["exit_date"])]))
+    if not hold_lengths:
+        return None, None
+    return sum(hold_lengths) / len(hold_lengths), max(hold_lengths)
+
+
+def calc_strategy_window_stats(work: pd.DataFrame, window: int = 200) -> dict[str, Any]:
+    """최근 window 거래일 기준 5/20 전략과 단순보유의 수익률/MDD."""
+    if len(work) < max(25, window):
+        return {
+            "window_days": window,
+            "strategy_return_pct": None,
+            "buy_hold_return_pct": None,
+            "strategy_mdd_pct": None,
+            "buy_hold_mdd_pct": None,
+        }
+
+    sub = work.iloc[-window:].copy()
+    simulation = simulate_vwap_5_20_strategy(sub, record_signals=False)
+    strategy_curve = simulation["equity_curve"]
+    base_price = float(sub["vwap_1d"].iloc[0])
+    buy_hold_curve = [float(v) / base_price if base_price else 1.0 for v in sub["vwap_1d"]]
+
+    return {
+        "window_days": window,
+        "strategy_return_pct": safe_round((strategy_curve[-1] - 1) * 100 if strategy_curve else None, 2),
+        "buy_hold_return_pct": safe_round((buy_hold_curve[-1] - 1) * 100 if buy_hold_curve else None, 2),
+        "strategy_mdd_pct": safe_round(calc_max_drawdown(strategy_curve), 2),
+        "buy_hold_mdd_pct": safe_round(calc_max_drawdown(buy_hold_curve), 2),
+    }
+
+
+def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
+    """최근 200거래일 기준 VWAP 5/20 전략과 5/200 위치 요약.
+
+    신호: 당일 종가 확정 후 판단. 백테스트 체결: 신호 다음 거래일 1일 VWAP proxy, 편도 수수료 0.03%.
+    `VWAP200`은 최신 5/200 수익률 계산용 기준값이며 상세 차트에는 수평 기준선으로만 표시한다.
+    """
+    if len(df) < LOOKBACK_TRADING_DAYS:
+        return {"available": False, "reason": "insufficient_recent_history"}
+
+    work = prepare_strategy_frame(df)
+    simulation = simulate_vwap_5_20_strategy(work, record_signals=True)
     latest = work.iloc[-1]
+
     v5 = safe_round(latest["vwap_5d"])
     v20 = safe_round(latest["vwap_20d"])
     v200 = safe_round(latest["vwap_200d"])
-    ret_5_20_ratio = None if pd.isna(latest["vwap_5_20_return"]) else float(latest["vwap_5_20_return"])
-    ret_5_200_ratio = None if pd.isna(latest["vwap_5_200_return"]) else float(latest["vwap_5_200_return"])
+    ret_5_20_ratio = None if is_missing(latest["vwap_5_20_return"]) else float(latest["vwap_5_20_return"])
+    ret_5_200_ratio = None if is_missing(latest["vwap_5_200_return"]) else float(latest["vwap_5_200_return"])
     ret_5_20_pct = safe_round(ret_5_20_ratio * 100 if ret_5_20_ratio is not None else None, 2)
     ret_5_200_pct = safe_round(ret_5_200_ratio * 100 if ret_5_200_ratio is not None else None, 2)
-    latest_date = str(work.index[-1].date())
+    latest_date = date_key(work.index[-1])
     buy_now = v5 is not None and v20 is not None and v5 > v20
-    sell_now = v5 is not None and v20 is not None and v5 < v20
-    alignment = "N/A" if None in (v5, v20) else ("5 > 20" if v5 > v20 else "5 < 20" if v5 < v20 else "5 = 20")
+    if v5 is None or v20 is None:
+        alignment = "N/A"
+    elif v5 > v20:
+        alignment = "5 > 20"
+    elif v5 < v20:
+        alignment = "5 < 20"
+    else:
+        alignment = "5 = 20"
     action = "매수" if buy_now else "매도"
-    current_trade_return = pct_change(entry_price, final_vwap_1d) if in_position and entry_price is not None else None
-    holding_days = None
-    if in_position and entry_date:
-        holding_days = len(work.loc[pd.Timestamp(entry_date):])
 
-    strategy_return = (final_equity - 1) * 100
-    bh_return = pct_change(float(work["vwap_1d"].iloc[0]), final_vwap_1d)
+    final_vwap_1d = float(work["vwap_1d"].iloc[-1])
+    current_trade_return = pct_change(simulation["entry_price"], final_vwap_1d) if simulation["in_position"] else None
+    holding_days = None
+    if simulation["in_position"] and simulation["entry_date"]:
+        holding_days = len(work.loc[pd.Timestamp(simulation["entry_date"]):])
+
+    trades = simulation["trades"]
     wins = [t for t in trades if t.get("return_pct") is not None and t["return_pct"] > 0]
-    avg_holding_days = None
-    max_holding_days = None
-    if trades:
-        hold_lengths = []
-        for trade in trades:
-            if trade.get("entry_date") and trade.get("exit_date"):
-                hold_lengths.append(len(work.loc[pd.Timestamp(trade["entry_date"]):pd.Timestamp(trade["exit_date"])]))
-        if hold_lengths:
-            avg_holding_days = sum(hold_lengths) / len(hold_lengths)
-            max_holding_days = max(hold_lengths)
+    avg_holding_days, max_holding_days = calc_trade_holding_stats(trades, work)
+    equity_curve = simulation["equity_curve"]
+    strategy_return = (simulation["final_equity"] - 1) * 100
+    bh_return = pct_change(float(work["vwap_1d"].iloc[0]), final_vwap_1d)
 
     return {
         "available": True,
         "strategy": "VWAP 5/20",
-        "rules": {
-            "buy": "VWAP5 > VWAP20",
-            "sell": "VWAP5 < VWAP20",
-            "execution": "next_day_vwap_1d_proxy",
-            "valuation": "vwap_1d_proxy",
-            "buy_hold_return": "last_vwap_1d_proxy / first_vwap_1d_proxy - 1",
-            "fee_one_way_pct": 0.03,
-        },
+        "rules": dict(STRATEGY_RULES),
         "latest": {
             "date": latest_date,
             "vwap5": v5, "vwap20": v20, "vwap200": v200,
             "vwap_5_20_return_pct": ret_5_20_pct,
             "vwap_5_200_return_pct": ret_5_200_pct,
             "vwap_5_20_momentum_pct": ret_5_20_pct,
-            "alignment": alignment, "in_position": in_position, "action": action,
-            "last_signal": last_signal, "last_signal_date": last_signal_date,
+            "alignment": alignment, "in_position": simulation["in_position"], "action": action,
+            "last_signal": simulation["last_signal"], "last_signal_date": simulation["last_signal_date"],
             "holding_days": holding_days,
-            "entry_date": entry_date, "entry_price": safe_round(entry_price),
+            "entry_date": simulation["entry_date"], "entry_price": safe_round(simulation["entry_price"]),
             "current_trade_return_pct": safe_round(current_trade_return, 2),
         },
         "backtest": {
             "period": f"recent_{LOOKBACK_TRADING_DAYS}_trading_days",
-            "start_date": str(work.index[0].date()), "end_date": latest_date,
+            "start_date": date_key(work.index[0]), "end_date": latest_date,
             "strategy_return_pct": safe_round(strategy_return, 2),
             "buy_hold_return_pct": safe_round(bh_return, 2),
             "max_drawdown_pct": safe_round(calc_max_drawdown(equity_curve), 2),
             "trades": len(trades),
             "win_rate_pct": safe_round(len(wins) / len(trades) * 100 if trades else None, 2),
-            "exposure_pct": safe_round(position_days / len(work) * 100 if len(work) else None, 2),
+            "exposure_pct": safe_round(simulation["position_days"] / len(work) * 100 if len(work) else None, 2),
             "avg_holding_days": safe_round(avg_holding_days, 1),
             "max_holding_days": max_holding_days,
-            "rolling_200d": calc_window_stats(200),
+            "rolling_200d": calc_strategy_window_stats(work, 200),
         },
-        "signals": signals[-80:],
+        "signals": simulation["signals"][-80:],
     }
 
 
@@ -580,7 +632,7 @@ def maybe_patch_krx_today(df: pd.DataFrame, ticker: str, today: date) -> pd.Data
         return df
 
     symbol = ticker.split(".", 1)[0]
-    latest_date = df.index[-1].date()
+    latest_date: date = cast(date, pd.Timestamp(cast(Any, df.index[-1])).date())
     if latest_date >= today:
         return df
 
@@ -649,27 +701,29 @@ def build_vwap_structure(df: pd.DataFrame) -> tuple[list[dict[str, Any]], float 
 def build_recent_records(df: pd.DataFrame) -> list[dict[str, Any]]:
     """최근 200거래일 close 기반 미니 레코드. 현재 UI에서는 보조/호환 필드다."""
     return [
-        {"date": str(dt.date()), "price": round(float(row["close"]), 2)}
+        {"date": date_key(dt), "price": round(float(row["close"]), 2)}
         for dt, row in df.tail(LOOKBACK_TRADING_DAYS).iterrows()
     ]
 
 
-def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any]:
-    """상세 데이터 생성: 최근 200거래일, VWAP line은 5/20만 표시."""
-    work = df.tail(LOOKBACK_TRADING_DAYS).copy()
-    work["vwap_5d"] = compute_proxy_vwap_series(work, window=5)
-    work["vwap_20d"] = compute_proxy_vwap_series(work, window=20)
-    tail = work.copy()
+def build_detail_data(
+    name: str,
+    ticker: str,
+    df: pd.DataFrame,
+    strategy_signal: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """상세 데이터 생성: 최근 200거래일, VWAP line은 5/20과 200 기준선을 표시."""
+    work = prepare_strategy_frame(df)
     ohlcv = []
-    for _i, (dt, row) in enumerate(tail.iterrows()):
+    for _i, (dt, row) in enumerate(work.iterrows()):
         rec: dict[str, Any] = {
-            "date": str(dt.date()),
+            "date": date_key(dt),
             "open": round(float(row["open"]), 4),
             "high": round(float(row["high"]), 4),
             "low": round(float(row["low"]), 4),
             "close": round(float(row["close"]), 4),
             "volume": int(row["volume"]),
-            "vwap_1d": safe_round((float(row["high"]) + float(row["low"]) + float(row["close"])) / 3),
+            "vwap_1d": safe_round(row["vwap_1d"]),
             "vwap_5d": safe_round(row["vwap_5d"]),
             "vwap_20d": safe_round(row["vwap_20d"]),
         }
@@ -689,16 +743,60 @@ def build_detail_data(name: str, ticker: str, df: pd.DataFrame) -> dict[str, Any
         "ticker": ticker,
         "ohlcv": ohlcv,
         "volume_profile": volume_profile,
-        "strategy_signal": build_strategy_signal(df),
+        "strategy_signal": strategy_signal if strategy_signal is not None else build_strategy_signal(df),
         "lookback_trading_days": LOOKBACK_TRADING_DAYS,
         "latest_price": round(float(df["close"].iloc[-1]), 2),
     }
 
 
+def attach_krx_data_source(target: dict[str, Any], df: pd.DataFrame) -> None:
+    """Naver 당일 보강 이력을 trend 메타데이터에 일관되게 부착."""
+    if df.attrs.get("krx_today_patched"):
+        target["data_source"] = {
+            "latest_krx_daily": df.attrs.get("krx_today_source"),
+            "latest_krx_date": df.attrs.get("krx_today_date"),
+        }
+
+
+def build_detail_meta(run_time: str, asset_result: dict[str, Any]) -> dict[str, Any]:
+    """detail_data의 기존 _meta KRX 키 계약을 보존한다."""
+    meta: dict[str, Any] = {"updated_at": run_time}
+    data_source = asset_result.get("data_source")
+    if data_source:
+        # Preserve the historical detail _meta contract while sourcing the
+        # values from the shared OHLCV snapshot metadata used for trend.
+        meta.update({
+            "krx_today_source": data_source.get("latest_krx_daily"),
+            "krx_today_date": data_source.get("latest_krx_date"),
+        })
+    return meta
+
+
+def build_asset_outputs(name: str, ticker: str, group: str, df: pd.DataFrame) -> tuple[dict[str, Any], dict[str, Any]]:
+    """동일한 OHLCV 스냅샷에서 trend/detail 결과를 함께 생성한다."""
+    df = df.tail(LOOKBACK_TRADING_DAYS).copy()
+    vwap_structure, _ = build_vwap_structure(df)
+    records = build_recent_records(df)
+    strategy_signal = build_strategy_signal(df)
+
+    asset_result = {
+        "ticker": ticker,
+        "group": group,
+        "records": records,
+        "vwap_structure": vwap_structure,
+        "strategy_signal": strategy_signal,
+        "lookback_trading_days": LOOKBACK_TRADING_DAYS,
+        "latest_price": round(float(df["close"].iloc[-1]), 2),
+    }
+    attach_krx_data_source(asset_result, df)
+    detail_result = build_detail_data(name, ticker, df, strategy_signal=strategy_signal)
+    return asset_result, detail_result
+
+
 def process_asset(
     name: str, ticker: str, group: str, end_date: str
-) -> dict[str, Any] | None:
-    """단일 종목 처리. 실패 시 None 반환."""
+) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    """단일 종목 처리. 다운로드는 한 번만 수행하고 trend/detail을 함께 반환한다."""
     print(f"  {name} ({ticker})...")
     try:
         df = download_ohlcv(ticker, end_date)
@@ -710,28 +808,10 @@ def process_asset(
         print(f"    [WARN] {name}: 데이터 없음")
         return None
 
-    df = df.tail(LOOKBACK_TRADING_DAYS).copy()
-    vwap_structure, _ = build_vwap_structure(df)
-    records = build_recent_records(df)
-
-    s = {item["window"]: item for item in vwap_structure}
+    asset_result, detail_result = build_asset_outputs(name, ticker, group, df)
+    s = {item["window"]: item for item in asset_result["vwap_structure"]}
     print(f"    5/200={s.get(5, {}).get('norm')} / 20/200={s.get(20, {}).get('norm')}")
-
-    asset_result = {
-        "ticker": ticker,
-        "group": group,
-        "records": records,
-        "vwap_structure": vwap_structure,
-        "strategy_signal": build_strategy_signal(df),
-        "lookback_trading_days": LOOKBACK_TRADING_DAYS,
-        "latest_price": round(float(df["close"].iloc[-1]), 2),
-    }
-    if df.attrs.get("krx_today_patched"):
-        asset_result["data_source"] = {
-            "latest_krx_daily": df.attrs.get("krx_today_source"),
-            "latest_krx_date": df.attrs.get("krx_today_date"),
-        }
-    return asset_result
+    return asset_result, detail_result
 
 
 # ──────────────────────────────────────────────────────────
@@ -742,45 +822,40 @@ def main() -> None:
     end_date = datetime.now(KST).strftime("%Y-%m-%d")
 
     result: dict[str, Any] = {"_meta": {"updated_at": run_time, "lookback_trading_days": LOOKBACK_TRADING_DAYS}}
+    detail_results: dict[str, dict[str, Any]] = {}
     failed: list[str] = []
 
     for name, ticker, group in ASSETS:
-        asset_data = process_asset(name, ticker, group, end_date)
-        if asset_data is not None:
+        outputs = process_asset(name, ticker, group, end_date)
+        if outputs is not None:
+            asset_data, detail_data = outputs
             result[name] = asset_data
+            detail_results[ticker] = detail_data
         else:
             failed.append(name)
 
+    krx_patched_assets = [
+        name for name, data in result.items()
+        if not name.startswith("_") and isinstance(data, dict) and data.get("data_source", {}).get("latest_krx_daily") == "naver_siseJson"
+    ]
+    if krx_patched_assets:
+        result["_meta"].update({
+            "krx_today_source": "naver_siseJson",
+            "krx_today_date": end_date,
+            "krx_today_patched_count": len(krx_patched_assets),
+        })
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
-        krx_patched_assets = [
-            name for name, data in result.items()
-            if not name.startswith("_") and isinstance(data, dict) and data.get("data_source", {}).get("latest_krx_daily") == "naver_siseJson"
-        ]
-        if krx_patched_assets:
-            result["_meta"].update({
-                "krx_today_source": "naver_siseJson",
-                "krx_today_date": end_date,
-                "krx_today_patched_count": len(krx_patched_assets),
-            })
         json.dump(result, f, ensure_ascii=False, allow_nan=False)
 
     # detail_data/ 생성
     os.makedirs(DETAIL_DIR, exist_ok=True)
     print("\n📊 detail_data 생성 중...")
     for name, ticker, _group in ASSETS:
-        if name in failed or name not in result:
+        if name in failed or ticker not in detail_results:
             continue
         try:
-            df = download_ohlcv(ticker, end_date)
-            if df.empty:
-                continue
-            detail = build_detail_data(name, ticker, df)
-            detail["_meta"] = {"updated_at": run_time}
-            if df.attrs.get("krx_today_patched"):
-                detail["_meta"].update({
-                    "krx_today_source": df.attrs.get("krx_today_source"),
-                    "krx_today_date": df.attrs.get("krx_today_date"),
-                })
+            detail = detail_results[ticker]
+            detail["_meta"] = build_detail_meta(run_time, result.get(name, {}))
             out_path = os.path.join(DETAIL_DIR, f"{ticker}.json")
             with open(out_path, "w", encoding="utf-8") as f:
                 json.dump(detail, f, ensure_ascii=False, allow_nan=False)
