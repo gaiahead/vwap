@@ -1,4 +1,4 @@
-const DATA_VERSION = 'refactor-20260602';
+const DATA_VERSION = 'add-mrvl-20260603';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -78,6 +78,7 @@ const DETAIL_NAME_OVERRIDES = {
   TQQQ: 'ProShares UltraPro QQQ',
   SOXL: 'Direxion Daily Semiconductor Bull 3X Shares',
   TECL: 'Direxion Daily Technology Bull 3X Shares',
+  MRVL: 'Marvell Technology, Inc.',
   ASML: 'ASML Holding N.V.',
   TCAI: 'Tortoise AI Infrastructure ETF',
   PANW: 'Palo Alto Networks, Inc.',

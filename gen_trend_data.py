@@ -94,6 +94,7 @@ ASSETS: list[AssetTuple] = [
     ("KODEX 미국반도체",              "390390.KS", "g3"),
     ("ACE 글로벌반도체TOP4 Plus",     "446770.KS", "g3"),
     ("엔비디아",                      "NVDA",      "g3"),
+    ("Marvell",                     "MRVL",      "g3"),
     ("ASML",                        "ASML",      "g3"),
     ("TSMC",                        "TSM",       "g3"),
     ("Dell Technologies",           "DELL",      "g3"),
