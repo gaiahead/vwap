@@ -41,13 +41,13 @@ def test_detail_panels_vp_tabs_and_price_datasets_use_5_20_200_design():
     assert dataset_labels[:6] == ["BUY", "SELL", "VWAP 5", "VWAP 20", "VWAP 200", "Close"]
 
 
-def test_cache_bust_version_is_add_mrvl_20260603_everywhere():
+def test_cache_bust_version_is_data_20260604_2208_everywhere():
     html = read("index.html")
     app = read("app.js")
 
-    assert 'style.css?v=add-mrvl-20260603' in html
-    assert 'app.js?v=add-mrvl-20260603' in html
-    assert "const DATA_VERSION = 'add-mrvl-20260603'" in app
+    assert 'style.css?v=data-20260604-2208' in html
+    assert 'app.js?v=data-20260604-2208' in html
+    assert "const DATA_VERSION = 'data-20260604-2208'" in app
 
 
 def test_old_matrix_vms_and_strategy_card_ui_are_not_reintroduced():
