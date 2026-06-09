@@ -626,7 +626,13 @@ def fetch_naver_daily_ohlcv(symbol: str, target_date: date) -> dict[str, Any] | 
 
 
 def maybe_patch_krx_today(df: pd.DataFrame, ticker: str, today: date) -> pd.DataFrame:
-    """Yahoo가 당일 KRX 데이터를 아직 주지 않을 때 Naver 일봉으로 최신 행을 보강한다."""
+    """당일 KRX 행은 Naver 일봉으로 보강/덮어쓴다.
+
+    Yahoo/yfinance는 장 마감 직후 같은 날짜 행을 주더라도 KRX ETF/종목의
+    OHLCV가 공식 Naver 일봉과 다른 경우가 있다. 한국 장 마감 후 수동 갱신은
+    당일 체결을 반영하는 용도이므로, KRX 티커는 Naver 당일 행이 있으면 기존
+    같은 날짜 행까지 덮어써서 오늘자 계산 기준을 공식 일봉에 맞춘다.
+    """
     if not (ticker.endswith(".KS") or ticker.endswith(".KQ")):
         return df
     if df.empty:
@@ -634,7 +640,7 @@ def maybe_patch_krx_today(df: pd.DataFrame, ticker: str, today: date) -> pd.Data
 
     symbol = ticker.split(".", 1)[0]
     latest_date: date = cast(date, pd.Timestamp(cast(Any, df.index[-1])).date())
-    if latest_date >= today:
+    if latest_date > today:
         return df
 
     try:

@@ -45,9 +45,9 @@ def test_cache_bust_version_is_data_20260604_2208_everywhere():
     html = read("index.html")
     app = read("app.js")
 
-    assert 'style.css?v=data-20260608-1538' in html
-    assert 'app.js?v=data-20260608-1538' in html
-    assert "const DATA_VERSION = 'data-20260608-1538'" in app
+    assert 'style.css?v=data-20260609-1835' in html
+    assert 'app.js?v=data-20260609-1835' in html
+    assert "const DATA_VERSION = 'data-20260609-1835'" in app
 
 
 def test_old_matrix_vms_and_strategy_card_ui_are_not_reintroduced():

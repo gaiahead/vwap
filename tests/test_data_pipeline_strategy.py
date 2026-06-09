@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+from datetime import date
 from typing import Iterable
 
 import pandas as pd
@@ -120,3 +121,35 @@ def test_krx_patched_snapshot_preserves_detail_meta_keys():
         "krx_today_date": "2026-06-03",
     }
     json.dumps(detail, allow_nan=False)
+
+
+def test_krx_today_patch_overwrites_existing_same_day_yfinance_row(monkeypatch):
+    today = date(2026, 6, 8)
+    df = make_ohlcv([100, 110, 120], start="2026-06-04")
+    df.index = pd.to_datetime(["2026-06-04", "2026-06-05", "2026-06-08"])
+
+    def fake_fetch(symbol, target_date):
+        assert symbol == "069500"
+        assert target_date == today
+        return {
+            "date": target_date,
+            "open": 119015.0,
+            "high": 125665.0,
+            "low": 117930.0,
+            "close": 119560.0,
+            "volume": 25087331,
+        }
+
+    monkeypatch.setattr(gen, "fetch_naver_daily_ohlcv", fake_fetch)
+
+    patched = gen.maybe_patch_krx_today(df, "069500.KS", today)
+
+    latest = patched.iloc[-1]
+    assert str(patched.index[-1])[:10] == "2026-06-08"
+    assert latest["open"] == 119015.0
+    assert latest["high"] == 125665.0
+    assert latest["low"] == 117930.0
+    assert latest["close"] == 119560.0
+    assert latest["volume"] == 25087331
+    assert patched.attrs["krx_today_patched"] is True
+    assert patched.attrs["krx_today_source"] == "naver_siseJson"
