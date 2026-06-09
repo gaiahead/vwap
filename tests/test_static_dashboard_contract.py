@@ -41,13 +41,18 @@ def test_detail_panels_vp_tabs_and_price_datasets_use_5_20_200_design():
     assert dataset_labels[:6] == ["BUY", "SELL", "VWAP 5", "VWAP 20", "VWAP 200", "Close"]
 
 
-def test_cache_bust_version_is_data_20260604_2208_everywhere():
+def test_cache_bust_version_is_consistent_everywhere():
     html = read("index.html")
     app = read("app.js")
 
-    assert 'style.css?v=data-20260609-1835' in html
-    assert 'app.js?v=data-20260609-1835' in html
-    assert "const DATA_VERSION = 'data-20260609-1835'" in app
+    style_match = re.search(r'style\.css\?v=(data-\d{8}-\d{4})', html)
+    script_match = re.search(r'app\.js\?v=(data-\d{8}-\d{4})', html)
+    app_match = re.search(r"const DATA_VERSION = '(data-\d{8}-\d{4})'", app)
+
+    assert style_match is not None
+    assert script_match is not None
+    assert app_match is not None
+    assert style_match.group(1) == script_match.group(1) == app_match.group(1)
 
 
 def test_old_matrix_vms_and_strategy_card_ui_are_not_reintroduced():
