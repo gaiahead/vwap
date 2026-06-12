@@ -33,6 +33,7 @@ ASSETS: list[AssetTuple] = [
     ("SPY",                        "SPY",       "g1"),
     ("QQQ",                        "QQQ",       "g1"),
     ("SCHD",                       "SCHD",      "g1"),
+    ("TIGER 미국배당다우존스",         "458730.KS", "g1"),
     ("XLE",                        "XLE",       "g1"),
     ("GUNR",                       "GUNR",      "g1"),
     ("IXC",                        "IXC",       "g1"),  # 글로벌 에너지
