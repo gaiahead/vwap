@@ -69,10 +69,10 @@ def test_strategy_signals_use_confirmed_previous_day_and_next_day_vwap_execution
 def test_build_asset_outputs_keeps_trend_and_detail_strategy_contract_in_sync():
     df = make_ohlcv([100] * 35 + [130] * 45 + [82] * 55 + [96] * 65)
 
-    trend, detail = gen.build_asset_outputs("테스트", "TEST", "g1", df)
+    trend, detail = gen.build_asset_outputs("테스트", "TEST", df)
 
     assert trend["ticker"] == detail["ticker"] == "TEST"
-    assert trend["group"] == "g1"
+    assert "group" not in trend
     assert trend["strategy_signal"] == detail["strategy_signal"]
     assert trend["lookback_trading_days"] == detail["lookback_trading_days"] == gen.LOOKBACK_TRADING_DAYS
     assert trend["latest_price"] == detail["latest_price"] == round(float(df["close"].iloc[-1]), 2)
@@ -88,7 +88,7 @@ def test_zero_volume_windows_emit_none_and_json_remains_strict():
     assert work["vwap_20d"].iloc[-1] is None
     assert work["vwap_200d"].iloc[-1] is None
 
-    trend, detail = gen.build_asset_outputs("무거래 테스트", "ZERO", "g1", df)
+    trend, detail = gen.build_asset_outputs("무거래 테스트", "ZERO", df)
     latest = trend["strategy_signal"]["latest"]
     assert latest["vwap5"] is None
     assert latest["vwap20"] is None
@@ -108,7 +108,7 @@ def test_krx_patched_snapshot_preserves_detail_meta_keys():
     df.attrs["krx_today_source"] = "naver_siseJson"
     df.attrs["krx_today_date"] = "2026-06-03"
 
-    trend, detail = gen.build_asset_outputs("KRX 테스트", "000000.KS", "g4", df)
+    trend, detail = gen.build_asset_outputs("KRX 테스트", "000000.KS", df)
     assert trend["data_source"] == {
         "latest_krx_daily": "naver_siseJson",
         "latest_krx_date": "2026-06-03",

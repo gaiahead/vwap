@@ -23,152 +23,152 @@ from scipy.stats import norm
 # ──────────────────────────────────────────────────────────
 # 종목 설정
 # ──────────────────────────────────────────────────────────
-AssetTuple = tuple[str, str, str]  # (표시명, 티커, 그룹)
+AssetTuple = tuple[str, str]  # (표시명, 티커)
 
 ASSETS: list[AssetTuple] = [
-    # 그룹 1: 핵심 매크로 / 시장 폭 / 크레딧
-    ("TLT",                        "TLT",       "g1"),
-    ("GLD",                        "GLD",       "g1"),
-    ("IBIT",                       "IBIT",      "g1"),
-    ("SPY",                        "SPY",       "g1"),
-    ("QQQ",                        "QQQ",       "g1"),
-    ("SCHD",                       "SCHD",      "g1"),
-    ("TIGER 미국배당다우존스",         "458730.KS", "g1"),
-    ("XLE",                        "XLE",       "g1"),
-    ("GUNR",                       "GUNR",      "g1"),
-    ("IXC",                        "IXC",       "g1"),  # 글로벌 에너지
-    ("XOP",                        "XOP",       "g1"),  # 미국 석유·가스 E&P
-    ("OIH",                        "OIH",       "g1"),  # 오일서비스
-    ("Exxon Mobil",                "XOM",       "g1"),
-    ("Shell",                      "SHEL",      "g1"),
-    ("SLB",                        "SLB",       "g1"),
-    ("UPRO",                       "UPRO",      "g1"),  # S&P500 3배 레버리지
-    ("RSP",                        "RSP",       "g1"),  # S&P500 동일가중
-    ("IWM",                        "IWM",       "g1"),  # 러셀2000
-    ("IEF",                        "IEF",       "g1"),  # 미국 7-10년 국채
-    ("SHY",                        "SHY",       "g1"),  # 미국 단기국채
-    ("TIP",                        "TIP",       "g1"),  # 물가연동채
-    ("HYG",                        "HYG",       "g1"),  # 하이일드 채권
-    ("LQD",                        "LQD",       "g1"),  # 투자등급 회사채
-    ("UUP",                        "UUP",       "g1"),  # 달러 인덱스 ETF
-    ("FXY",                        "FXY",       "g1"),  # 엔화 ETF
+    # 핵심 매크로 / 시장 폭 / 크레딧
+    ("TLT",                        "TLT"),
+    ("GLD",                        "GLD"),
+    ("IBIT",                       "IBIT"),
+    ("SPY",                        "SPY"),
+    ("QQQ",                        "QQQ"),
+    ("SCHD",                       "SCHD"),
+    ("TIGER 미국배당다우존스",         "458730.KS"),
+    ("XLE",                        "XLE"),
+    ("GUNR",                       "GUNR"),
+    ("IXC",                        "IXC"),  # 글로벌 에너지
+    ("XOP",                        "XOP"),  # 미국 석유·가스 E&P
+    ("OIH",                        "OIH"),  # 오일서비스
+    ("Exxon Mobil",                "XOM"),
+    ("Shell",                      "SHEL"),
+    ("SLB",                        "SLB"),
+    ("UPRO",                       "UPRO"),  # S&P500 3배 레버리지
+    ("RSP",                        "RSP"),  # S&P500 동일가중
+    ("IWM",                        "IWM"),  # 러셀2000
+    ("IEF",                        "IEF"),  # 미국 7-10년 국채
+    ("SHY",                        "SHY"),  # 미국 단기국채
+    ("TIP",                        "TIP"),  # 물가연동채
+    ("HYG",                        "HYG"),  # 하이일드 채권
+    ("LQD",                        "LQD"),  # 투자등급 회사채
+    ("UUP",                        "UUP"),  # 달러 인덱스 ETF
+    ("FXY",                        "FXY"),  # 엔화 ETF
 
-    # 그룹 2: 미국 섹터 / 원자재 / 글로벌 지역
-    ("XLK",                        "XLK",       "g2"),  # 기술
-    ("ITA",                        "ITA",       "g2"),  # 미국 대형 방산 ETF
-    ("XAR",                        "XAR",       "g2"),  # 미국 중소형 방산 ETF
-    ("Lockheed Martin",            "LMT",       "g2"),
-    ("RTX",                        "RTX",       "g2"),
-    ("Rheinmetall",                "RHM.DE",    "g2"),
-    ("BAE Systems",                "BA.L",      "g2"),
-    ("Saab",                       "SAAB-B.ST", "g2"),
-    ("XLF",                        "XLF",       "g2"),  # 금융
-    ("XLV",                        "XLV",       "g2"),  # 헬스케어
-    ("XLI",                        "XLI",       "g2"),  # 산업재
-    ("XLY",                        "XLY",       "g2"),  # 경기소비재
-    ("XLP",                        "XLP",       "g2"),  # 필수소비재
-    ("XLU",                        "XLU",       "g2"),  # 유틸리티
-    ("XLRE",                       "XLRE",      "g2"),  # 부동산
-    ("XLB",                        "XLB",       "g2"),  # 소재
-    ("USO",                        "USO",       "g2"),  # 원유
-    ("UCO",                        "UCO",       "g2"),  # 원유 2배 레버리지
-    ("NUGT",                       "NUGT",      "g2"),  # 금광주 2배 레버리지
-    ("CPER",                       "CPER",      "g2"),  # 구리
-    ("COPX",                       "COPX",      "g2"),  # 구리 광산
-    ("DBA",                        "DBA",       "g2"),  # 농산물
-    ("URA",                        "URA",       "g2"),  # 우라늄/원전
-    ("SLV",                        "SLV",       "g2"),  # 은
-    ("EFA",                        "EFA",       "g2"),  # 선진국 ex-US
-    ("EEM",                        "EEM",       "g2"),  # 신흥국
-    ("EWJ",                        "EWJ",       "g2"),  # 일본
-    ("FXI",                        "FXI",       "g2"),  # 중국 대형주
-    ("INDA",                       "INDA",      "g2"),  # 인도
-    ("EWT",                        "EWT",       "g2"),  # 대만
+    # 미국 섹터 / 원자재 / 글로벌 지역
+    ("XLK",                        "XLK"),  # 기술
+    ("ITA",                        "ITA"),  # 미국 대형 방산 ETF
+    ("XAR",                        "XAR"),  # 미국 중소형 방산 ETF
+    ("Lockheed Martin",            "LMT"),
+    ("RTX",                        "RTX"),
+    ("Rheinmetall",                "RHM.DE"),
+    ("BAE Systems",                "BA.L"),
+    ("Saab",                       "SAAB-B.ST"),
+    ("XLF",                        "XLF"),  # 금융
+    ("XLV",                        "XLV"),  # 헬스케어
+    ("XLI",                        "XLI"),  # 산업재
+    ("XLY",                        "XLY"),  # 경기소비재
+    ("XLP",                        "XLP"),  # 필수소비재
+    ("XLU",                        "XLU"),  # 유틸리티
+    ("XLRE",                       "XLRE"),  # 부동산
+    ("XLB",                        "XLB"),  # 소재
+    ("USO",                        "USO"),  # 원유
+    ("UCO",                        "UCO"),  # 원유 2배 레버리지
+    ("NUGT",                       "NUGT"),  # 금광주 2배 레버리지
+    ("CPER",                       "CPER"),  # 구리
+    ("COPX",                       "COPX"),  # 구리 광산
+    ("DBA",                        "DBA"),  # 농산물
+    ("URA",                        "URA"),  # 우라늄/원전
+    ("SLV",                        "SLV"),  # 은
+    ("EFA",                        "EFA"),  # 선진국 ex-US
+    ("EEM",                        "EEM"),  # 신흥국
+    ("EWJ",                        "EWJ"),  # 일본
+    ("FXI",                        "FXI"),  # 중국 대형주
+    ("INDA",                       "INDA"),  # 인도
+    ("EWT",                        "EWT"),  # 대만
 
-    # 그룹 3: 미국/글로벌 AI·기술주와 관련 ETF
-    ("TQQQ",                       "TQQQ",      "g3"),  # 나스닥100 3배 레버리지
-    ("SOXL",                       "SOXL",      "g3"),  # 반도체 3배 레버리지
-    ("TECL",                       "TECL",      "g3"),  # 기술섹터 3배 레버리지
-    ("SOL 미국테크TOP10",            "481190.KS", "g3"),
-    ("TIME 글로벌AI인공지능액티브",     "456600.KS", "g3"),
-    ("TIGER 미국필라델피아반도체나스닥", "381180.KS", "g3"),
-    ("KODEX 미국반도체",              "390390.KS", "g3"),
-    ("ACE 글로벌반도체TOP4 Plus",     "446770.KS", "g3"),
-    ("엔비디아",                      "NVDA",      "g3"),
-    ("Marvell",                     "MRVL",      "g3"),
-    ("ASML",                        "ASML",      "g3"),
-    ("TSMC",                        "TSM",       "g3"),
-    ("Dell Technologies",           "DELL",      "g3"),
-    ("TCAI",                         "TCAI",      "g3"),
-    ("Snowflake",                    "SNOW",      "g3"),
-    ("PANW",                         "PANW",      "g3"),
-    ("FTNT",                         "FTNT",      "g3"),
-    ("DDOG",                         "DDOG",      "g3"),
-    ("CRWD",                         "CRWD",      "g3"),
-    ("알파벳",                        "GOOGL",     "g3"),
-    ("애플",                          "AAPL",      "g3"),
-    ("마이크로소프트",                 "MSFT",      "g3"),
-    ("아마존",                        "AMZN",      "g3"),
-    ("메타",                          "META",      "g3"),
-    ("브로드컴",                      "AVGO",      "g3"),
-    ("테슬라",                        "TSLA",      "g3"),
-    ("넷플릭스",                      "NFLX",      "g3"),
-    ("팔란티어",                      "PLTR",      "g3"),
-    ("시스코",                        "CSCO",      "g3"),
+    # 미국/글로벌 AI·기술주와 관련 ETF
+    ("TQQQ",                       "TQQQ"),  # 나스닥100 3배 레버리지
+    ("SOXL",                       "SOXL"),  # 반도체 3배 레버리지
+    ("TECL",                       "TECL"),  # 기술섹터 3배 레버리지
+    ("SOL 미국테크TOP10",            "481190.KS"),
+    ("TIME 글로벌AI인공지능액티브",     "456600.KS"),
+    ("TIGER 미국필라델피아반도체나스닥", "381180.KS"),
+    ("KODEX 미국반도체",              "390390.KS"),
+    ("ACE 글로벌반도체TOP4 Plus",     "446770.KS"),
+    ("엔비디아",                      "NVDA"),
+    ("Marvell",                     "MRVL"),
+    ("ASML",                        "ASML"),
+    ("TSMC",                        "TSM"),
+    ("Dell Technologies",           "DELL"),
+    ("TCAI",                         "TCAI"),
+    ("Snowflake",                    "SNOW"),
+    ("PANW",                         "PANW"),
+    ("FTNT",                         "FTNT"),
+    ("DDOG",                         "DDOG"),
+    ("CRWD",                         "CRWD"),
+    ("알파벳",                        "GOOGL"),
+    ("애플",                          "AAPL"),
+    ("마이크로소프트",                 "MSFT"),
+    ("아마존",                        "AMZN"),
+    ("메타",                          "META"),
+    ("브로드컴",                      "AVGO"),
+    ("테슬라",                        "TSLA"),
+    ("넷플릭스",                      "NFLX"),
+    ("팔란티어",                      "PLTR"),
+    ("시스코",                        "CSCO"),
 
-    # 그룹 4: 한국 대표지수 / 반도체
-    ("KODEX 200",                    "069500.KS", "g4"),
-    ("KODEX 200 레버리지",             "122630.KS", "g4"),
-    ("KODEX 코스닥150",               "229200.KS", "g4"),
-    ("KODEX 코스닥150 레버리지",        "233740.KS", "g4"),
-    ("KODEX 반도체",                  "091160.KS", "g4"),
-    ("KODEX AI반도체TOP2플러스",       "395160.KS", "g4"),
-    ("KODEX AI반도체핵심장비",          "471990.KS", "g4"),
-    ("ACE AI반도체TOP3+",             "469150.KS", "g4"),
-    ("SOL 반도체전공정",               "475300.KS", "g4"),
-    ("SOL 반도체후공정",               "475310.KS", "g4"),
-    ("SOL AI반도체소부장",             "455850.KS", "g4"),
-    ("KODEX AI전력핵심설비",            "487240.KS", "g5"),
-    ("TIGER 반도체TOP10",             "396500.KS", "g4"),
-    ("삼성전자",                      "005930.KS", "g4"),
-    ("삼성전기",                      "009150.KS", "g4"),
-    ("SK하이닉스",                    "000660.KS", "g4"),
-    ("한미반도체",                    "042700.KS", "g4"),
-    ("리노공업",                      "058470.KS", "g4"),
+    # 한국 대표지수 / 반도체
+    ("KODEX 200",                    "069500.KS"),
+    ("KODEX 200 레버리지",             "122630.KS"),
+    ("KODEX 코스닥150",               "229200.KS"),
+    ("KODEX 코스닥150 레버리지",        "233740.KS"),
+    ("KODEX 반도체",                  "091160.KS"),
+    ("KODEX AI반도체TOP2플러스",       "395160.KS"),
+    ("KODEX AI반도체핵심장비",          "471990.KS"),
+    ("ACE AI반도체TOP3+",             "469150.KS"),
+    ("SOL 반도체전공정",               "475300.KS"),
+    ("SOL 반도체후공정",               "475310.KS"),
+    ("SOL AI반도체소부장",             "455850.KS"),
+    ("KODEX AI전력핵심설비",            "487240.KS"),
+    ("TIGER 반도체TOP10",             "396500.KS"),
+    ("삼성전자",                      "005930.KS"),
+    ("삼성전기",                      "009150.KS"),
+    ("SK하이닉스",                    "000660.KS"),
+    ("한미반도체",                    "042700.KS"),
+    ("리노공업",                      "058470.KS"),
 
-    # 그룹 5: 한국 주요 섹터 / 테마
-    ("KIWOOM 미국원유에너지기업",      "474800.KS", "g5"),
-    ("KoAct 미국천연가스인프라액티브", "497780.KS", "g5"),
-    ("RISE 미국천연가스밸류체인",      "0036Z0.KS", "g5"),
-    ("PLUS 글로벌희토류&전략자원생산기업", "415920.KS", "g5"),
-    ("PLUS 태양광&ESS",              "389260.KS", "g5"),
-    ("한화솔루션",                    "009830.KS", "g5"),
-    ("OCI홀딩스",                    "010060.KS", "g5"),
-    ("HD현대에너지솔루션",              "322000.KS", "g5"),
-    ("씨에스윈드",                    "112610.KS", "g5"),
-    ("씨에스베어링",                  "297090.KQ", "g5"),
-    ("SK이터닉스",                   "475150.KS", "g5"),
-    ("KODEX 자동차",                  "091180.KS", "g5"),
-    ("KODEX 은행",                    "091170.KS", "g5"),
-    ("KODEX 2차전지산업",              "305720.KS", "g5"),
-    ("KODEX 헬스케어",                "266420.KS", "g5"),
-    ("KODEX 조선TOP10",               "0115D0.KS", "g5"),
-    ("HD현대중공업",                   "329180.KS", "g5"),
-    ("삼성중공업",                     "010140.KS", "g5"),
-    ("한화오션",                       "042660.KS", "g5"),
-    ("KODEX 방산TOP10",               "0080G0.KS", "g5"),
-    ("한화에어로스페이스",              "012450.KS", "g5"),
-    ("현대로템",                       "064350.KS", "g5"),
-    ("LIG디펜스&에어로스페이스",       "079550.KS", "g5"),
-    ("한국항공우주",                    "047810.KS", "g5"),
-    ("한화시스템",                    "272210.KS", "g5"),
-    ("풍산",                          "103140.KS", "g5"),
-    ("휴니드",                        "005870.KS", "g5"),
-    ("KODEX 금융고배당TOP10",          "498410.KS", "g5"),
-    ("TIGER 소프트웨어",               "157490.KS", "g5"),
-    ("KODEX IT",                      "266370.KS", "g5"),
-    ("TIGER 미디어컨텐츠",             "228810.KS", "g5"),
-    ("KODEX 로봇액티브",               "445290.KS", "g5"),
+    # 한국 주요 섹터 / 테마
+    ("KIWOOM 미국원유에너지기업",      "474800.KS"),
+    ("KoAct 미국천연가스인프라액티브", "497780.KS"),
+    ("RISE 미국천연가스밸류체인",      "0036Z0.KS"),
+    ("PLUS 글로벌희토류&전략자원생산기업", "415920.KS"),
+    ("PLUS 태양광&ESS",              "389260.KS"),
+    ("한화솔루션",                    "009830.KS"),
+    ("OCI홀딩스",                    "010060.KS"),
+    ("HD현대에너지솔루션",              "322000.KS"),
+    ("씨에스윈드",                    "112610.KS"),
+    ("씨에스베어링",                  "297090.KQ"),
+    ("SK이터닉스",                   "475150.KS"),
+    ("KODEX 자동차",                  "091180.KS"),
+    ("KODEX 은행",                    "091170.KS"),
+    ("KODEX 2차전지산업",              "305720.KS"),
+    ("KODEX 헬스케어",                "266420.KS"),
+    ("KODEX 조선TOP10",               "0115D0.KS"),
+    ("HD현대중공업",                   "329180.KS"),
+    ("삼성중공업",                     "010140.KS"),
+    ("한화오션",                       "042660.KS"),
+    ("KODEX 방산TOP10",               "0080G0.KS"),
+    ("한화에어로스페이스",              "012450.KS"),
+    ("현대로템",                       "064350.KS"),
+    ("LIG디펜스&에어로스페이스",       "079550.KS"),
+    ("한국항공우주",                    "047810.KS"),
+    ("한화시스템",                    "272210.KS"),
+    ("풍산",                          "103140.KS"),
+    ("휴니드",                        "005870.KS"),
+    ("KODEX 금융고배당TOP10",          "498410.KS"),
+    ("TIGER 소프트웨어",               "157490.KS"),
+    ("KODEX IT",                      "266370.KS"),
+    ("TIGER 미디어컨텐츠",             "228810.KS"),
+    ("KODEX 로봇액티브",               "445290.KS"),
 ]
 WINDOWS: list[int] = [5, 20, 200]  # 상단 판단/상세 VP용 핵심 VWAP
 LOOKBACK_TRADING_DAYS: int = 200
@@ -785,7 +785,7 @@ def build_detail_meta(run_time: str, asset_result: dict[str, Any]) -> dict[str, 
     return meta
 
 
-def build_asset_outputs(name: str, ticker: str, group: str, df: pd.DataFrame) -> tuple[dict[str, Any], dict[str, Any]]:
+def build_asset_outputs(name: str, ticker: str, df: pd.DataFrame) -> tuple[dict[str, Any], dict[str, Any]]:
     """동일한 OHLCV 스냅샷에서 trend/detail 결과를 함께 생성한다."""
     df = df.tail(LOOKBACK_TRADING_DAYS).copy()
     vwap_structure, _ = build_vwap_structure(df)
@@ -794,7 +794,6 @@ def build_asset_outputs(name: str, ticker: str, group: str, df: pd.DataFrame) ->
 
     asset_result = {
         "ticker": ticker,
-        "group": group,
         "records": records,
         "vwap_structure": vwap_structure,
         "strategy_signal": strategy_signal,
@@ -807,7 +806,7 @@ def build_asset_outputs(name: str, ticker: str, group: str, df: pd.DataFrame) ->
 
 
 def process_asset(
-    name: str, ticker: str, group: str, end_date: str
+    name: str, ticker: str, end_date: str
 ) -> tuple[dict[str, Any], dict[str, Any]] | None:
     """단일 종목 처리. 다운로드는 한 번만 수행하고 trend/detail을 함께 반환한다."""
     print(f"  {name} ({ticker})...")
@@ -821,7 +820,7 @@ def process_asset(
         print(f"    [WARN] {name}: 데이터 없음")
         return None
 
-    asset_result, detail_result = build_asset_outputs(name, ticker, group, df)
+    asset_result, detail_result = build_asset_outputs(name, ticker, df)
     s = {item["window"]: item for item in asset_result["vwap_structure"]}
     print(f"    5/200={s.get(5, {}).get('norm')} / 20/200={s.get(20, {}).get('norm')}")
     return asset_result, detail_result
@@ -838,8 +837,8 @@ def main() -> None:
     detail_results: dict[str, dict[str, Any]] = {}
     failed: list[str] = []
 
-    for name, ticker, group in ASSETS:
-        outputs = process_asset(name, ticker, group, end_date)
+    for name, ticker in ASSETS:
+        outputs = process_asset(name, ticker, end_date)
         if outputs is not None:
             asset_data, detail_data = outputs
             result[name] = asset_data
@@ -863,7 +862,7 @@ def main() -> None:
     # detail_data/ 생성
     os.makedirs(DETAIL_DIR, exist_ok=True)
     print("\n📊 detail_data 생성 중...")
-    for name, ticker, _group in ASSETS:
+    for name, ticker in ASSETS:
         if name in failed or ticker not in detail_results:
             continue
         try:
