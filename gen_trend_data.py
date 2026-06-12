@@ -33,7 +33,7 @@ ASSETS: list[AssetTuple] = [
     ("SPY",                        "SPY",       "g1"),
     ("QQQ",                        "QQQ",       "g1"),
     ("SCHD",                       "SCHD",      "g1"),
-    ("TIGER 미국배당다우존스",         "458730.KS", "g1"),
+    ("SOL 반도체전공정",               "475300.KS", "g1"),
     ("XLE",                        "XLE",       "g1"),
     ("GUNR",                       "GUNR",      "g1"),
     ("IXC",                        "IXC",       "g1"),  # 글로벌 에너지
@@ -125,7 +125,6 @@ ASSETS: list[AssetTuple] = [
     ("KODEX AI반도체TOP2플러스",       "395160.KS", "g4"),
     ("KODEX AI반도체핵심장비",          "471990.KS", "g4"),
     ("ACE AI반도체TOP3+",             "469150.KS", "g4"),
-    ("SOL 반도체전공정",               "475300.KS", "g4"),
     ("SOL 반도체후공정",               "475310.KS", "g4"),
     ("SOL AI반도체소부장",             "455850.KS", "g4"),
     ("KODEX AI전력핵심설비",            "487240.KS", "g5"),
