@@ -5,6 +5,10 @@ def test_marvell_mrvl_is_registered():
     assert ("Marvell", "MRVL") in gen.ASSETS
 
 
+def test_sandisk_sndk_is_registered():
+    assert ("Sandisk", "SNDK") in gen.ASSETS
+
+
 def test_tiger_us_dividend_dow_jones_is_registered():
     assert ("TIGER 미국배당다우존스", "458730.KS") in gen.ASSETS
 

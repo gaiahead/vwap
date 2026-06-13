@@ -96,6 +96,7 @@ ASSETS: list[AssetTuple] = [
     ("ACE 글로벌반도체TOP4 Plus",     "446770.KS"),
     ("엔비디아",                      "NVDA"),
     ("Marvell",                     "MRVL"),
+    ("Sandisk",                     "SNDK"),
     ("ASML",                        "ASML"),
     ("TSMC",                        "TSM"),
     ("Dell Technologies",           "DELL"),
