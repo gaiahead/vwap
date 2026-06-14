@@ -28,6 +28,10 @@ def test_requested_kodex_ai_power_equipment_etf_is_registered():
     assert ("KODEX AI전력핵심설비", "487240.KS") in gen.ASSETS
 
 
+def test_requested_tiger_korea_ai_power_equipment_top3_plus_is_registered():
+    assert ("TIGER 코리아AI전력기기TOP3플러스", "0117V0.KS") in gen.ASSETS
+
+
 def test_asset_tickers_are_unique():
     tickers = [ticker for _, ticker in gen.ASSETS]
 

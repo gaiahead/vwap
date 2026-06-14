@@ -42,6 +42,25 @@ def test_prepare_strategy_frame_uses_recent_200_days_and_vwap1d_proxy():
     assert not work["vwap_1d"].isna().any()
 
 
+def test_strategy_available_for_newer_assets_inside_recent_200_day_scope():
+    df = make_ohlcv(range(100, 160))
+
+    signal = gen.build_strategy_signal(df)
+
+    assert signal["available"] is True
+    assert signal["latest"]["vwap5"] is not None
+    assert signal["latest"]["vwap20"] is not None
+    assert signal["latest"]["vwap200"] is None
+    assert signal["latest"]["vwap_5_20_return_pct"] is not None
+    assert signal["latest"]["vwap_5_200_return_pct"] is None
+    rolling_200d = signal["backtest"]["rolling_200d"]
+    assert rolling_200d["window_days"] == len(df)
+    assert rolling_200d["strategy_return_pct"] is not None
+    assert rolling_200d["buy_hold_return_pct"] is not None
+    assert rolling_200d["strategy_mdd_pct"] is not None
+    assert rolling_200d["buy_hold_mdd_pct"] is not None
+
+
 def test_strategy_signals_use_confirmed_previous_day_and_next_day_vwap_execution():
     # Flat -> rising -> falling sequence creates both BUY and SELL crosses.
     prices = [100] * 35 + [130] * 45 + [82] * 55 + [96] * 65

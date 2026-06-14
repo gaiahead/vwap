@@ -130,6 +130,7 @@ ASSETS: list[AssetTuple] = [
     ("SOL 반도체후공정",               "475310.KS"),
     ("SOL AI반도체소부장",             "455850.KS"),
     ("KODEX AI전력핵심설비",            "487240.KS"),
+    ("TIGER 코리아AI전력기기TOP3플러스",  "0117V0.KS"),
     ("TIGER 반도체TOP10",             "396500.KS"),
     ("삼성전자",                      "005930.KS"),
     ("삼성전기",                      "009150.KS"),
@@ -173,6 +174,7 @@ ASSETS: list[AssetTuple] = [
 ]
 WINDOWS: list[int] = [5, 20, 200]  # 상단 판단/상세 VP용 핵심 VWAP
 LOOKBACK_TRADING_DAYS: int = 200
+MIN_STRATEGY_TRADING_DAYS: int = 25  # 5/20 신호 산출에 필요한 최소 이력
 DOWNLOAD_CALENDAR_DAYS: int = 450  # 최근 200거래일 확보용 여유 다운로드
 N_BUCKETS: int = 20
 KST: timezone = timezone(timedelta(hours=9))
@@ -487,24 +489,24 @@ def calc_trade_holding_stats(trades: list[dict[str, Any]], work: pd.DataFrame) -
 
 
 def calc_strategy_window_stats(work: pd.DataFrame, window: int = 200) -> dict[str, Any]:
-    """최근 window 거래일 기준 5/20 전략과 단순보유의 수익률/MDD."""
-    if len(work) < max(25, window):
+    """최근 최대 window 거래일 기준 5/20 전략과 단순보유의 수익률/MDD."""
+    if len(work) < MIN_STRATEGY_TRADING_DAYS:
         return {
-            "window_days": window,
+            "window_days": min(window, len(work)),
             "strategy_return_pct": None,
             "buy_hold_return_pct": None,
             "strategy_mdd_pct": None,
             "buy_hold_mdd_pct": None,
         }
 
-    sub = work.iloc[-window:].copy()
+    sub = work.iloc[-min(window, len(work)):].copy()
     simulation = simulate_vwap_5_20_strategy(sub, record_signals=False)
     strategy_curve = simulation["equity_curve"]
     base_price = float(sub["vwap_1d"].iloc[0])
     buy_hold_curve = [float(v) / base_price if base_price else 1.0 for v in sub["vwap_1d"]]
 
     return {
-        "window_days": window,
+        "window_days": len(sub),
         "strategy_return_pct": safe_round((strategy_curve[-1] - 1) * 100 if strategy_curve else None, 2),
         "buy_hold_return_pct": safe_round((buy_hold_curve[-1] - 1) * 100 if buy_hold_curve else None, 2),
         "strategy_mdd_pct": safe_round(calc_max_drawdown(strategy_curve), 2),
@@ -518,7 +520,7 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
     신호: 당일 종가 확정 후 판단. 백테스트 체결: 신호 다음 거래일 1일 VWAP proxy, 편도 수수료 0.03%.
     `VWAP200`은 최신 5/200 수익률 계산용 기준값이며 상세 차트에는 수평 기준선으로만 표시한다.
     """
-    if len(df) < LOOKBACK_TRADING_DAYS:
+    if len(df) < MIN_STRATEGY_TRADING_DAYS:
         return {"available": False, "reason": "insufficient_recent_history"}
 
     work = prepare_strategy_frame(df)
