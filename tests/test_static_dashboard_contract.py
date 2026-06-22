@@ -29,16 +29,18 @@ def test_table_columns_and_default_sort_match_current_dashboard_contract():
     assert "const DEFAULT_SORT = { key: 'vwap_5_20_return_pct', dir: 'desc' }" in app
 
 
-def test_detail_panels_vp_tabs_and_price_datasets_use_5_20_200_design():
+def test_detail_panels_vp_tabs_and_price_datasets_use_5_20_50_200_design():
     app = read("app.js")
 
-    assert "VWAP Lines · 5/20/200" in app
+    assert "VWAP Lines · 5/20/50/200" in app
     assert "Volume Profile" in app
     assert "const VP_PERIODS = ['5d', '20d', '200d']" in app
-    assert "const PRICE_DATASET_ORDER = ['BUY', 'SELL', 'VWAP 5', 'VWAP 20', 'VWAP 200', 'Close']" in app
+    assert "const PRICE_DATASET_ORDER = ['BUY', 'SELL', 'VWAP 5', 'VWAP 20', 'VWAP 50', 'VWAP 200', 'Close']" in app
+    assert "{label: 'VWAP 50', data: vwap50, borderColor: '#2563eb'" in app
+    assert "{label: 'VWAP 200', data: vwap200Line, borderColor: '#000000'" in app
 
     dataset_labels = re.findall(r"\{label: '([^']+)'", app)
-    assert dataset_labels[:6] == ["BUY", "SELL", "VWAP 5", "VWAP 20", "VWAP 200", "Close"]
+    assert dataset_labels[:7] == ["BUY", "SELL", "VWAP 5", "VWAP 20", "VWAP 50", "VWAP 200", "Close"]
 
 
 def test_cache_bust_version_is_consistent_everywhere():

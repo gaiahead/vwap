@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260622-1600';
+const DATA_VERSION = 'data-20260622-1854';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -10,7 +10,7 @@ const COLOR = {
 };
 const DEFAULT_SORT = { key: 'vwap_5_20_return_pct', dir: 'desc' };
 const VP_PERIODS = ['5d', '20d', '200d'];
-const PRICE_DATASET_ORDER = ['BUY', 'SELL', 'VWAP 5', 'VWAP 20', 'VWAP 200', 'Close'];
+const PRICE_DATASET_ORDER = ['BUY', 'SELL', 'VWAP 5', 'VWAP 20', 'VWAP 50', 'VWAP 200', 'Close'];
 
 const MOMENTUM_COLUMNS = [
   { key: 'name', label: '종목', type: 'text', get: row => row.name },
@@ -298,7 +298,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
   }
 
   function renderDetailPanels() {
-    const pricePanel = createChartPanel('VWAP Lines · 5/20/200', 'chart-price');
+    const pricePanel = createChartPanel('VWAP Lines · 5/20/50/200', 'chart-price');
     const vpPanel = createChartPanel('Volume Profile', 'chart-vp');
     vpPanel.classList.add('volume-profile-panel');
 
@@ -338,12 +338,30 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
 
 
   // ─── Panel A: Price + VWAP ─────────────────────────────
+  function rollingProxyVwap(ohlcv, windowSize) {
+    return ohlcv.map((_, i) => {
+      if (i < windowSize - 1) return null;
+      const rows = ohlcv.slice(i - windowSize + 1, i + 1);
+      let pvSum = 0;
+      let volumeSum = 0;
+      for (const row of rows) {
+        const vwap1d = Number(row.vwap_1d ?? ((row.high + row.low + row.close) / 3));
+        const volume = Number(row.volume);
+        if (!Number.isFinite(vwap1d) || !Number.isFinite(volume)) return null;
+        pvSum += vwap1d * volume;
+        volumeSum += volume;
+      }
+      return volumeSum > 0 ? pvSum / volumeSum : null;
+    });
+  }
+
   function renderPriceChart(detailData) {
     const ohlcv = detailData.ohlcv;
     const labels = ohlcv.map(d => d.date);
     const closes = ohlcv.map(d => d.close);
     const vwap5 = ohlcv.map(d => d.vwap_5d);
     const vwap20 = ohlcv.map(d => d.vwap_20d);
+    const vwap50 = rollingProxyVwap(ohlcv, 50);
     const signalMap = new Map((detailData.strategy_signal?.signals || []).map(sig => [sig.date, sig]));
     const buyPoints = labels.map((date, i) => signalMap.get(date)?.type === 'BUY' ? vwap5[i] : null);
     const sellPoints = labels.map((date, i) => signalMap.get(date)?.type === 'SELL' ? vwap5[i] : null);
@@ -356,6 +374,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       if (label === 'SELL') return 'SELL';
       if (label.startsWith('VWAP 5')) return 'VWAP 5';
       if (label.startsWith('VWAP 20')) return 'VWAP 20';
+      if (label.startsWith('VWAP 50')) return 'VWAP 50';
       if (label.startsWith('VWAP 200')) return 'VWAP 200';
       return label;
     };
@@ -370,8 +389,9 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
           {label: 'SELL', data: sellPoints, type: 'line', showLine: false, pointStyle: 'triangle', pointRotation: 180, pointRadius: 7, pointBackgroundColor: '#dc2626', pointBorderColor: '#991b1b', pointBorderWidth: 1.5, order: 1},
           {label: 'VWAP 5', data: vwap5, borderColor: '#dc2626', borderWidth: 2.2, borderDash: [5, 3], pointRadius: 0, tension: 0.2, fill: false, order: 3},
           {label: 'VWAP 20', data: vwap20, borderColor: '#16a34a', borderWidth: 2.2, borderDash: [5, 3], pointRadius: 0, tension: 0.2, fill: false, order: 4},
-          {label: 'VWAP 200', data: vwap200Line, borderColor: '#2563eb', borderWidth: 2, borderDash: [5, 3], pointRadius: 0, tension: 0, fill: false, order: 5},
-          {label: 'Close', data: closes, borderColor: '#64748b', borderWidth: 1, pointRadius: 0, tension: 0.1, fill: false, order: 6}
+          {label: 'VWAP 50', data: vwap50, borderColor: '#2563eb', borderWidth: 2.2, borderDash: [5, 3], pointRadius: 0, tension: 0.2, fill: false, order: 5},
+          {label: 'VWAP 200', data: vwap200Line, borderColor: '#000000', borderWidth: 2, borderDash: [5, 3], pointRadius: 0, tension: 0, fill: false, order: 6},
+          {label: 'Close', data: closes, borderColor: '#64748b', borderWidth: 1, pointRadius: 0, tension: 0.1, fill: false, order: 7}
         ]
       },
       options: {
