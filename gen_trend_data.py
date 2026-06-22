@@ -172,7 +172,7 @@ ASSETS: list[AssetTuple] = [
     ("TIGER 미디어컨텐츠",             "228810.KS"),
     ("KODEX 로봇액티브",               "445290.KS"),
 ]
-WINDOWS: list[int] = [5, 20, 200]  # 상단 판단/상세 VP용 핵심 VWAP
+WINDOWS: list[int] = [5, 20, 50, 200]  # 상단 판단/상세 VP용 핵심 VWAP
 LOOKBACK_TRADING_DAYS: int = 200
 MIN_STRATEGY_TRADING_DAYS: int = 25  # 5/20 신호 산출에 필요한 최소 이력
 DOWNLOAD_CALENDAR_DAYS: int = 450  # 최근 200거래일 확보용 여유 다운로드
@@ -728,7 +728,7 @@ def build_detail_data(
     df: pd.DataFrame,
     strategy_signal: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """상세 데이터 생성: 최근 200거래일, VWAP line은 5/20과 200 기준선을 표시."""
+    """상세 데이터 생성: 최근 200거래일, VWAP line은 5/20/50과 200 기준선을 표시."""
     work = prepare_strategy_frame(df)
     ohlcv = []
     for _i, (dt, row) in enumerate(work.iterrows()):

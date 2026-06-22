@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260622-1854';
+const DATA_VERSION = 'data-20260622-1917';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -9,7 +9,7 @@ const COLOR = {
   blue: '#2563eb'
 };
 const DEFAULT_SORT = { key: 'vwap_5_20_return_pct', dir: 'desc' };
-const VP_PERIODS = ['5d', '20d', '200d'];
+const VP_PERIODS = ['5d', '20d', '50d', '200d'];
 const PRICE_DATASET_ORDER = ['BUY', 'SELL', 'VWAP 5', 'VWAP 20', 'VWAP 50', 'VWAP 200', 'Close'];
 
 const MOMENTUM_COLUMNS = [
