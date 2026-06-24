@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260624-1600';
+const DATA_VERSION = 'data-20260624-1958';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -369,14 +369,10 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     const vp = detailData.volume_profile;
     const vwap200 = vp?.['200d']?.vwap ?? null;
     const vwap200Line = labels.map(() => vwap200);
+    const legendOrder = new Map(PRICE_DATASET_ORDER.map((label, idx) => [label, idx]));
     const legendKey = label => {
-      if (label === 'BUY') return 'BUY';
-      if (label === 'SELL') return 'SELL';
-      if (label.startsWith('VWAP 5')) return 'VWAP 5';
-      if (label.startsWith('VWAP 20')) return 'VWAP 20';
-      if (label.startsWith('VWAP 50')) return 'VWAP 50';
-      if (label.startsWith('VWAP 200')) return 'VWAP 200';
-      return label;
+      if (legendOrder.has(label)) return label;
+      return PRICE_DATASET_ORDER.find(key => label === key || label.startsWith(`${key} `)) || label;
     };
     const annotations = {};
 
@@ -398,7 +394,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
         responsive: true, maintainAspectRatio: false, animation: {duration: 200},
         interaction: {mode: 'index', intersect: false},
         plugins: {
-          legend: {display: true, labels: {color: '#334155', font: {size: 10}, boxWidth: 12, padding: 10, usePointStyle: true, sort: (a, b) => PRICE_DATASET_ORDER.indexOf(legendKey(a.text)) - PRICE_DATASET_ORDER.indexOf(legendKey(b.text))}},
+          legend: {display: true, labels: {color: '#334155', font: {size: 10}, boxWidth: 12, padding: 10, usePointStyle: true, sort: (a, b) => (legendOrder.get(legendKey(a.text)) ?? 999) - (legendOrder.get(legendKey(b.text)) ?? 999)}},
           annotation: {annotations},
           tooltip: {callbacks: {label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y?.toLocaleString(undefined, {maximumFractionDigits: 2})}`}}
         },

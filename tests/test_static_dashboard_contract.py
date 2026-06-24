@@ -36,6 +36,9 @@ def test_detail_panels_vp_tabs_and_price_datasets_use_5_20_50_200_design():
     assert "Volume Profile" in app
     assert "const VP_PERIODS = ['5d', '20d', '50d', '200d']" in app
     assert "const PRICE_DATASET_ORDER = ['BUY', 'SELL', 'VWAP 5', 'VWAP 20', 'VWAP 50', 'VWAP 200', 'Close']" in app
+    assert "const legendOrder = new Map(PRICE_DATASET_ORDER.map((label, idx) => [label, idx]));" in app
+    assert "if (legendOrder.has(label)) return label;" in app
+    assert "label.startsWith('VWAP 5')" not in app
     assert "{label: 'VWAP 50', data: vwap50, borderColor: '#2563eb'" in app
     assert "{label: 'VWAP 200', data: vwap200Line, borderColor: '#000000'" in app
 
