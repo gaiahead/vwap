@@ -95,7 +95,9 @@ def test_build_asset_outputs_keeps_trend_and_detail_strategy_contract_in_sync():
     assert trend["strategy_signal"] == detail["strategy_signal"]
     assert trend["lookback_trading_days"] == detail["lookback_trading_days"] == gen.LOOKBACK_TRADING_DAYS
     assert trend["latest_price"] == detail["latest_price"] == round(float(df["close"].iloc[-1]), 2)
-    assert set(detail["volume_profile"]) == {"5d", "20d", "50d", "200d"}
+    assert set(detail["volume_profile"]) == {"3d", "5d", "10d", "20d", "40d", "60d", "100d", "200d"}
+    for window in gen.WINDOWS:
+        assert f"vwap_{window}d" in detail["ohlcv"][-1]
 
 
 def test_zero_volume_windows_emit_none_and_json_remains_strict():

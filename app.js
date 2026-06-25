@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260626-0700';
+const DATA_VERSION = 'data-20260626-0819';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -9,20 +9,25 @@ const COLOR = {
   blue: '#2563eb'
 };
 const DEFAULT_SORT = { key: 'vwap_5_20_return_pct', dir: 'desc' };
-const VP_PERIODS = ['5d', '20d', '50d', '200d'];
-const PRICE_DATASET_ORDER = ['BUY', 'SELL', 'VWAP 5', 'VWAP 20', 'VWAP 50', 'VWAP 200', 'Close'];
+const VP_PERIODS = ['3d', '5d', '10d', '20d', '40d', '60d', '100d', '200d'];
+const PRICE_LINE_DEFS = [
+  { label: '3d', window: 3, color: '#dc2626', dash: [5, 3], width: 2 },
+  { label: '5d', window: 5, color: '#dc2626', dash: [], width: 2.2 },
+  { label: '10d', window: 10, color: '#16a34a', dash: [5, 3], width: 2 },
+  { label: '20d', window: 20, color: '#16a34a', dash: [], width: 2.2 },
+  { label: '40d', window: 40, color: '#2563eb', dash: [5, 3], width: 2 },
+  { label: '60d', window: 60, color: '#2563eb', dash: [], width: 2.2 },
+  { label: '100d', window: 100, color: '#000000', dash: [5, 3], width: 2 },
+  { label: '200d', window: 200, color: '#000000', dash: [], width: 2.2, horizontal: true }
+];
+const PRICE_DATASET_ORDER = [...PRICE_LINE_DEFS.map(def => def.label), 'Close'];
 
 const MOMENTUM_COLUMNS = [
   { key: 'name', label: '종목', type: 'text', get: row => row.name },
-  { key: 'last_signal_date', label: '최근 변화', type: 'text', get: row => row.strategy.latest?.last_signal_date || '' },
   { key: 'vwap_5_20_return_pct', label: '5/20 수익률', type: 'number', get: row => row.strategy.latest?.vwap_5_20_return_pct },
   { key: 'vwap_5_200_return_pct', label: '5/200 수익률', type: 'number', get: row => row.strategy.latest?.vwap_5_200_return_pct },
-  { key: 'holding_days', label: '당기 보유일', type: 'number', get: row => row.strategy.latest?.holding_days },
-  { key: 'current_trade_return_pct', label: '당기 수익률', type: 'number', get: row => row.strategy.latest?.current_trade_return_pct },
-  { key: 'strategy_return_pct', label: '200일 전략 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.strategy_return_pct },
-  { key: 'buy_hold_return_pct', label: '200일 보유 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.buy_hold_return_pct },
-  { key: 'strategy_mdd_pct', label: '200일 전략 MDD', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.strategy_mdd_pct, isMdd: true },
-  { key: 'buy_hold_mdd_pct', label: '200일 보유 MDD', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.buy_hold_mdd_pct, isMdd: true }
+  { key: 'buy_hold_return_pct', label: '200일 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.buy_hold_return_pct },
+  { key: 'buy_hold_mdd_pct', label: '200일 MDD', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.buy_hold_mdd_pct, isMdd: true }
 ];
 const SORT_FIELDS = Object.fromEntries(MOMENTUM_COLUMNS.map(column => [column.key, column.get]));
 const NUMERIC_SORT_FIELDS = new Set(MOMENTUM_COLUMNS.filter(column => column.type === 'number').map(column => column.key));
@@ -90,7 +95,7 @@ const DETAIL_NAME_OVERRIDES = {
 
 let priceChart = null;
 let vpChart = null;
-let currentVpPeriod = '20d';
+let currentVpPeriod = '3d';
 let currentDetailName = null;
 const detailCache = {};
 
@@ -107,12 +112,6 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     if (isMdd) return value <= -20 ? COLOR.negative : COLOR.positive;
     return value >= 0 ? COLOR.positive : COLOR.negative;
   }
-  function signalColor(type) {
-    if (type === 'BUY') return COLOR.positive;
-    if (type === 'SELL') return COLOR.negative;
-    return COLOR.muted;
-  }
-
   function createCell(text, { className, color, weight } = {}) {
     const td = document.createElement('td');
     td.textContent = text;
@@ -141,7 +140,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
   let sortState = { ...DEFAULT_SORT };
 
   function compareRows(a, b) {
-    const getter = SORT_FIELDS[sortState.key] || SORT_FIELDS.current_trade_return_pct;
+    const getter = SORT_FIELDS[sortState.key] || SORT_FIELDS.vwap_5_20_return_pct;
     const av = getter(a);
     const bv = getter(b);
     const dir = sortState.dir === 'asc' ? 1 : -1;
@@ -206,22 +205,14 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       tr.style.setProperty('--c', trendColor);
       tr.append(
         createNameCell(name),
-        createCell(
-          `${latest.last_signal || '–'} ${latest.last_signal_date ? latest.last_signal_date.slice(5) : ''}`,
-          { className: 'recent-signal', color: signalColor(latest.last_signal), weight: '800' }
-        ),
         createCell(fmtPct(latest.vwap_5_20_return_pct), { color: statColor(latest.vwap_5_20_return_pct), weight: '800' }),
         createCell(fmtPct(latest.vwap_5_200_return_pct), { color: statColor(latest.vwap_5_200_return_pct), weight: '800' }),
-        createCell(latest.holding_days ?? '–'),
-        createCell(fmtPct(latest.current_trade_return_pct), { color: statColor(latest.current_trade_return_pct), weight: '800' }),
-        createCell(fmtPct(rolling200.strategy_return_pct), { color: statColor(rolling200.strategy_return_pct), weight: '800' }),
         createCell(fmtPct(rolling200.buy_hold_return_pct), { color: statColor(rolling200.buy_hold_return_pct), weight: '800' }),
-        createCell(fmtPct(rolling200.strategy_mdd_pct), { color: statColor(rolling200.strategy_mdd_pct, true), weight: '800' }),
         createCell(fmtPct(rolling200.buy_hold_mdd_pct), { color: statColor(rolling200.buy_hold_mdd_pct, true), weight: '800' })
       );
       tr.addEventListener('click', () => {
         if (!ticker) return;
-        currentVpPeriod = '20d';
+        currentVpPeriod = '3d';
         location.hash = encodeURIComponent(ticker);
         fetchDetail(ticker, name);
       });
@@ -298,7 +289,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
   }
 
   function renderDetailPanels() {
-    const pricePanel = createChartPanel('VWAP Lines · 5/20/50/200', 'chart-price');
+    const pricePanel = createChartPanel('VWAP Lines · 3/5/10/20/40/60/100/200', 'chart-price');
     const vpPanel = createChartPanel('Volume Profile', 'chart-vp');
     vpPanel.classList.add('volume-profile-panel');
 
@@ -359,21 +350,29 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     const ohlcv = detailData.ohlcv;
     const labels = ohlcv.map(d => d.date);
     const closes = ohlcv.map(d => d.close);
-    const vwap5 = ohlcv.map(d => d.vwap_5d);
-    const vwap20 = ohlcv.map(d => d.vwap_20d);
-    const vwap50 = rollingProxyVwap(ohlcv, 50);
-    const signalMap = new Map((detailData.strategy_signal?.signals || []).map(sig => [sig.date, sig]));
-    const buyPoints = labels.map((date, i) => signalMap.get(date)?.type === 'BUY' ? vwap5[i] : null);
-    const sellPoints = labels.map((date, i) => signalMap.get(date)?.type === 'SELL' ? vwap5[i] : null);
-
     const vp = detailData.volume_profile;
-    const vwap200 = vp?.['200d']?.vwap ?? null;
-    const vwap200Line = labels.map(() => vwap200);
-    const legendOrder = new Map(PRICE_DATASET_ORDER.map((label, idx) => [label, idx]));
-    const legendKey = label => {
-      if (legendOrder.has(label)) return label;
-      return PRICE_DATASET_ORDER.find(key => label === key || label.startsWith(`${key} `)) || label;
+    const lineData = def => {
+      if (def.horizontal) {
+        const vwap = vp?.[`${def.window}d`]?.vwap ?? null;
+        return labels.map(() => vwap);
+      }
+      return ohlcv.map(d => d[`vwap_${def.window}d`] ?? null).some(v => v != null)
+        ? ohlcv.map(d => d[`vwap_${def.window}d`] ?? null)
+        : rollingProxyVwap(ohlcv, def.window);
     };
+    const vwapLineDatasets = PRICE_LINE_DEFS.map((def, idx) => ({
+      label: def.label,
+      data: lineData(def),
+      borderColor: def.color,
+      borderWidth: def.width,
+      borderDash: def.dash,
+      pointRadius: 0,
+      tension: def.horizontal ? 0 : 0.2,
+      fill: false,
+      order: idx + 2
+    }));
+    const legendOrder = new Map(PRICE_DATASET_ORDER.map((label, idx) => [label, idx]));
+    const legendKey = label => legendOrder.has(label) ? label : label;
     const annotations = {};
 
     const config = {
@@ -381,13 +380,8 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       data: {
         labels,
         datasets: [
-          {label: 'BUY', data: buyPoints, type: 'line', showLine: false, pointStyle: 'triangle', pointRadius: 7, pointBackgroundColor: '#16a34a', pointBorderColor: '#166534', pointBorderWidth: 1.5, order: 1},
-          {label: 'SELL', data: sellPoints, type: 'line', showLine: false, pointStyle: 'triangle', pointRotation: 180, pointRadius: 7, pointBackgroundColor: '#dc2626', pointBorderColor: '#991b1b', pointBorderWidth: 1.5, order: 1},
-          {label: 'VWAP 5', data: vwap5, borderColor: '#dc2626', borderWidth: 2.2, borderDash: [5, 3], pointRadius: 0, tension: 0.2, fill: false, order: 3},
-          {label: 'VWAP 20', data: vwap20, borderColor: '#16a34a', borderWidth: 2.2, borderDash: [5, 3], pointRadius: 0, tension: 0.2, fill: false, order: 4},
-          {label: 'VWAP 50', data: vwap50, borderColor: '#2563eb', borderWidth: 2.2, borderDash: [5, 3], pointRadius: 0, tension: 0.2, fill: false, order: 5},
-          {label: 'VWAP 200', data: vwap200Line, borderColor: '#000000', borderWidth: 2, borderDash: [5, 3], pointRadius: 0, tension: 0, fill: false, order: 6},
-          {label: 'Close', data: closes, borderColor: '#64748b', borderWidth: 1, pointRadius: 0, tension: 0.1, fill: false, order: 7}
+          ...vwapLineDatasets,
+          {label: 'Close', data: closes, borderColor: '#64748b', borderWidth: 1, pointRadius: 0, tension: 0.1, fill: false, order: 99}
         ]
       },
       options: {
