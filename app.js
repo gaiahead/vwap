@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260626-1151';
+const DATA_VERSION = 'data-20260626-1202';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -25,7 +25,7 @@ const PRICE_DATASET_ORDER = PRICE_LINE_DEFS.map(def => def.label);
 const MOMENTUM_COLUMNS = [
   { key: 'name', label: '종목', type: 'text', get: row => row.name },
   { key: 'vwap_5_20_return_pct', label: '5/20 수익률', type: 'number', get: row => row.strategy.latest?.vwap_5_20_return_pct },
-  { key: 'vwap_5_200_return_pct', label: '5/200 수익률', type: 'number', get: row => row.strategy.latest?.vwap_5_200_return_pct },
+  { key: 'vwap_5_200_return_pct', label: '5/200 괴리율', type: 'number', get: row => row.strategy.latest?.vwap_5_200_return_pct },
   { key: 'buy_hold_return_pct', label: '200일 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.buy_hold_return_pct },
   { key: 'buy_hold_mdd_pct', label: '200일 MDD', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.buy_hold_mdd_pct, isMdd: true }
 ];

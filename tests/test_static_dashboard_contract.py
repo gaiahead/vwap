@@ -17,11 +17,14 @@ def test_table_columns_and_default_sort_match_current_dashboard_contract():
     assert headers == [
         "종목",
         "5/20 수익률",
-        "5/200 수익률",
+        "5/200 괴리율",
         "200일 수익률",
         "200일 MDD",
     ]
     assert "const DEFAULT_SORT = { key: 'vwap_5_20_return_pct', dir: 'desc' }" in app
+    assert "5/200은 장기 VWAP 대비 괴리율" in html
+    assert "5/200 수익률" not in html
+    assert "label: '5/200 괴리율'" in app
 
 
 def test_asset_name_column_has_no_signal_color_indicator():
