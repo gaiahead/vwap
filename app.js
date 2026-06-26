@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260626-0919';
+const DATA_VERSION = 'data-20260626-1151';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -123,9 +123,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
 
   function createNameCell(name) {
     const td = document.createElement('td');
-    const indicator = document.createElement('span');
-    indicator.className = 'row-indicator';
-    td.append(indicator, document.createTextNode(name));
+    td.textContent = name;
     return td;
   }
 
@@ -198,11 +196,9 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     rows.forEach(({name, strategy}) => {
       const ticker = data[name]?.ticker;
       const latest = strategy?.latest || {};
-      const trendColor = statColor(latest.vwap_5_200_return_pct);
       const rolling200 = strategy?.backtest?.rolling_200d || {};
       const tr = document.createElement('tr');
       tr.className = 'momentum-row' + (name === currentDetailName ? ' detail-active' : '');
-      tr.style.setProperty('--c', trendColor);
       tr.append(
         createNameCell(name),
         createCell(fmtPct(latest.vwap_5_20_return_pct), { color: statColor(latest.vwap_5_20_return_pct), weight: '800' }),

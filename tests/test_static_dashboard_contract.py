@@ -24,6 +24,15 @@ def test_table_columns_and_default_sort_match_current_dashboard_contract():
     assert "const DEFAULT_SORT = { key: 'vwap_5_20_return_pct', dir: 'desc' }" in app
 
 
+def test_asset_name_column_has_no_signal_color_indicator():
+    app = read("app.js")
+    css = read("style.css")
+
+    assert "row-indicator" not in app
+    assert "row-indicator" not in css
+    assert "setProperty('--c'" not in app
+
+
 def test_detail_panels_vp_tabs_and_price_datasets_use_3_to_200_design_without_trade_markers():
     app = read("app.js")
 

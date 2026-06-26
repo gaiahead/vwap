@@ -26,8 +26,6 @@ header p{font-size:0.74rem;color:#64748b;margin-top:4px}
 .momentum-row{cursor:pointer;transition:background .15s}
 .momentum-row:hover td{background:#eef6ff}
 .momentum-row.detail-active td{background:#dbeafe;box-shadow:inset 0 1px 0 #93c5fd,inset 0 -1px 0 #93c5fd}
-.row-indicator{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--c);margin-right:8px;box-shadow:0 0 0 3px color-mix(in srgb, var(--c) 18%, transparent)}
-
 /* Detail section */
 .detail-section{border-top:1px solid #dbe6f3;padding:20px 28px 0}
 .detail-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
