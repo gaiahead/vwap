@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260626-0909';
+const DATA_VERSION = 'data-20260626-0919';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -20,7 +20,7 @@ const PRICE_LINE_DEFS = [
   { label: '100d', window: 100, color: '#000000', dash: [5, 3], width: 1.15 },
   { label: '200d', window: 200, color: '#000000', dash: [], width: 1.15, horizontal: true }
 ];
-const PRICE_DATASET_ORDER = [...PRICE_LINE_DEFS.map(def => def.label), 'Close'];
+const PRICE_DATASET_ORDER = PRICE_LINE_DEFS.map(def => def.label);
 
 const MOMENTUM_COLUMNS = [
   { key: 'name', label: '종목', type: 'text', get: row => row.name },
@@ -352,7 +352,6 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
   function renderPriceChart(detailData) {
     const ohlcv = detailData.ohlcv;
     const labels = ohlcv.map(d => d.date);
-    const closes = ohlcv.map(d => d.close);
     const vp = detailData.volume_profile;
     const lineData = def => {
       if (def.horizontal) {
@@ -383,10 +382,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       type: 'line',
       data: {
         labels,
-        datasets: [
-          ...vwapLineDatasets,
-          {label: 'Close', data: closes, borderColor: '#64748b', borderWidth: 1, pointRadius: 0, tension: 0.1, fill: false, order: 99}
-        ]
+        datasets: vwapLineDatasets
       },
       options: {
         responsive: true, maintainAspectRatio: false, animation: {duration: 200},

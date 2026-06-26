@@ -30,7 +30,7 @@ def test_detail_panels_vp_tabs_and_price_datasets_use_3_to_200_design_without_tr
     assert "VWAP Lines · 3/5/10/20/40/60/100/200" not in app
     assert "Volume Profile" in app
     assert "const VP_PERIODS = ['3d', '5d', '10d', '20d', '40d', '60d', '100d', '200d']" in app
-    assert "const PRICE_DATASET_ORDER = [...PRICE_LINE_DEFS.map(def => def.label), 'Close']" in app
+    assert "const PRICE_DATASET_ORDER = PRICE_LINE_DEFS.map(def => def.label);" in app
     assert "const legendOrder = new Map(PRICE_DATASET_ORDER.map((label, idx) => [label, idx]));" in app
     assert "label.startsWith('VWAP 5')" not in app
     assert "{ label: '3d', window: 3, color: '#dc2626', dash: [5, 3], width: 1.15 }" in app
@@ -45,10 +45,12 @@ def test_detail_panels_vp_tabs_and_price_datasets_use_3_to_200_design_without_tr
     assert "lineDash: dataset.borderDash || []" in app
     assert "label: 'BUY'" not in app
     assert "label: 'SELL'" not in app
+    assert "label: 'Close'" not in app
+    assert "data: closes" not in app
     assert "signalMap" not in app
 
     line_labels = re.findall(r"\{ label: '([^']+)'", app)
-    assert line_labels[:8] == ["3d", "5d", "10d", "20d", "40d", "60d", "100d", "200d"]
+    assert line_labels == ["3d", "5d", "10d", "20d", "40d", "60d", "100d", "200d"]
 
 
 def test_cache_bust_version_is_consistent_everywhere():
