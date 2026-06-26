@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260626-0819';
+const DATA_VERSION = 'data-20260626-0909';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -11,14 +11,14 @@ const COLOR = {
 const DEFAULT_SORT = { key: 'vwap_5_20_return_pct', dir: 'desc' };
 const VP_PERIODS = ['3d', '5d', '10d', '20d', '40d', '60d', '100d', '200d'];
 const PRICE_LINE_DEFS = [
-  { label: '3d', window: 3, color: '#dc2626', dash: [5, 3], width: 2 },
-  { label: '5d', window: 5, color: '#dc2626', dash: [], width: 2.2 },
-  { label: '10d', window: 10, color: '#16a34a', dash: [5, 3], width: 2 },
-  { label: '20d', window: 20, color: '#16a34a', dash: [], width: 2.2 },
-  { label: '40d', window: 40, color: '#2563eb', dash: [5, 3], width: 2 },
-  { label: '60d', window: 60, color: '#2563eb', dash: [], width: 2.2 },
-  { label: '100d', window: 100, color: '#000000', dash: [5, 3], width: 2 },
-  { label: '200d', window: 200, color: '#000000', dash: [], width: 2.2, horizontal: true }
+  { label: '3d', window: 3, color: '#dc2626', dash: [5, 3], width: 1.15 },
+  { label: '5d', window: 5, color: '#dc2626', dash: [], width: 1.15 },
+  { label: '10d', window: 10, color: '#16a34a', dash: [5, 3], width: 1.15 },
+  { label: '20d', window: 20, color: '#16a34a', dash: [], width: 1.15 },
+  { label: '40d', window: 40, color: '#2563eb', dash: [5, 3], width: 1.15 },
+  { label: '60d', window: 60, color: '#2563eb', dash: [], width: 1.15 },
+  { label: '100d', window: 100, color: '#000000', dash: [5, 3], width: 1.15 },
+  { label: '200d', window: 200, color: '#000000', dash: [], width: 1.15, horizontal: true }
 ];
 const PRICE_DATASET_ORDER = [...PRICE_LINE_DEFS.map(def => def.label), 'Close'];
 
@@ -276,20 +276,23 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
   function createChartPanel(title, canvasId) {
     const panel = document.createElement('div');
     panel.className = 'panel-box';
-    const heading = document.createElement('div');
-    heading.className = 'panel-title';
-    heading.textContent = title;
     const chartWrap = document.createElement('div');
     chartWrap.className = 'chart-wrap';
     const canvas = document.createElement('canvas');
     canvas.id = canvasId;
     chartWrap.appendChild(canvas);
-    panel.append(heading, chartWrap);
+    if (title) {
+      const heading = document.createElement('div');
+      heading.className = 'panel-title';
+      heading.textContent = title;
+      panel.appendChild(heading);
+    }
+    panel.appendChild(chartWrap);
     return panel;
   }
 
   function renderDetailPanels() {
-    const pricePanel = createChartPanel('VWAP Lines · 3/5/10/20/40/60/100/200', 'chart-price');
+    const pricePanel = createChartPanel('', 'chart-price');
     const vpPanel = createChartPanel('Volume Profile', 'chart-vp');
     vpPanel.classList.add('volume-profile-panel');
 
@@ -366,6 +369,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       borderColor: def.color,
       borderWidth: def.width,
       borderDash: def.dash,
+      pointStyle: 'line',
       pointRadius: 0,
       tension: def.horizontal ? 0 : 0.2,
       fill: false,
@@ -388,7 +392,21 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
         responsive: true, maintainAspectRatio: false, animation: {duration: 200},
         interaction: {mode: 'index', intersect: false},
         plugins: {
-          legend: {display: true, labels: {color: '#334155', font: {size: 10}, boxWidth: 12, padding: 10, usePointStyle: true, sort: (a, b) => (legendOrder.get(legendKey(a.text)) ?? 999) - (legendOrder.get(legendKey(b.text)) ?? 999)}},
+          legend: {display: true, labels: {
+            color: '#334155', font: {size: 10}, boxWidth: 28, pointStyleWidth: 28, padding: 10, usePointStyle: true,
+            generateLabels: chart => Chart.defaults.plugins.legend.labels.generateLabels(chart).map(item => {
+              const dataset = chart.data.datasets[item.datasetIndex] || {};
+              return {
+                ...item,
+                pointStyle: 'line',
+                lineDash: dataset.borderDash || [],
+                lineWidth: dataset.borderWidth || 1,
+                strokeStyle: dataset.borderColor,
+                fillStyle: dataset.borderColor
+              };
+            }),
+            sort: (a, b) => (legendOrder.get(legendKey(a.text)) ?? 999) - (legendOrder.get(legendKey(b.text)) ?? 999)
+          }},
           annotation: {annotations},
           tooltip: {callbacks: {label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y?.toLocaleString(undefined, {maximumFractionDigits: 2})}`}}
         },
