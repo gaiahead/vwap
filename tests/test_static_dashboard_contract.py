@@ -48,14 +48,15 @@ def test_detail_panels_vp_tabs_and_price_datasets_use_3_to_200_design_without_tr
     assert "const legendOrder = new Map(PRICE_DATASET_ORDER.map((label, idx) => [label, idx]));" in app
     assert "label.startsWith('VWAP 5')" not in app
     assert "{ label: '1d', window: 1, color: '#eab308', dash: [], width: 1.15 }" in app
-    assert "{ label: '3d', window: 3, color: '#dc2626', dash: [5, 3], width: 1.15 }" in app
+    assert "{ label: '3d', window: 3, color: '#f97316', dash: [], width: 1.15 }" in app
     assert "{ label: '5d', window: 5, color: '#dc2626', dash: [], width: 1.15 }" in app
-    assert "{ label: '10d', window: 10, color: '#16a34a', dash: [5, 3], width: 1.15 }" in app
+    assert "{ label: '10d', window: 10, color: '#84cc16', dash: [], width: 1.15 }" in app
     assert "{ label: '20d', window: 20, color: '#16a34a', dash: [], width: 1.15 }" in app
-    assert "{ label: '40d', window: 40, color: '#2563eb', dash: [5, 3], width: 1.15 }" in app
+    assert "{ label: '40d', window: 40, color: '#0891b2', dash: [], width: 1.15 }" in app
     assert "{ label: '60d', window: 60, color: '#2563eb', dash: [], width: 1.15 }" in app
-    assert "{ label: '100d', window: 100, color: '#000000', dash: [5, 3], width: 1.15 }" in app
+    assert "{ label: '100d', window: 100, color: '#1e3a8a', dash: [], width: 1.15 }" in app
     assert "{ label: '200d', window: 200, color: '#000000', dash: [], width: 1.15" in app
+    assert "dash: [5, 3]" not in app
     assert "pointStyle: 'line'" in app
     assert "lineDash: dataset.borderDash || []" in app
     assert "label: 'BUY'" not in app
