@@ -172,7 +172,8 @@ ASSETS: list[AssetTuple] = [
     ("TIGER 미디어컨텐츠",             "228810.KS"),
     ("KODEX 로봇액티브",               "445290.KS"),
 ]
-WINDOWS: list[int] = [3, 5, 10, 20, 40, 60, 100, 200]  # 상세 차트/VP용 VWAP 기간
+WINDOWS: list[int] = [3, 5, 10, 20, 40, 60, 100, 200]  # 상세 차트용 롤링 VWAP 기간
+VOLUME_PROFILE_WINDOWS: list[int] = [1, *WINDOWS]  # 하단 Volume Profile 기간
 LOOKBACK_TRADING_DAYS: int = 200
 MIN_STRATEGY_TRADING_DAYS: int = 25  # 5/20 신호 산출에 필요한 최소 이력
 DOWNLOAD_CALENDAR_DAYS: int = 450  # 최근 200거래일 확보용 여유 다운로드
@@ -741,7 +742,7 @@ def build_detail_data(
     df: pd.DataFrame,
     strategy_signal: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """상세 데이터 생성: 최근 200거래일, VWAP line/Volume Profile은 3~200d 기간을 표시."""
+    """상세 데이터 생성: 최근 200거래일, VWAP line/Volume Profile은 1~200d 기간을 표시."""
     work = prepare_strategy_frame(df)
     ohlcv = []
     for _i, (dt, row) in enumerate(work.iterrows()):
@@ -759,7 +760,7 @@ def build_detail_data(
         ohlcv.append(rec)
 
     volume_profile: dict[str, Any] = {}
-    for period in WINDOWS:
+    for period in VOLUME_PROFILE_WINDOWS:
         if len(work) >= period:
             vwap_val, buckets = compute_vwap_with_profile(work.iloc[-period:])
             volume_profile[f"{period}d"] = {
