@@ -16,14 +16,16 @@ def test_table_columns_and_default_sort_match_current_dashboard_contract():
 
     assert headers == [
         "종목",
-        "5/20 수익률",
+        "5/20 괴리율",
         "5/200 괴리율",
         "200일 수익률",
         "200일 MDD",
     ]
     assert "const DEFAULT_SORT = { key: 'vwap_5_20_return_pct', dir: 'desc' }" in app
-    assert "5/200은 장기 VWAP 대비 괴리율" in html
+    assert "5/20과 5/200은 각각 단기·장기 VWAP 대비 괴리율" in html
+    assert "5/20 수익률" not in html
     assert "5/200 수익률" not in html
+    assert "label: '5/20 괴리율'" in app
     assert "label: '5/200 괴리율'" in app
 
 
@@ -45,6 +47,7 @@ def test_detail_panels_vp_tabs_and_price_datasets_use_3_to_200_design_without_tr
     assert "const PRICE_DATASET_ORDER = PRICE_LINE_DEFS.map(def => def.label);" in app
     assert "const legendOrder = new Map(PRICE_DATASET_ORDER.map((label, idx) => [label, idx]));" in app
     assert "label.startsWith('VWAP 5')" not in app
+    assert "{ label: '1d', window: 1, color: '#eab308', dash: [], width: 1.15 }" in app
     assert "{ label: '3d', window: 3, color: '#dc2626', dash: [5, 3], width: 1.15 }" in app
     assert "{ label: '5d', window: 5, color: '#dc2626', dash: [], width: 1.15 }" in app
     assert "{ label: '10d', window: 10, color: '#16a34a', dash: [5, 3], width: 1.15 }" in app
@@ -62,7 +65,7 @@ def test_detail_panels_vp_tabs_and_price_datasets_use_3_to_200_design_without_tr
     assert "signalMap" not in app
 
     line_labels = re.findall(r"\{ label: '([^']+)'", app)
-    assert line_labels == ["3d", "5d", "10d", "20d", "40d", "60d", "100d", "200d"]
+    assert line_labels == ["1d", "3d", "5d", "10d", "20d", "40d", "60d", "100d", "200d"]
 
 
 def test_cache_bust_version_is_consistent_everywhere():

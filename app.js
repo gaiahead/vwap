@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260626-1202';
+const DATA_VERSION = 'data-20260626-1224';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -11,6 +11,7 @@ const COLOR = {
 const DEFAULT_SORT = { key: 'vwap_5_20_return_pct', dir: 'desc' };
 const VP_PERIODS = ['3d', '5d', '10d', '20d', '40d', '60d', '100d', '200d'];
 const PRICE_LINE_DEFS = [
+  { label: '1d', window: 1, color: '#eab308', dash: [], width: 1.15 },
   { label: '3d', window: 3, color: '#dc2626', dash: [5, 3], width: 1.15 },
   { label: '5d', window: 5, color: '#dc2626', dash: [], width: 1.15 },
   { label: '10d', window: 10, color: '#16a34a', dash: [5, 3], width: 1.15 },
@@ -24,7 +25,7 @@ const PRICE_DATASET_ORDER = PRICE_LINE_DEFS.map(def => def.label);
 
 const MOMENTUM_COLUMNS = [
   { key: 'name', label: '종목', type: 'text', get: row => row.name },
-  { key: 'vwap_5_20_return_pct', label: '5/20 수익률', type: 'number', get: row => row.strategy.latest?.vwap_5_20_return_pct },
+  { key: 'vwap_5_20_return_pct', label: '5/20 괴리율', type: 'number', get: row => row.strategy.latest?.vwap_5_20_return_pct },
   { key: 'vwap_5_200_return_pct', label: '5/200 괴리율', type: 'number', get: row => row.strategy.latest?.vwap_5_200_return_pct },
   { key: 'buy_hold_return_pct', label: '200일 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.buy_hold_return_pct },
   { key: 'buy_hold_mdd_pct', label: '200일 MDD', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.buy_hold_mdd_pct, isMdd: true }
