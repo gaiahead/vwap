@@ -98,6 +98,8 @@ def test_build_asset_outputs_keeps_trend_and_detail_strategy_contract_in_sync():
     assert set(detail["volume_profile"]) == {"1d", "5d", "20d", "40d", "60d", "100d", "200d"}
     for window in gen.WINDOWS:
         assert f"vwap_{window}d" in detail["ohlcv"][-1]
+    assert "vwap_3d" not in detail["ohlcv"][-1]
+    assert "vwap_10d" not in detail["ohlcv"][-1]
 
 
 def test_zero_volume_windows_emit_none_and_json_remains_strict():

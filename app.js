@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260626-1733';
+const DATA_VERSION = 'data-20260626-1741';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -12,9 +12,7 @@ const DEFAULT_SORT = { key: 'vwap_5_20_return_pct', dir: 'desc' };
 const VP_PERIODS = ['1d', '5d', '20d', '40d', '60d', '100d', '200d'];
 const PRICE_LINE_DEFS = [
   { label: '1d', window: 1, color: '#eab308', dash: [], width: 1.15 },
-  { label: '3d', window: 3, color: '#f97316', dash: [], width: 1.15 },
   { label: '5d', window: 5, color: '#dc2626', dash: [], width: 1.15 },
-  { label: '10d', window: 10, color: '#84cc16', dash: [], width: 1.15 },
   { label: '20d', window: 20, color: '#16a34a', dash: [], width: 1.15 },
   { label: '40d', window: 40, color: '#0891b2', dash: [], width: 1.15 },
   { label: '60d', window: 60, color: '#2563eb', dash: [], width: 1.15 },
