@@ -172,8 +172,8 @@ ASSETS: list[AssetTuple] = [
     ("TIGER 미디어컨텐츠",             "228810.KS"),
     ("KODEX 로봇액티브",               "445290.KS"),
 ]
-WINDOWS: list[int] = [5, 20, 40, 60, 100, 200]  # 상세 차트용 롤링 VWAP 기간
-VOLUME_PROFILE_WINDOWS: list[int] = [1, 5, 20, 40, 60, 100, 200]  # 하단 Volume Profile 기간
+WINDOWS: list[int] = [2, 5, 20, 40, 60, 100, 200]  # 상세 차트용 롤링 VWAP 기간
+VOLUME_PROFILE_WINDOWS: list[int] = [2, 5, 20, 40, 60, 100, 200]  # 하단 Volume Profile 기간
 LOOKBACK_TRADING_DAYS: int = 200
 MIN_STRATEGY_TRADING_DAYS: int = 25  # 5/20 신호 산출에 필요한 최소 이력
 DOWNLOAD_CALENDAR_DAYS: int = 450  # 최근 200거래일 확보용 여유 다운로드

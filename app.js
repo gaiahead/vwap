@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260630-1600';
+const DATA_VERSION = 'data-20260630-1926';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -9,9 +9,9 @@ const COLOR = {
   blue: '#2563eb'
 };
 const DEFAULT_SORT = { key: 'vwap_5_20_return_pct', dir: 'desc' };
-const VP_PERIODS = ['1d', '5d', '20d', '40d', '60d', '100d', '200d'];
+const VP_PERIODS = ['2d', '5d', '20d', '40d', '60d', '100d', '200d'];
 const PRICE_LINE_DEFS = [
-  { label: '1d', window: 1, color: '#eab308', dash: [], width: 1.15 },
+  { label: '2d', window: 2, color: '#eab308', dash: [], width: 1.15 },
   { label: '5d', window: 5, color: '#dc2626', dash: [], width: 1.15 },
   { label: '20d', window: 20, color: '#16a34a', dash: [], width: 1.15 },
   { label: '40d', window: 40, color: '#0891b2', dash: [], width: 1.15 },
@@ -94,7 +94,7 @@ const DETAIL_NAME_OVERRIDES = {
 
 let priceChart = null;
 let vpChart = null;
-let currentVpPeriod = '1d';
+let currentVpPeriod = '2d';
 let currentDetailName = null;
 const detailCache = {};
 
@@ -207,7 +207,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       );
       tr.addEventListener('click', () => {
         if (!ticker) return;
-        currentVpPeriod = '1d';
+        currentVpPeriod = '2d';
         location.hash = encodeURIComponent(ticker);
         fetchDetail(ticker, name);
       });

@@ -34,6 +34,8 @@ def test_prepare_strategy_frame_uses_recent_200_days_and_vwap1d_proxy():
     assert work.index[0] == df.index[-gen.LOOKBACK_TRADING_DAYS]
     first = work.iloc[0]
     assert first["vwap_1d"] == (first["high"] + first["low"] + first["close"]) / 3
+    assert pd.isna(work["vwap_2d"].iloc[0])
+    assert work["vwap_2d"].iloc[1] == work["vwap_1d"].iloc[:2].mean()
     assert pd.isna(work["vwap_5d"].iloc[3])
     assert work["vwap_5d"].iloc[4] == work["vwap_1d"].iloc[:5].mean()
     assert pd.isna(work["vwap_20d"].iloc[18])
@@ -95,9 +97,10 @@ def test_build_asset_outputs_keeps_trend_and_detail_strategy_contract_in_sync():
     assert trend["strategy_signal"] == detail["strategy_signal"]
     assert trend["lookback_trading_days"] == detail["lookback_trading_days"] == gen.LOOKBACK_TRADING_DAYS
     assert trend["latest_price"] == detail["latest_price"] == round(float(df["close"].iloc[-1]), 2)
-    assert set(detail["volume_profile"]) == {"1d", "5d", "20d", "40d", "60d", "100d", "200d"}
+    assert set(detail["volume_profile"]) == {"2d", "5d", "20d", "40d", "60d", "100d", "200d"}
     for window in gen.WINDOWS:
         assert f"vwap_{window}d" in detail["ohlcv"][-1]
+    assert "vwap_1d" in detail["ohlcv"][-1]
     assert "vwap_3d" not in detail["ohlcv"][-1]
     assert "vwap_10d" not in detail["ohlcv"][-1]
 
