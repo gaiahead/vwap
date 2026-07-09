@@ -25,6 +25,7 @@ def test_table_columns_and_default_sort_match_current_dashboard_contract():
     ]
     assert "const DEFAULT_SORT = { key: 'vwap_5_20_return_pct', dir: 'desc' }" in app
     assert "EA는 Entry Activation, LM은 Late Maturity 패턴 유사도" in html
+    assert "EA는 장기 VWAP 역추세를 벌점 처리" in html
     assert "5/20과 5/200은 각각 단기·장기 VWAP 대비 괴리율" in html
     assert "5/20 수익률" not in html
     assert "5/200 수익률" not in html
@@ -33,6 +34,11 @@ def test_table_columns_and_default_sort_match_current_dashboard_contract():
     assert "label: 'EA지수'" in app
     assert "label: 'LM지수'" in app
     assert "function calculateLifecycleScores(item)" in app
+    assert "const longContextGate = weightedAverage" in app
+    assert "ramp(spread5_200, -6, 5)" in app
+    assert "ramp(priceVs200, -6, 5)" in app
+    assert "ramp(spread20_200, -8, 6)" in app
+    assert "eaRaw * eaGate * (0.15 + 0.85 * longContextGate)" in app
 
 
 def test_asset_name_column_has_no_signal_color_indicator():

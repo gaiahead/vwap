@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260709-1600-ealm';
+const DATA_VERSION = 'data-20260709-1600-eagate';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -228,16 +228,23 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     const holdingDays = finite(latest.holding_days);
     const buyHold = finite(rolling200.buy_hold_return_pct);
 
-    const activation = weightedAverage([
-      [ramp(spread5_20, 0, 1.5), 0.65],
-      [fadeAbove(spread5_20, 8, 16), 0.35]
+    const activationRise = ramp(spread5_20, 0, 2);
+    const activationNotOverextended = fadeAbove(spread5_20, 7, 15);
+    const activation = activationRise == null || activationNotOverextended == null
+      ? null
+      : activationRise * activationNotOverextended;
+    const priceReclaimRise = ramp(priceVs20, -0.5, 2);
+    const priceReclaimNotOverextended = fadeAbove(priceVs20, 8, 16);
+    const priceReclaim = priceReclaimRise == null || priceReclaimNotOverextended == null
+      ? null
+      : priceReclaimRise * priceReclaimNotOverextended;
+    const overheatControl = bandScore(spread5_200, -2, 18, -12, 42);
+    const longContextGate = weightedAverage([
+      [ramp(spread5_200, -6, 5), 0.35],
+      [ramp(priceVs200, -6, 5), 0.25],
+      [ramp(spread20_200, -8, 6), 0.25],
+      [ramp(buyHold, -12, 12), 0.15]
     ]);
-    const priceReclaim = weightedAverage([
-      [ramp(priceVs20, -0.5, 1.5), 0.65],
-      [fadeAbove(priceVs20, 10, 18), 0.2],
-      [bandScore(priceVs5, -2, 5, -8, 14), 0.15]
-    ]);
-    const overheatControl = bandScore(spread5_200, -5, 24, -15, 60);
     const tradeFresh = currentTrade == null
       ? (finite(spread5_20) != null && spread5_20 > 0 ? 0.85 : 0)
       : weightedAverage([
@@ -260,7 +267,9 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       [activation, 0.6],
       [priceReclaim, 0.4]
     ]);
-    const ea = eaRaw == null || eaGate == null ? null : Math.round(eaRaw * (0.15 + 0.85 * eaGate) * 100);
+    const ea = eaRaw == null || eaGate == null || longContextGate == null
+      ? null
+      : Math.round(eaRaw * eaGate * (0.15 + 0.85 * longContextGate) * 100);
 
     const maturity = weightedAverage([
       [ramp(spread20_200, 12, 40), 0.35],
