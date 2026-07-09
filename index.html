@@ -6,7 +6,7 @@
   <title>VWAP 추세 모니터</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
-  <link rel="stylesheet" href="style.css?v=data-20260709-1600"/>
+  <link rel="stylesheet" href="style.css?v=data-20260709-1600-ealm"/>
 </head>
 <body>
 
@@ -17,11 +17,13 @@
 
 <div class="section-box momentum-monitor" id="momentum-section" style="display:none">
   <div class="panel-title">📐 VWAP 5 / 20 / 200 MONITOR</div>
-  <div class="momentum-monitor-sub">5/20과 5/200은 각각 단기·장기 VWAP 대비 괴리율입니다. 행 클릭 시 종목 상세 차트가 열립니다.</div>
+  <div class="momentum-monitor-sub">EA는 Entry Activation, LM은 Late Maturity 패턴 유사도입니다. 5/20과 5/200은 각각 단기·장기 VWAP 대비 괴리율입니다. 행 클릭 시 종목 상세 차트가 열립니다.</div>
   <div class="momentum-table-wrap"><table class="momentum-table">
     <thead>
       <tr>
         <th data-sort="name">종목</th>
+        <th data-sort="ea_score">EA지수</th>
+        <th data-sort="lm_score">LM지수</th>
         <th data-sort="vwap_5_20_return_pct">5/20 괴리율</th>
         <th data-sort="vwap_5_200_return_pct">5/200 괴리율</th>
         <th data-sort="buy_hold_return_pct">200일 수익률</th>
@@ -43,6 +45,6 @@
   <div id="detail-content"></div>
 </div>
 
-<script src="app.js?v=data-20260709-1600"></script>
+<script src="app.js?v=data-20260709-1600-ealm"></script>
 </body>
 </html>

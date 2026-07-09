@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260709-1600';
+const DATA_VERSION = 'data-20260709-1600-ealm';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -6,6 +6,7 @@ const COLOR = {
   negative: '#dc2626',
   muted: '#64748b',
   neutral: '#475569',
+  warning: '#ea580c',
   blue: '#2563eb'
 };
 const DEFAULT_SORT = { key: 'vwap_5_20_return_pct', dir: 'desc' };
@@ -23,6 +24,8 @@ const PRICE_DATASET_ORDER = PRICE_LINE_DEFS.map(def => def.label);
 
 const MOMENTUM_COLUMNS = [
   { key: 'name', label: '종목', type: 'text', get: row => row.name },
+  { key: 'ea_score', label: 'EA지수', type: 'number', get: row => row.lifecycle?.ea },
+  { key: 'lm_score', label: 'LM지수', type: 'number', get: row => row.lifecycle?.lm },
   { key: 'vwap_5_20_return_pct', label: '5/20 괴리율', type: 'number', get: row => row.strategy.latest?.vwap_5_20_return_pct },
   { key: 'vwap_5_200_return_pct', label: '5/200 괴리율', type: 'number', get: row => row.strategy.latest?.vwap_5_200_return_pct },
   { key: 'buy_hold_return_pct', label: '200일 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.buy_hold_return_pct },
@@ -106,10 +109,22 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
 
   // ─── Formatting helpers ──────────────────────────────────────────
   function fmtPct(v) { return v == null ? '–' : `${v > 0 ? '+' : ''}${Number(v).toFixed(2)}%`; }
+  function fmtIndex(v) { return v == null ? '–' : `${Math.round(Number(v))}%`; }
   function statColor(value, isMdd=false) {
     if (value == null) return COLOR.muted;
     if (isMdd) return value <= -20 ? COLOR.negative : COLOR.positive;
     return value >= 0 ? COLOR.positive : COLOR.negative;
+  }
+  function indexColor(value, kind) {
+    if (value == null) return COLOR.muted;
+    if (kind === 'lm') {
+      if (value >= 70) return COLOR.negative;
+      if (value >= 45) return COLOR.warning;
+      return COLOR.muted;
+    }
+    if (value >= 65) return COLOR.positive;
+    if (value >= 40) return COLOR.blue;
+    return COLOR.muted;
   }
   function createCell(text, { className, color, weight } = {}) {
     const td = document.createElement('td');
@@ -124,6 +139,160 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     const td = document.createElement('td');
     td.textContent = name;
     return td;
+  }
+
+  function finite(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+  }
+
+  function clamp01(value) {
+    return Math.max(0, Math.min(1, value));
+  }
+
+  function ramp(value, low, high) {
+    const number = finite(value);
+    if (number == null || high === low) return null;
+    return clamp01((number - low) / (high - low));
+  }
+
+  function fadeAbove(value, low, high) {
+    const score = ramp(value, low, high);
+    return score == null ? null : 1 - score;
+  }
+
+  function bandScore(value, goodLow, goodHigh, badLow, badHigh) {
+    const number = finite(value);
+    if (number == null) return null;
+    if (number < goodLow) return ramp(number, badLow, goodLow);
+    if (number > goodHigh) return fadeAbove(number, goodHigh, badHigh);
+    return 1;
+  }
+
+  function weightedAverage(parts) {
+    let total = 0;
+    let weightTotal = 0;
+    parts.forEach(([score, weight]) => {
+      const value = finite(score);
+      if (value == null) return;
+      total += clamp01(value) * weight;
+      weightTotal += weight;
+    });
+    return weightTotal > 0 ? total / weightTotal : null;
+  }
+
+  function weightedIndex(parts) {
+    const score = weightedAverage(parts);
+    return score == null ? null : Math.round(score * 100);
+  }
+
+  function maxScore(scores) {
+    const values = scores.map(finite).filter(value => value != null);
+    return values.length ? Math.max(...values) : null;
+  }
+
+  function pctRatio(numerator, denominator) {
+    const n = finite(numerator);
+    const d = finite(denominator);
+    if (n == null || d == null || d === 0) return null;
+    return (n / d - 1) * 100;
+  }
+
+  function getVwap(item, window) {
+    const found = item?.vwap_structure?.find(entry => Number(entry.window) === window);
+    return finite(found?.vwap);
+  }
+
+  function calculateLifecycleScores(item) {
+    const latest = item?.strategy_signal?.latest || {};
+    const rolling200 = item?.strategy_signal?.backtest?.rolling_200d || {};
+    const lastRecord = item?.records?.at(-1) || {};
+    const vwap2 = getVwap(item, 2);
+    const vwap5 = finite(latest.vwap5) ?? getVwap(item, 5);
+    const vwap20 = finite(latest.vwap20) ?? getVwap(item, 20);
+    const vwap40 = getVwap(item, 40);
+    const vwap60 = getVwap(item, 60);
+    const vwap200 = finite(latest.vwap200) ?? getVwap(item, 200);
+    const price = finite(lastRecord.price);
+
+    const spread2_5 = pctRatio(vwap2, vwap5);
+    const spread5_20 = finite(latest.vwap_5_20_return_pct) ?? pctRatio(vwap5, vwap20);
+    const spread5_200 = finite(latest.vwap_5_200_return_pct) ?? pctRatio(vwap5, vwap200);
+    const spread20_40 = pctRatio(vwap20, vwap40);
+    const spread20_60 = pctRatio(vwap20, vwap60);
+    const spread20_200 = pctRatio(vwap20, vwap200);
+    const priceVs5 = pctRatio(price, vwap5);
+    const priceVs20 = pctRatio(price, vwap20);
+    const priceVs200 = pctRatio(price, vwap200);
+    const currentTrade = finite(latest.current_trade_return_pct);
+    const holdingDays = finite(latest.holding_days);
+    const buyHold = finite(rolling200.buy_hold_return_pct);
+
+    const activation = weightedAverage([
+      [ramp(spread5_20, 0, 1.5), 0.65],
+      [fadeAbove(spread5_20, 8, 16), 0.35]
+    ]);
+    const priceReclaim = weightedAverage([
+      [ramp(priceVs20, -0.5, 1.5), 0.65],
+      [fadeAbove(priceVs20, 10, 18), 0.2],
+      [bandScore(priceVs5, -2, 5, -8, 14), 0.15]
+    ]);
+    const overheatControl = bandScore(spread5_200, -5, 24, -15, 60);
+    const tradeFresh = currentTrade == null
+      ? (finite(spread5_20) != null && spread5_20 > 0 ? 0.85 : 0)
+      : weightedAverage([
+        [bandScore(currentTrade, -4, 10, -12, 28), 0.6],
+        [holdingDays == null ? null : fadeAbove(holdingDays, 18, 70), 0.4]
+      ]);
+    const earlyAcceleration = weightedAverage([
+      [bandScore(spread2_5, 0, 5, -3, 12), 0.55],
+      [bandScore(spread20_40, -2, 8, -8, 18), 0.2],
+      [bandScore(priceVs5, -2, 5, -8, 14), 0.25]
+    ]);
+    const eaRaw = weightedAverage([
+      [activation, 0.32],
+      [priceReclaim, 0.22],
+      [overheatControl, 0.18],
+      [tradeFresh, 0.16],
+      [earlyAcceleration, 0.12]
+    ]);
+    const eaGate = weightedAverage([
+      [activation, 0.6],
+      [priceReclaim, 0.4]
+    ]);
+    const ea = eaRaw == null || eaGate == null ? null : Math.round(eaRaw * (0.15 + 0.85 * eaGate) * 100);
+
+    const maturity = weightedAverage([
+      [ramp(spread20_200, 12, 40), 0.35],
+      [ramp(spread5_200, 18, 55), 0.35],
+      [ramp(priceVs200, 15, 55), 0.3]
+    ]);
+    const mediumTrendLead = maxScore([spread20_60, spread20_40, spread20_200]);
+    const deceleration = weightedAverage([
+      [ramp(mediumTrendLead != null && spread5_20 != null ? mediumTrendLead - spread5_20 : null, 4, 20), 0.35],
+      [ramp(spread2_5 == null ? null : -spread2_5, 0.5, 6), 0.2],
+      [ramp(priceVs5 == null ? null : -priceVs5, 0.5, 7), 0.2],
+      [ramp(priceVs20 == null ? null : -priceVs20, 2, 14), 0.25]
+    ]);
+    const harvest = maxScore([
+      ramp(currentTrade, 10, 35),
+      ramp(holdingDays, 25, 90),
+      ramp(buyHold, 20, 90),
+      ramp(spread5_200, 25, 70)
+    ]);
+    const notBroken = weightedAverage([
+      [ramp(spread20_200, 8, 22), 0.55],
+      [priceVs20 == null ? null : fadeAbove(-priceVs20, 18, 35), 0.3],
+      [spread5_200 == null ? null : fadeAbove(-spread5_200, 0, 15), 0.15]
+    ]);
+    const lm = weightedIndex([
+      [maturity, 0.32],
+      [deceleration, 0.32],
+      [harvest, 0.22],
+      [notBroken, 0.14]
+    ]);
+
+    return { ea, lm };
   }
 
   function setLoading(text) {
@@ -187,12 +356,12 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     tbody.replaceChildren();
 
     const rows = allNames
-      .map(n => ({ name: n, strategy: data[n]?.strategy_signal }))
+      .map(n => ({ name: n, strategy: data[n]?.strategy_signal, lifecycle: calculateLifecycleScores(data[n]) }))
       .filter(r => r.strategy?.available)
       .sort(compareRows);
     updateSortHeaders();
 
-    rows.forEach(({name, strategy}) => {
+    rows.forEach(({name, strategy, lifecycle}) => {
       const ticker = data[name]?.ticker;
       const latest = strategy?.latest || {};
       const rolling200 = strategy?.backtest?.rolling_200d || {};
@@ -200,6 +369,8 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       tr.className = 'momentum-row' + (name === currentDetailName ? ' detail-active' : '');
       tr.append(
         createNameCell(name),
+        createCell(fmtIndex(lifecycle.ea), { color: indexColor(lifecycle.ea, 'ea'), weight: '800' }),
+        createCell(fmtIndex(lifecycle.lm), { color: indexColor(lifecycle.lm, 'lm'), weight: '800' }),
         createCell(fmtPct(latest.vwap_5_20_return_pct), { color: statColor(latest.vwap_5_20_return_pct), weight: '800' }),
         createCell(fmtPct(latest.vwap_5_200_return_pct), { color: statColor(latest.vwap_5_200_return_pct), weight: '800' }),
         createCell(fmtPct(rolling200.buy_hold_return_pct), { color: statColor(rolling200.buy_hold_return_pct), weight: '800' }),
