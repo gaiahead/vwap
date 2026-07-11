@@ -32,6 +32,7 @@ ASSETS: list[AssetTuple] = [
     ("IBIT",                       "IBIT"),
     ("SPY",                        "SPY"),
     ("QQQ",                        "QQQ"),
+    ("TIGER 토탈월드스탁액티브",       "0060H0.KS"),
     ("SCHD",                       "SCHD"),
     ("TIGER 미국배당다우존스",         "458730.KS"),
     ("XLE",                        "XLE"),
@@ -63,7 +64,10 @@ ASSETS: list[AssetTuple] = [
     ("BAE Systems",                "BA.L"),
     ("Saab",                       "SAAB-B.ST"),
     ("XLF",                        "XLF"),  # 금융
+    ("KODEX 미국S&P500금융",          "453650.KS"),
     ("XLV",                        "XLV"),  # 헬스케어
+    ("KODEX 미국S&P500헬스케어",       "453640.KS"),
+    ("TIGER 미국나스닥바이오",         "203780.KS"),
     ("XLI",                        "XLI"),  # 산업재
     ("XLY",                        "XLY"),  # 경기소비재
     ("XLP",                        "XLP"),  # 필수소비재

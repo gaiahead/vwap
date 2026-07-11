@@ -32,6 +32,17 @@ def test_requested_tiger_korea_ai_power_equipment_top3_plus_is_registered():
     assert ("TIGER 코리아AI전력기기TOP3플러스", "0117V0.KS") in gen.ASSETS
 
 
+def test_requested_world_healthcare_biotech_financial_etfs_are_registered():
+    requested_assets = {
+        ("TIGER 토탈월드스탁액티브", "0060H0.KS"),
+        ("KODEX 미국S&P500헬스케어", "453640.KS"),
+        ("TIGER 미국나스닥바이오", "203780.KS"),
+        ("KODEX 미국S&P500금융", "453650.KS"),
+    }
+
+    assert requested_assets <= set(gen.ASSETS)
+
+
 def test_asset_tickers_are_unique():
     tickers = [ticker for _, ticker in gen.ASSETS]
 
