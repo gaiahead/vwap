@@ -43,6 +43,11 @@ def test_requested_world_healthcare_biotech_financial_etfs_are_registered():
     assert requested_assets <= set(gen.ASSETS)
 
 
+def test_leeno_industrial_uses_kosdaq_ticker():
+    assert ("리노공업", "058470.KQ") in gen.ASSETS
+    assert ("리노공업", "058470.KS") not in gen.ASSETS
+
+
 def test_asset_tickers_are_unique():
     tickers = [ticker for _, ticker in gen.ASSETS]
 
