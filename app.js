@@ -1,4 +1,4 @@
-const DATA_VERSION = 'fix-leeno-20260714';
+const DATA_VERSION = 'data-20260716-0817';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
