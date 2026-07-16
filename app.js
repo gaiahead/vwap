@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260716-0817';
+const DATA_VERSION = 'data-20260716-1600';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
