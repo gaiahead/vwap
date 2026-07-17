@@ -57,30 +57,30 @@ def test_asset_name_column_has_no_signal_color_indicator():
     assert "setProperty('--c'" not in app
 
 
-def test_detail_panels_vp_tabs_and_price_datasets_use_2_to_200_design_without_trade_markers():
+def test_detail_panels_vp_tabs_and_price_datasets_use_only_1_5_20_200_without_trade_markers():
     app = read("app.js")
 
     assert "VWAP Lines · 3/5/10/20/40/60/100/200" not in app
     assert "VWAP Lines · 1/5/20/40/60/100/200" not in app
     assert "VWAP Lines · 2/5/20/40/60/100/200" not in app
     assert "Volume Profile" in app
-    assert "const VP_PERIODS = ['2d', '5d', '20d', '40d', '60d', '100d', '200d']" in app
-    assert "let currentVpPeriod = '2d';" in app
-    assert "currentVpPeriod = '2d';" in app
+    assert "const VP_PERIODS = ['1d', '5d', '20d', '200d']" in app
+    assert "let currentVpPeriod = '1d';" in app
+    assert "currentVpPeriod = '1d';" in app
     assert "const PRICE_DATASET_ORDER = PRICE_LINE_DEFS.map(def => def.label);" in app
     assert "const legendOrder = new Map(PRICE_DATASET_ORDER.map((label, idx) => [label, idx]));" in app
     assert "label.startsWith('VWAP 5')" not in app
-    assert "{ label: '2d', window: 2, color: '#eab308', dash: [], width: 1.15 }" in app
+    assert "{ label: '1d', window: 1, color: '#eab308', dash: [], width: 1.15 }" in app
     assert "{ label: '5d', window: 5, color: '#dc2626', dash: [], width: 1.15 }" in app
     assert "{ label: '20d', window: 20, color: '#16a34a', dash: [], width: 1.15 }" in app
-    assert "{ label: '40d', window: 40, color: '#0891b2', dash: [], width: 1.15 }" in app
-    assert "{ label: '60d', window: 60, color: '#2563eb', dash: [], width: 1.15 }" in app
-    assert "{ label: '100d', window: 100, color: '#1e3a8a', dash: [], width: 1.15 }" in app
     assert "{ label: '200d', window: 200, color: '#000000', dash: [], width: 1.15" in app
     assert "dash: [5, 3]" not in app
     assert "{ label: '3d'" not in app
-    assert "{ label: '1d'" not in app
     assert "{ label: '10d'" not in app
+    assert "{ label: '2d'" not in app
+    assert "{ label: '40d'" not in app
+    assert "{ label: '60d'" not in app
+    assert "{ label: '100d'" not in app
     assert "pointStyle: 'line'" in app
     assert "lineDash: dataset.borderDash || []" in app
     assert "label: 'BUY'" not in app
@@ -90,7 +90,7 @@ def test_detail_panels_vp_tabs_and_price_datasets_use_2_to_200_design_without_tr
     assert "signalMap" not in app
 
     line_labels = re.findall(r"\{ label: '([^']+)'", app)
-    assert line_labels == ["2d", "5d", "20d", "40d", "60d", "100d", "200d"]
+    assert line_labels == ["1d", "5d", "20d", "200d"]
 
 
 def test_cache_bust_version_is_consistent_everywhere():
