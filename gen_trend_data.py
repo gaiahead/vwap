@@ -179,8 +179,9 @@ ASSETS: list[AssetTuple] = [
 WINDOWS: list[int] = [5, 20, 200]  # 1d는 명시적 proxy, 나머지는 상세 차트용 롤링 VWAP 기간
 VOLUME_PROFILE_WINDOWS: list[int] = [1, 5, 20, 200]  # 하단 Volume Profile 기간
 LOOKBACK_TRADING_DAYS: int = 200
-MIN_STRATEGY_TRADING_DAYS: int = 25  # 5/20 신호 산출에 필요한 최소 이력
-DOWNLOAD_CALENDAR_DAYS: int = 450  # 최근 200거래일 확보용 여유 다운로드
+HISTORY_TRADING_DAYS: int = LOOKBACK_TRADING_DAYS + max(WINDOWS) - 1
+MIN_STRATEGY_TRADING_DAYS: int = 25  # 신규 종목도 표에 유지하되, 200d 미산출 시 신호는 WAIT
+DOWNLOAD_CALENDAR_DAYS: int = 650  # 최근 200일 + VWAP200 지표 warm-up 확보
 N_BUCKETS: int = 20
 KST: timezone = timezone(timedelta(hours=9))
 KRX_TODAY_PATCH_AFTER = time(15, 30)  # 장중 Naver 일봉은 미확정값이므로 15:30 이후만 반영
@@ -352,61 +353,92 @@ def calc_max_drawdown(equity: list[float]) -> float | None:
 
 STRATEGY_FEE_ONE_WAY = 0.0003
 STRATEGY_RULES: dict[str, Any] = {
-    "buy": "VWAP5 > VWAP20",
-    "sell": "VWAP5 < VWAP20",
+    "buy": "VWAP1 > VWAP5 > VWAP20 > VWAP200 alignment starts",
+    "sell": "full alignment breaks",
     "execution": "next_day_vwap_1d_proxy",
     "valuation": "vwap_1d_proxy",
     "buy_hold_return": "last_vwap_1d_proxy / first_vwap_1d_proxy - 1",
     "fee_one_way_pct": 0.03,
+    "backtest_window_trading_days": LOOKBACK_TRADING_DAYS,
+    "carry_in_position": False,
 }
 
 
 def prepare_strategy_frame(df: pd.DataFrame) -> pd.DataFrame:
-    """최근 200거래일 기준 5/20/200 전략 계산 컬럼을 만든다.
+    """VWAP 지표를 계산한 뒤 백테스트/차트용 최근 200거래일만 반환한다.
 
     비즈니스 기준:
-    - 평가 범위는 최근 200거래일만 사용한다.
+    - 수익률·MDD·신호 이벤트 범위는 최근 200거래일만 사용한다.
+    - VWAP200은 미래 참조 없이 계산하기 위해 이전 199거래일을 지표 warm-up으로만 사용한다.
+    - 최근 200일 시작 전 포지션은 이월하지 않는다.
     - 1일 VWAP proxy = (High + Low + Close) / 3.
-    - 5/20 신호와 5/200 위치는 빠른 일봉 VWAP proxy의 롤링 VWAP로 계산한다.
+    - 정배열은 1d > 5d > 20d > 200d 순서다.
     """
-    work = df.tail(LOOKBACK_TRADING_DAYS).copy()
-    work["vwap_1d"] = ((work["high"] + work["low"] + work["close"]) / 3).astype(float)
+    source = df.tail(HISTORY_TRADING_DAYS).copy()
+    source["vwap_1d"] = ((source["high"] + source["low"] + source["close"]) / 3).astype(float)
     for window in WINDOWS:
-        work[f"vwap_{window}d"] = compute_proxy_vwap_series(work, window)
-    work["vwap_5_20_return"] = work["vwap_5d"] / work["vwap_20d"] - 1
-    work["vwap_5_200_return"] = work["vwap_5d"] / work["vwap_200d"] - 1
-    return work
+        source[f"vwap_{window}d"] = compute_proxy_vwap_series(source, window)
+    return source.tail(LOOKBACK_TRADING_DAYS).copy()
 
 
-def vwap_5_20_signal(vwap5: Any, vwap20: Any) -> str:
-    """확정된 VWAP5/VWAP20 배열을 BUY/SELL/WAIT로 변환."""
-    if is_missing(vwap5) or is_missing(vwap20):
+def full_alignment_signal(vwap1: Any, vwap5: Any, vwap20: Any, vwap200: Any) -> str:
+    """확정된 1d/5d/20d/200d 배열을 BUY/SELL/WAIT로 변환."""
+    values = [vwap1, vwap5, vwap20, vwap200]
+    if any(is_missing(value) for value in values):
         return "WAIT"
-    if float(vwap5) > float(vwap20):
+    v1, v5, v20, v200 = (round(float(value), 4) for value in values)
+    if v1 > v5 > v20 > v200:
         return "BUY"
-    if float(vwap5) < float(vwap20):
-        return "SELL"
-    return "WAIT"
+    return "SELL"
 
 
-def make_signal_record(signal_date: str, execution_date: str, signal_type: str, execution_price: float, confirmed: pd.Series) -> dict[str, Any]:
-    """상단/상세 UI가 쓰는 최근 변화 레코드."""
-    ret_5_20 = confirmed.get("vwap_5_20_return")
-    ret_5_200 = confirmed.get("vwap_5_200_return")
+def make_signal_record(
+    signal_date: str,
+    execution_date: str | None,
+    signal_type: str,
+    execution_price: float | None,
+    confirmed: pd.Series,
+) -> dict[str, Any]:
+    """차트 마커와 익일 체결 검증에 사용하는 정배열 전환 레코드."""
     return {
         "date": signal_date,
         "execution_date": execution_date,
         "type": signal_type,
-        "price": round(execution_price, 4),
-        "vwap_5_20_return_pct": safe_round(float(ret_5_20) * 100 if not is_missing(ret_5_20) else None, 2),
-        "vwap_5_200_return_pct": safe_round(float(ret_5_200) * 100 if not is_missing(ret_5_200) else None, 2),
+        "price": safe_round(execution_price, 4),
+        "marker_price": safe_round(confirmed.get("vwap_5d"), 4),
+        "vwap1": safe_round(confirmed.get("vwap_1d"), 4),
+        "vwap5": safe_round(confirmed.get("vwap_5d"), 4),
+        "vwap20": safe_round(confirmed.get("vwap_20d"), 4),
+        "vwap200": safe_round(confirmed.get("vwap_200d"), 4),
     }
 
 
-def simulate_vwap_5_20_strategy(work: pd.DataFrame, record_signals: bool = True) -> dict[str, Any]:
-    """VWAP 5/20 전략을 최근 구간에서 시뮬레이션한다.
+def build_full_alignment_events(work: pd.DataFrame) -> list[dict[str, Any]]:
+    """최근 구간 안에서 발생한 정배열 시작/해제 전환만 추출한다."""
+    events: list[dict[str, Any]] = []
+    previous_state: bool | None = None
 
-    전일 확정된 VWAP5/VWAP20 신호를 다음 거래일의 1일 VWAP proxy 가격으로 체결한다.
+    for i, (dt, row) in enumerate(work.iterrows()):
+        signal = full_alignment_signal(
+            row.get("vwap_1d"), row.get("vwap_5d"), row.get("vwap_20d"), row.get("vwap_200d")
+        )
+        current_state = None if signal == "WAIT" else signal == "BUY"
+        if previous_state is not None and current_state is not None and current_state != previous_state:
+            execution_date = date_key(work.index[i + 1]) if i + 1 < len(work) else None
+            execution_price = float(work.iloc[i + 1]["vwap_1d"]) if i + 1 < len(work) else None
+            events.append(make_signal_record(
+                date_key(dt), execution_date, "BUY" if current_state else "SELL", execution_price, row
+            ))
+        previous_state = current_state
+
+    return events
+
+
+def simulate_full_alignment_strategy(work: pd.DataFrame, record_signals: bool = True) -> dict[str, Any]:
+    """1d > 5d > 20d > 200d 정배열 전략을 최근 구간에서 시뮬레이션한다.
+
+    전환 신호를 확정한 다음 거래일의 1일 VWAP proxy 가격으로 체결한다.
+    최근 구간 시작 전 포지션은 이월하지 않는다.
     반환값은 JSON 직렬화 가능한 dict로 유지해 trend/detail 생성 로직에서 공유한다.
     """
     cash = 1.0
@@ -417,7 +449,9 @@ def simulate_vwap_5_20_strategy(work: pd.DataFrame, record_signals: bool = True)
     last_signal = "WAIT"
     last_signal_date: str | None = None
     trades: list[dict[str, Any]] = []
-    signals: list[dict[str, Any]] = []
+    all_signals = build_full_alignment_events(work)
+    signals = all_signals if record_signals else []
+    executions = {event["execution_date"]: event for event in all_signals if event.get("execution_date")}
     equity_curve: list[float] = []
     position_days = 0
 
@@ -425,29 +459,23 @@ def simulate_vwap_5_20_strategy(work: pd.DataFrame, record_signals: bool = True)
         row = work.iloc[i]
         valuation_price = float(row["vwap_1d"])
 
-        if i > 0:
-            confirmed = work.iloc[i - 1]
-            signal = vwap_5_20_signal(confirmed["vwap_5d"], confirmed["vwap_20d"])
-            signal_dt = date_key(work.index[i - 1])
-            execution_dt = date_key(work.index[i])
-
+        execution_dt = date_key(work.index[i])
+        event = executions.get(execution_dt)
+        if event:
+            signal = event["type"]
+            last_signal = signal
+            last_signal_date = event["date"]
             if not in_position and signal == "BUY":
                 shares = cash * (1 - STRATEGY_FEE_ONE_WAY) / valuation_price
                 cash = 0.0
                 in_position = True
                 entry_price = valuation_price
                 entry_date = execution_dt
-                last_signal = "BUY"
-                last_signal_date = signal_dt
-                if record_signals:
-                    signals.append(make_signal_record(signal_dt, execution_dt, "BUY", valuation_price, confirmed))
             elif in_position and signal == "SELL":
                 exit_price = valuation_price
                 cash = shares * exit_price * (1 - STRATEGY_FEE_ONE_WAY)
                 shares = 0.0
                 in_position = False
-                last_signal = "SELL"
-                last_signal_date = signal_dt
                 ret = pct_change(entry_price, exit_price)
                 trades.append({
                     "entry_date": entry_date,
@@ -456,8 +484,6 @@ def simulate_vwap_5_20_strategy(work: pd.DataFrame, record_signals: bool = True)
                     "exit_price": round(exit_price, 4),
                     "return_pct": safe_round(ret, 2),
                 })
-                if record_signals:
-                    signals.append(make_signal_record(signal_dt, execution_dt, "SELL", exit_price, confirmed))
                 entry_price = None
                 entry_date = None
 
@@ -494,7 +520,7 @@ def calc_trade_holding_stats(trades: list[dict[str, Any]], work: pd.DataFrame) -
 
 
 def calc_strategy_window_stats(work: pd.DataFrame, window: int = 200) -> dict[str, Any]:
-    """최근 최대 window 거래일 기준 5/20 전략과 단순보유의 수익률/MDD."""
+    """최근 최대 window 거래일 기준 정배열 전략과 단순보유의 수익률/MDD."""
     if len(work) < MIN_STRATEGY_TRADING_DAYS:
         return {
             "window_days": min(window, len(work)),
@@ -505,7 +531,7 @@ def calc_strategy_window_stats(work: pd.DataFrame, window: int = 200) -> dict[st
         }
 
     sub = work.iloc[-min(window, len(work)):].copy()
-    simulation = simulate_vwap_5_20_strategy(sub, record_signals=False)
+    simulation = simulate_full_alignment_strategy(sub, record_signals=False)
     strategy_curve = simulation["equity_curve"]
     base_price = float(sub["vwap_1d"].iloc[0])
     buy_hold_curve = [float(v) / base_price if base_price else 1.0 for v in sub["vwap_1d"]]
@@ -520,36 +546,30 @@ def calc_strategy_window_stats(work: pd.DataFrame, window: int = 200) -> dict[st
 
 
 def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
-    """최근 200거래일 기준 VWAP 5/20 전략과 5/200 위치 요약.
+    """최근 200거래일 기준 1d/5d/20d/200d 정배열 전략 요약.
 
     신호: 당일 종가 확정 후 판단. 백테스트 체결: 신호 다음 거래일 1일 VWAP proxy, 편도 수수료 0.03%.
-    `VWAP200`은 최신 5/200 수익률 계산용 기준값이며 상세 차트에는 수평 기준선으로만 표시한다.
     """
     if len(df) < MIN_STRATEGY_TRADING_DAYS:
         return {"available": False, "reason": "insufficient_recent_history"}
 
     work = prepare_strategy_frame(df)
-    simulation = simulate_vwap_5_20_strategy(work, record_signals=True)
+    simulation = simulate_full_alignment_strategy(work, record_signals=True)
     latest = work.iloc[-1]
 
+    v1 = safe_round(latest["vwap_1d"])
     v5 = safe_round(latest["vwap_5d"])
     v20 = safe_round(latest["vwap_20d"])
     v200 = safe_round(latest["vwap_200d"])
-    ret_5_20_ratio = None if is_missing(latest["vwap_5_20_return"]) else float(latest["vwap_5_20_return"])
-    ret_5_200_ratio = None if is_missing(latest["vwap_5_200_return"]) else float(latest["vwap_5_200_return"])
-    ret_5_20_pct = safe_round(ret_5_20_ratio * 100 if ret_5_20_ratio is not None else None, 2)
-    ret_5_200_pct = safe_round(ret_5_200_ratio * 100 if ret_5_200_ratio is not None else None, 2)
     latest_date = date_key(work.index[-1])
-    buy_now = v5 is not None and v20 is not None and v5 > v20
-    if v5 is None or v20 is None:
+    current_signal = full_alignment_signal(v1, v5, v20, v200)
+    if current_signal == "WAIT":
         alignment = "N/A"
-    elif v5 > v20:
-        alignment = "5 > 20"
-    elif v5 < v20:
-        alignment = "5 < 20"
+    elif current_signal == "BUY":
+        alignment = "1 > 5 > 20 > 200"
     else:
-        alignment = "5 = 20"
-    action = "매수" if buy_now else "매도"
+        alignment = "정배열 아님"
+    action = "매수" if current_signal == "BUY" else "매도" if current_signal == "SELL" else "대기"
 
     final_vwap_1d = float(work["vwap_1d"].iloc[-1])
     current_trade_return = pct_change(simulation["entry_price"], final_vwap_1d) if simulation["in_position"] else None
@@ -566,14 +586,12 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
 
     return {
         "available": True,
-        "strategy": "VWAP 5/20",
+        "strategy": "VWAP 1/5/20/200 full alignment",
         "rules": dict(STRATEGY_RULES),
         "latest": {
             "date": latest_date,
-            "vwap5": v5, "vwap20": v20, "vwap200": v200,
-            "vwap_5_20_return_pct": ret_5_20_pct,
-            "vwap_5_200_return_pct": ret_5_200_pct,
-            "vwap_5_20_momentum_pct": ret_5_20_pct,
+            "vwap1": v1, "vwap5": v5, "vwap20": v20, "vwap200": v200,
+            "signal": current_signal,
             "alignment": alignment, "in_position": simulation["in_position"], "action": action,
             "last_signal": simulation["last_signal"], "last_signal_date": simulation["last_signal_date"],
             "holding_days": holding_days,
@@ -682,7 +700,7 @@ def maybe_patch_krx_today(
     patched.loc[pd.Timestamp(today_row["date"]), ["open", "high", "low", "close", "volume"]] = [
         today_row["open"], today_row["high"], today_row["low"], today_row["close"], today_row["volume"]
     ]
-    patched = patched.sort_index().tail(LOOKBACK_TRADING_DAYS).copy()
+    patched = patched.sort_index().tail(HISTORY_TRADING_DAYS).copy()
     patched.attrs["krx_today_patched"] = True
     patched.attrs["krx_today_source"] = "naver_siseJson"
     patched.attrs["krx_today_date"] = today.isoformat()
@@ -690,7 +708,7 @@ def maybe_patch_krx_today(
 
 
 def download_ohlcv(ticker: str, end_date: str) -> pd.DataFrame:
-    """최근 200거래일 확보에 필요한 OHLCV만 다운로드해 최종 200거래일로 제한."""
+    """최근 200일 백테스트와 VWAP200 warm-up에 필요한 OHLCV를 다운로드한다."""
     end_dt = datetime.strptime(end_date, "%Y-%m-%d")
     start_date = (end_dt - timedelta(days=DOWNLOAD_CALENDAR_DAYS)).strftime("%Y-%m-%d")
     # yfinance의 end는 배타적이라 다음 날짜를 넘겨준다. 그래도 KRX 당일이 없으면 Naver로 보강한다.
@@ -704,7 +722,7 @@ def download_ohlcv(ticker: str, end_date: str) -> pd.DataFrame:
         progress=False,
     )
     raw.columns = [c[0].lower() for c in raw.columns]
-    df = raw[["open", "high", "low", "close", "volume"]].dropna().tail(LOOKBACK_TRADING_DAYS).copy()
+    df = raw[["open", "high", "low", "close", "volume"]].dropna().tail(HISTORY_TRADING_DAYS).copy()
     return maybe_patch_krx_today(df, ticker, end_dt.date())
 
 
@@ -808,7 +826,7 @@ def build_detail_meta(run_time: str, asset_result: dict[str, Any]) -> dict[str, 
 
 def build_asset_outputs(name: str, ticker: str, df: pd.DataFrame) -> tuple[dict[str, Any], dict[str, Any]]:
     """동일한 OHLCV 스냅샷에서 trend/detail 결과를 함께 생성한다."""
-    df = df.tail(LOOKBACK_TRADING_DAYS).copy()
+    df = df.tail(HISTORY_TRADING_DAYS).copy()
     vwap_structure, _ = build_vwap_structure(df)
     records = build_recent_records(df)
     strategy_signal = build_strategy_signal(df)

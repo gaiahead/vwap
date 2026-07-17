@@ -1,4 +1,4 @@
-const DATA_VERSION = 'periods-1-5-20-200-20260717';
+const DATA_VERSION = 'full-alignment-20260717';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -7,20 +7,21 @@ const COLOR = {
   muted: '#64748b',
   blue: '#2563eb'
 };
-const DEFAULT_SORT = { key: 'vwap_5_20_return_pct', dir: 'desc' };
+const DEFAULT_SORT = { key: 'strategy_return_pct', dir: 'desc' };
 const VP_PERIODS = ['1d', '5d', '20d', '200d'];
 const PRICE_LINE_DEFS = [
   { label: '1d', window: 1, color: '#eab308', dash: [], width: 1.15 },
   { label: '5d', window: 5, color: '#dc2626', dash: [], width: 1.15 },
   { label: '20d', window: 20, color: '#16a34a', dash: [], width: 1.15 },
-  { label: '200d', window: 200, color: '#000000', dash: [], width: 1.15, horizontal: true }
+  { label: '200d', window: 200, color: '#000000', dash: [], width: 1.15 }
 ];
-const PRICE_DATASET_ORDER = PRICE_LINE_DEFS.map(def => def.label);
+const PRICE_DATASET_ORDER = ['BUY', 'SELL', ...PRICE_LINE_DEFS.map(def => def.label)];
 
 const MOMENTUM_COLUMNS = [
   { key: 'name', label: '종목', type: 'text', get: row => row.name },
-  { key: 'vwap_5_20_return_pct', label: '5/20 괴리율', type: 'number', get: row => row.strategy.latest?.vwap_5_20_return_pct },
-  { key: 'vwap_5_200_return_pct', label: '5/200 괴리율', type: 'number', get: row => row.strategy.latest?.vwap_5_200_return_pct },
+  { key: 'signal', label: '신호', type: 'text', get: row => row.strategy.latest?.signal },
+  { key: 'strategy_return_pct', label: '정배열 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.strategy_return_pct },
+  { key: 'strategy_mdd_pct', label: '정배열 MDD', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.strategy_mdd_pct, isMdd: true },
   { key: 'buy_hold_return_pct', label: '200일 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.buy_hold_return_pct },
   { key: 'buy_hold_mdd_pct', label: '200일 MDD', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.buy_hold_mdd_pct, isMdd: true }
 ];
@@ -122,6 +123,12 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     return td;
   }
 
+  function createSignalCell(signal) {
+    if (signal === 'BUY') return createCell('BUY', { className: 'signal-cell buy', color: COLOR.positive, weight: '900' });
+    if (signal === 'SELL') return createCell('SELL', { className: 'signal-cell sell', color: COLOR.negative, weight: '900' });
+    return createCell('–', { className: 'signal-cell wait', color: COLOR.muted, weight: '800' });
+  }
+
 
   function setLoading(text) {
     detailContent.replaceChildren();
@@ -134,7 +141,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
   let sortState = { ...DEFAULT_SORT };
 
   function compareRows(a, b) {
-    const getter = SORT_FIELDS[sortState.key] || SORT_FIELDS.vwap_5_20_return_pct;
+    const getter = SORT_FIELDS[sortState.key] || SORT_FIELDS.strategy_return_pct;
     const av = getter(a);
     const bv = getter(b);
     const dir = sortState.dir === 'asc' ? 1 : -1;
@@ -197,8 +204,9 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       tr.className = 'momentum-row' + (name === currentDetailName ? ' detail-active' : '');
       tr.append(
         createNameCell(name),
-        createCell(fmtPct(latest.vwap_5_20_return_pct), { color: statColor(latest.vwap_5_20_return_pct), weight: '800' }),
-        createCell(fmtPct(latest.vwap_5_200_return_pct), { color: statColor(latest.vwap_5_200_return_pct), weight: '800' }),
+        createSignalCell(latest.signal),
+        createCell(fmtPct(rolling200.strategy_return_pct), { color: statColor(rolling200.strategy_return_pct), weight: '800' }),
+        createCell(fmtPct(rolling200.strategy_mdd_pct), { color: statColor(rolling200.strategy_mdd_pct, true), weight: '800' }),
         createCell(fmtPct(rolling200.buy_hold_return_pct), { color: statColor(rolling200.buy_hold_return_pct), weight: '800' }),
         createCell(fmtPct(rolling200.buy_hold_mdd_pct), { color: statColor(rolling200.buy_hold_mdd_pct, true), weight: '800' })
       );
@@ -344,16 +352,15 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
   function renderPriceChart(detailData) {
     const ohlcv = detailData.ohlcv;
     const labels = ohlcv.map(d => d.date);
-    const vp = detailData.volume_profile;
-    const lineData = def => {
-      if (def.horizontal) {
-        const vwap = vp?.[`${def.window}d`]?.vwap ?? null;
-        return labels.map(() => vwap);
-      }
-      return ohlcv.map(d => d[`vwap_${def.window}d`] ?? null).some(v => v != null)
-        ? ohlcv.map(d => d[`vwap_${def.window}d`] ?? null)
-        : rollingProxyVwap(ohlcv, def.window);
-    };
+    const signalMap = new Map((detailData.strategy_signal?.signals || []).map(signal => [signal.date, signal]));
+    const markerData = type => labels.map((date, i) => {
+      const signal = signalMap.get(date);
+      if (signal?.type !== type) return null;
+      return signal.marker_price ?? ohlcv[i]?.vwap_5d ?? null;
+    });
+    const lineData = def => ohlcv.map(d => d[`vwap_${def.window}d`] ?? null).some(v => v != null)
+      ? ohlcv.map(d => d[`vwap_${def.window}d`] ?? null)
+      : rollingProxyVwap(ohlcv, def.window);
     const vwapLineDatasets = PRICE_LINE_DEFS.map((def, idx) => ({
       label: def.label,
       data: lineData(def),
@@ -362,10 +369,14 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       borderDash: def.dash,
       pointStyle: 'line',
       pointRadius: 0,
-      tension: def.horizontal ? 0 : 0.2,
+      tension: 0.2,
       fill: false,
       order: idx + 2
     }));
+    const signalDatasets = [
+      { label: 'BUY', data: markerData('BUY'), type: 'line', showLine: false, pointStyle: 'triangle', pointRotation: 0, pointRadius: 7, pointHoverRadius: 9, pointBackgroundColor: COLOR.positive, pointBorderColor: '#166534', pointBorderWidth: 1.5, order: 1 },
+      { label: 'SELL', data: markerData('SELL'), type: 'line', showLine: false, pointStyle: 'triangle', pointRotation: 180, pointRadius: 7, pointHoverRadius: 9, pointBackgroundColor: COLOR.negative, pointBorderColor: '#991b1b', pointBorderWidth: 1.5, order: 1 }
+    ];
     const legendOrder = new Map(PRICE_DATASET_ORDER.map((label, idx) => [label, idx]));
     const legendKey = label => legendOrder.has(label) ? label : label;
     const annotations = {};
@@ -374,7 +385,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       type: 'line',
       data: {
         labels,
-        datasets: vwapLineDatasets
+        datasets: [...signalDatasets, ...vwapLineDatasets]
       },
       options: {
         responsive: true, maintainAspectRatio: false, animation: {duration: 200},
@@ -384,13 +395,15 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
             color: '#334155', font: {size: 10}, boxWidth: 28, pointStyleWidth: 28, padding: 10, usePointStyle: true,
             generateLabels: chart => Chart.defaults.plugins.legend.labels.generateLabels(chart).map(item => {
               const dataset = chart.data.datasets[item.datasetIndex] || {};
+              const isSignal = dataset.label === 'BUY' || dataset.label === 'SELL';
               return {
                 ...item,
-                pointStyle: 'line',
+                pointStyle: isSignal ? dataset.pointStyle : 'line',
+                rotation: isSignal ? dataset.pointRotation : 0,
                 lineDash: dataset.borderDash || [],
                 lineWidth: dataset.borderWidth || 1,
-                strokeStyle: dataset.borderColor,
-                fillStyle: dataset.borderColor
+                strokeStyle: dataset.borderColor || dataset.pointBorderColor,
+                fillStyle: dataset.pointBackgroundColor || dataset.borderColor
               };
             }),
             sort: (a, b) => (legendOrder.get(legendKey(a.text)) ?? 999) - (legendOrder.get(legendKey(b.text)) ?? 999)

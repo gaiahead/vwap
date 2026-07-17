@@ -16,17 +16,17 @@ def test_table_columns_and_default_sort_match_current_dashboard_contract():
 
     assert headers == [
         "종목",
-        "5/20 괴리율",
-        "5/200 괴리율",
+        "신호",
+        "정배열 수익률",
+        "정배열 MDD",
         "200일 수익률",
         "200일 MDD",
     ]
-    assert "const DEFAULT_SORT = { key: 'vwap_5_20_return_pct', dir: 'desc' }" in app
-    assert "5/20과 5/200은 각각 단기·장기 VWAP 대비 괴리율" in html
-    assert "5/20 수익률" not in html
-    assert "5/200 수익률" not in html
-    assert "label: '5/20 괴리율'" in app
-    assert "label: '5/200 괴리율'" in app
+    assert "const DEFAULT_SORT = { key: 'strategy_return_pct', dir: 'desc' }" in app
+    assert "1d &gt; 5d &gt; 20d &gt; 200d" in html
+    assert "다음 거래일 1d VWAP" in html
+    for token in ["5/20 괴리율", "5/200 괴리율"]:
+        assert token not in html + app
 
 
 def test_ea_lm_columns_and_lifecycle_score_code_are_removed():
@@ -48,16 +48,20 @@ def test_ea_lm_columns_and_lifecycle_score_code_are_removed():
         assert token not in app
 
 
-def test_asset_name_column_has_no_signal_color_indicator():
+def test_signal_cell_uses_buy_sell_colors_without_name_indicator():
     app = read("app.js")
     css = read("style.css")
 
     assert "row-indicator" not in app
     assert "row-indicator" not in css
     assert "setProperty('--c'" not in app
+    assert "signal-cell buy" in app
+    assert "signal-cell sell" in app
+    assert ".signal-cell.buy" in css
+    assert ".signal-cell.sell" in css
 
 
-def test_detail_panels_vp_tabs_and_price_datasets_use_only_1_5_20_200_without_trade_markers():
+def test_detail_panels_vp_tabs_and_price_datasets_use_only_1_5_20_200_with_trade_markers():
     app = read("app.js")
 
     assert "VWAP Lines · 3/5/10/20/40/60/100/200" not in app
@@ -67,7 +71,7 @@ def test_detail_panels_vp_tabs_and_price_datasets_use_only_1_5_20_200_without_tr
     assert "const VP_PERIODS = ['1d', '5d', '20d', '200d']" in app
     assert "let currentVpPeriod = '1d';" in app
     assert "currentVpPeriod = '1d';" in app
-    assert "const PRICE_DATASET_ORDER = PRICE_LINE_DEFS.map(def => def.label);" in app
+    assert "const PRICE_DATASET_ORDER = ['BUY', 'SELL', ...PRICE_LINE_DEFS.map(def => def.label)];" in app
     assert "const legendOrder = new Map(PRICE_DATASET_ORDER.map((label, idx) => [label, idx]));" in app
     assert "label.startsWith('VWAP 5')" not in app
     assert "{ label: '1d', window: 1, color: '#eab308', dash: [], width: 1.15 }" in app
@@ -83,14 +87,18 @@ def test_detail_panels_vp_tabs_and_price_datasets_use_only_1_5_20_200_without_tr
     assert "{ label: '100d'" not in app
     assert "pointStyle: 'line'" in app
     assert "lineDash: dataset.borderDash || []" in app
-    assert "label: 'BUY'" not in app
-    assert "label: 'SELL'" not in app
+    assert "label: 'BUY'" in app
+    assert "label: 'SELL'" in app
+    assert "pointStyle: 'triangle'" in app
+    assert "pointRotation: 180" in app
+    assert "pointBackgroundColor: COLOR.positive" in app
+    assert "pointBackgroundColor: COLOR.negative" in app
     assert "label: 'Close'" not in app
     assert "data: closes" not in app
-    assert "signalMap" not in app
+    assert "signalMap" in app
 
     line_labels = re.findall(r"\{ label: '([^']+)'", app)
-    assert line_labels == ["1d", "5d", "20d", "200d"]
+    assert line_labels == ["1d", "5d", "20d", "200d", "BUY", "SELL"]
 
 
 def test_cache_bust_version_is_consistent_everywhere():

@@ -6,7 +6,7 @@
   <title>VWAP 추세 모니터</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
-  <link rel="stylesheet" href="style.css?v=periods-1-5-20-200-20260717"/>
+  <link rel="stylesheet" href="style.css?v=full-alignment-20260717"/>
 </head>
 <body>
 
@@ -16,14 +16,15 @@
 </header>
 
 <div class="section-box momentum-monitor" id="momentum-section" style="display:none">
-  <div class="panel-title">📐 VWAP 5 / 20 / 200 MONITOR</div>
-  <div class="momentum-monitor-sub">5/20과 5/200은 각각 단기·장기 VWAP 대비 괴리율입니다.</div>
+  <div class="panel-title">📐 VWAP 1 / 5 / 20 / 200 정배열 MONITOR</div>
+  <div class="momentum-monitor-sub">정배열은 1d &gt; 5d &gt; 20d &gt; 200d입니다. 신호 확정 후 다음 거래일 1d VWAP으로 매매합니다.</div>
   <div class="momentum-table-wrap"><table class="momentum-table">
     <thead>
       <tr>
         <th data-sort="name">종목</th>
-        <th data-sort="vwap_5_20_return_pct">5/20 괴리율</th>
-        <th data-sort="vwap_5_200_return_pct">5/200 괴리율</th>
+        <th data-sort="signal">신호</th>
+        <th data-sort="strategy_return_pct">정배열 수익률</th>
+        <th data-sort="strategy_mdd_pct">정배열 MDD</th>
         <th data-sort="buy_hold_return_pct">200일 수익률</th>
         <th data-sort="buy_hold_mdd_pct">200일 MDD</th>
       </tr>
@@ -43,6 +44,6 @@
   <div id="detail-content"></div>
 </div>
 
-<script src="app.js?v=periods-1-5-20-200-20260717"></script>
+<script src="app.js?v=full-alignment-20260717"></script>
 </body>
 </html>
