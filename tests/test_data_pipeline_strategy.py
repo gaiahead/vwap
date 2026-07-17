@@ -38,7 +38,8 @@ def test_prepare_strategy_frame_uses_indicator_warmup_but_returns_recent_200_day
     assert not work[["vwap_5d", "vwap_20d", "vwap_200d"]].isna().any().any()
     source = df.tail(gen.HISTORY_TRADING_DAYS).copy()
     source_proxy = (source["high"] + source["low"] + source["close"]) / 3
-    assert math.isclose(work["vwap_200d"].iloc[0], source_proxy.iloc[:200].mean())
+    expected_vwap200 = source_proxy.rolling(200).mean()
+    assert math.isclose(work["vwap_200d"].iloc[0], expected_vwap200.loc[work.index[0]])
     assert math.isclose(work["vwap_200d"].iloc[-1], source_proxy.iloc[-200:].mean())
     assert not work["vwap_1d"].isna().any()
 
@@ -66,7 +67,8 @@ def test_full_alignment_signal_requires_1_above_5_above_20_above_200():
     assert gen.full_alignment_signal(140, 130, 120, 100) == "BUY"
     assert gen.full_alignment_signal(130, 140, 120, 100) == "SELL"
     assert gen.full_alignment_signal(140, 130, 90, 100) == "SELL"
-    assert gen.full_alignment_signal(140, 130.00001, 130.0, 100) == "SELL"
+    assert gen.full_alignment_signal(140, 130.00001, 130.0, 100) == "BUY"
+    assert gen.full_alignment_signal(140, 130.0, 130.0, 100) == "SELL"
     assert gen.full_alignment_signal(None, 130, 120, 100) == "WAIT"
 
 
@@ -149,6 +151,54 @@ def test_alignment_strategy_does_not_carry_a_pre_window_position():
     assert simulation["signals"] == []
     assert simulation["in_position"] is False
     assert simulation["final_equity"] == 1.0
+
+
+def test_build_strategy_keeps_first_day_transition_and_all_200_visible_events(monkeypatch):
+    idx = pd.bdate_range(start="2025-01-01", periods=gen.LOOKBACK_TRADING_DAYS + 1)
+    states = [False] + [i % 2 == 0 for i in range(gen.LOOKBACK_TRADING_DAYS)]
+    rows = []
+    for i, aligned in enumerate(states):
+        rows.append({
+            "vwap_1d": float(140 + i) if aligned else float(110 + i),
+            "vwap_5d": 130.0 if aligned else 120.0,
+            "vwap_20d": 120.0 if aligned else 125.0,
+            "vwap_200d": 100.0,
+        })
+    context = pd.DataFrame(rows, index=idx)
+
+    def fake_prepare(_df, output_days=gen.LOOKBACK_TRADING_DAYS):
+        return context.tail(output_days).copy()
+
+    monkeypatch.setattr(gen, "prepare_strategy_frame", fake_prepare)
+    result = gen.build_strategy_signal(make_ohlcv(range(100, 125)))
+
+    assert result["backtest"]["start_date"] == gen.date_key(idx[1])
+    assert len(result["signals"]) == gen.LOOKBACK_TRADING_DAYS
+    assert result["signals"][0]["date"] == gen.date_key(idx[1])
+    assert result["signals"][0]["execution_date"] == gen.date_key(idx[2])
+    assert result["signals"][0]["type"] == "BUY"
+
+
+def test_trade_return_and_win_rate_include_both_one_way_fees(monkeypatch):
+    idx = pd.bdate_range(start="2026-03-02", periods=5)
+    work = pd.DataFrame(
+        {
+            "vwap_1d": [99.0, 101.0, 100.0, 100.0, 100.03],
+            "vwap_5d": [110.0, 90.0, 90.0, 110.0, 110.0],
+            "vwap_20d": [80.0] * 5,
+            "vwap_200d": [70.0] * 5,
+        },
+        index=idx,
+    )
+
+    simulation = gen.simulate_full_alignment_strategy(work, record_signals=True)
+    assert simulation["trades"][0]["return_pct"] < 0
+    assert simulation["final_equity"] < 1
+
+    monkeypatch.setattr(gen, "prepare_strategy_frame", lambda _df, output_days=200: work.copy())
+    result = gen.build_strategy_signal(make_ohlcv(range(100, 125)))
+    assert result["backtest"]["trades"] == 1
+    assert result["backtest"]["win_rate_pct"] == 0.0
 
 
 def test_build_asset_outputs_keeps_trend_and_detail_strategy_contract_in_sync():

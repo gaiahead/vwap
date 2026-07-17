@@ -1,4 +1,4 @@
-const DATA_VERSION = 'full-alignment-20260717';
+const DATA_VERSION = 'full-alignment-fixes-20260717';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
