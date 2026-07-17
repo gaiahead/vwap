@@ -16,29 +16,36 @@ def test_table_columns_and_default_sort_match_current_dashboard_contract():
 
     assert headers == [
         "종목",
-        "EA지수",
-        "LM지수",
         "5/20 괴리율",
         "5/200 괴리율",
         "200일 수익률",
         "200일 MDD",
     ]
     assert "const DEFAULT_SORT = { key: 'vwap_5_20_return_pct', dir: 'desc' }" in app
-    assert "EA는 Entry Activation, LM은 Late Maturity 패턴 유사도" in html
-    assert "EA는 장기 VWAP 역추세를 벌점 처리" in html
     assert "5/20과 5/200은 각각 단기·장기 VWAP 대비 괴리율" in html
     assert "5/20 수익률" not in html
     assert "5/200 수익률" not in html
     assert "label: '5/20 괴리율'" in app
     assert "label: '5/200 괴리율'" in app
-    assert "label: 'EA지수'" in app
-    assert "label: 'LM지수'" in app
-    assert "function calculateLifecycleScores(item)" in app
-    assert "const longContextGate = weightedAverage" in app
-    assert "ramp(spread5_200, -6, 5)" in app
-    assert "ramp(priceVs200, -6, 5)" in app
-    assert "ramp(spread20_200, -8, 6)" in app
-    assert "eaRaw * eaGate * (0.15 + 0.85 * longContextGate)" in app
+
+
+def test_ea_lm_columns_and_lifecycle_score_code_are_removed():
+    html = read("index.html")
+    app = read("app.js")
+
+    for token in ["EA지수", "LM지수", "Entry Activation", "Late Maturity"]:
+        assert token not in html + app
+
+    for token in [
+        "ea_score",
+        "lm_score",
+        "calculateLifecycleScores",
+        "fmtIndex",
+        "indexColor",
+        "longContextGate",
+        "lifecycle",
+    ]:
+        assert token not in app
 
 
 def test_asset_name_column_has_no_signal_color_indicator():
