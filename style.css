@@ -9,7 +9,7 @@ header p{font-size:0.74rem;color:#64748b;margin-top:4px}
 .momentum-title{font-size:0.72rem;font-weight:700;color:#64748b;letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px}
 .momentum-monitor-sub{font-size:0.73rem;color:#64748b;line-height:1.45;margin:-4px 0 10px}
 .momentum-table-wrap{overflow:auto;-webkit-overflow-scrolling:touch;max-height:560px;border:1px solid #e2e8f0;border-radius:12px;background:#ffffff}
-.momentum-table{width:100%;border-collapse:separate;border-spacing:0;font-size:0.8rem;min-width:850px;table-layout:fixed}
+.momentum-table{width:100%;border-collapse:separate;border-spacing:0;font-size:0.8rem;min-width:580px;table-layout:fixed}
 .momentum-table th{position:sticky;top:0;z-index:3;padding:9px 8px;text-align:center;font-size:0.65rem;font-weight:800;color:#475569;letter-spacing:.02em;line-height:1.15;white-space:nowrap;background:#eff6ff;border-bottom:1px solid #cbd5e1;vertical-align:middle;user-select:none}
 .momentum-table th[data-sort]{cursor:pointer;position:sticky}
 .momentum-table th[data-sort]::after{content:'↕';display:inline-block;margin-left:4px;font-size:.58rem;color:#94a3b8;vertical-align:1px}
@@ -53,4 +53,4 @@ header p{font-size:0.74rem;color:#64748b;margin-top:4px}
 .vp-tab:hover{background:#eff6ff;border-color:#93c5fd;color:#1e293b}
 .vp-tab.active{background:#dbeafe;border-color:#60a5fa;color:#1d4ed8}
 
-@media(max-width:900px){.momentum-table{min-width:850px}}
+@media(max-width:900px){.momentum-table{min-width:580px}}

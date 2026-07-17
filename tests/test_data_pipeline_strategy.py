@@ -59,8 +59,11 @@ def test_strategy_available_for_newer_assets_inside_recent_200_day_scope():
     assert rolling_200d["window_days"] == len(df)
     assert rolling_200d["strategy_return_pct"] is not None
     assert rolling_200d["buy_hold_return_pct"] is not None
-    assert rolling_200d["strategy_mdd_pct"] is not None
-    assert rolling_200d["buy_hold_mdd_pct"] is not None
+    assert set(rolling_200d) == {
+        "window_days",
+        "strategy_return_pct",
+        "buy_hold_return_pct",
+    }
 
 
 def test_full_alignment_signal_requires_1_above_5_above_20_above_200():
@@ -209,6 +212,7 @@ def test_build_asset_outputs_keeps_trend_and_detail_strategy_contract_in_sync():
     assert trend["ticker"] == detail["ticker"] == "TEST"
     assert "group" not in trend
     assert trend["strategy_signal"] == detail["strategy_signal"]
+    assert "mdd" not in json.dumps(trend["strategy_signal"], ensure_ascii=False).lower()
     assert trend["lookback_trading_days"] == detail["lookback_trading_days"] == gen.LOOKBACK_TRADING_DAYS
     assert trend["latest_price"] == detail["latest_price"] == round(float(df["close"].iloc[-1]), 2)
     assert gen.WINDOWS == [5, 20, 200]

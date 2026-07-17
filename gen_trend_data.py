@@ -339,18 +339,6 @@ def date_key(value: Any) -> str:
     return str(pd.Timestamp(value).date())
 
 
-def calc_max_drawdown(equity: list[float]) -> float | None:
-    if not equity:
-        return None
-    peak = equity[0]
-    max_dd = 0.0
-    for value in equity:
-        peak = max(peak, value)
-        if peak > 0:
-            max_dd = min(max_dd, value / peak - 1)
-    return max_dd * 100
-
-
 STRATEGY_FEE_ONE_WAY = 0.0003
 STRATEGY_RULES: dict[str, Any] = {
     "buy": "VWAP1 > VWAP5 > VWAP20 > VWAP200 alignment starts",
@@ -371,7 +359,7 @@ def prepare_strategy_frame(
     """VWAP 지표를 계산한 뒤 요청한 최근 거래일 구간만 반환한다.
 
     비즈니스 기준:
-    - 수익률·MDD·신호 이벤트 범위는 최근 200거래일만 사용한다.
+    - 수익률·신호 이벤트 범위는 최근 200거래일만 사용한다.
     - VWAP200은 미래 참조 없이 계산하기 위해 이전 199거래일을 지표 warm-up으로만 사용한다.
     - 최근 200일 시작 전 포지션은 이월하지 않는다.
     - 1일 VWAP proxy = (High + Low + Close) / 3.
@@ -534,14 +522,12 @@ def calc_strategy_window_stats(
     window: int = 200,
     previous_state: bool | None = None,
 ) -> dict[str, Any]:
-    """최근 최대 window 거래일 기준 정배열 전략과 단순보유의 수익률/MDD."""
+    """최근 최대 window 거래일 기준 정배열 전략과 단순보유 수익률."""
     if len(work) < MIN_STRATEGY_TRADING_DAYS:
         return {
             "window_days": min(window, len(work)),
             "strategy_return_pct": None,
             "buy_hold_return_pct": None,
-            "strategy_mdd_pct": None,
-            "buy_hold_mdd_pct": None,
         }
 
     sub = work.iloc[-min(window, len(work)):].copy()
@@ -552,14 +538,12 @@ def calc_strategy_window_stats(
     )
     strategy_curve = simulation["equity_curve"]
     base_price = float(sub["vwap_1d"].iloc[0])
-    buy_hold_curve = [float(v) / base_price if base_price else 1.0 for v in sub["vwap_1d"]]
+    final_price = float(sub["vwap_1d"].iloc[-1])
 
     return {
         "window_days": len(sub),
         "strategy_return_pct": safe_round((strategy_curve[-1] - 1) * 100 if strategy_curve else None, 2),
-        "buy_hold_return_pct": safe_round((buy_hold_curve[-1] - 1) * 100 if buy_hold_curve else None, 2),
-        "strategy_mdd_pct": safe_round(calc_max_drawdown(strategy_curve), 2),
-        "buy_hold_mdd_pct": safe_round(calc_max_drawdown(buy_hold_curve), 2),
+        "buy_hold_return_pct": safe_round(pct_change(base_price, final_price), 2),
     }
 
 
@@ -616,7 +600,6 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
     trades = simulation["trades"]
     wins = [t for t in trades if t.get("return_pct") is not None and t["return_pct"] > 0]
     avg_holding_days, max_holding_days = calc_trade_holding_stats(trades, work)
-    equity_curve = simulation["equity_curve"]
     strategy_return = (simulation["final_equity"] - 1) * 100
     bh_return = pct_change(float(work["vwap_1d"].iloc[0]), final_vwap_1d)
 
@@ -639,7 +622,6 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
             "start_date": date_key(work.index[0]), "end_date": latest_date,
             "strategy_return_pct": safe_round(strategy_return, 2),
             "buy_hold_return_pct": safe_round(bh_return, 2),
-            "max_drawdown_pct": safe_round(calc_max_drawdown(equity_curve), 2),
             "trades": len(trades),
             "win_rate_pct": safe_round(len(wins) / len(trades) * 100 if trades else None, 2),
             "exposure_pct": safe_round(simulation["position_days"] / len(work) * 100 if len(work) else None, 2),

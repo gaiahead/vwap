@@ -12,21 +12,21 @@ def read(name: str) -> str:
 def test_table_columns_and_default_sort_match_current_dashboard_contract():
     html = read("index.html")
     app = read("app.js")
+    generator = read("gen_trend_data.py")
     headers = re.findall(r"<th data-sort=\"[^\"]+\">([^<]+)</th>", html)
 
     assert headers == [
         "종목",
         "신호",
         "정배열 수익률",
-        "정배열 MDD",
         "200일 수익률",
-        "200일 MDD",
     ]
     assert "const DEFAULT_SORT = { key: 'strategy_return_pct', dir: 'desc' }" in app
     assert "1d &gt; 5d &gt; 20d &gt; 200d" in html
     assert "다음 거래일 1d VWAP" in html
-    for token in ["5/20 괴리율", "5/200 괴리율"]:
-        assert token not in html + app
+    combined = html + app + generator
+    for token in ["5/20 괴리율", "5/200 괴리율", "MDD", "mdd", "drawdown"]:
+        assert token not in combined
 
 
 def test_ea_lm_columns_and_lifecycle_score_code_are_removed():
