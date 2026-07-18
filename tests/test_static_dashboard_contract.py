@@ -18,9 +18,9 @@ def test_table_columns_and_default_sort_match_current_dashboard_contract():
     assert headers == [
         "종목",
         "신호",
+        "변돌 수익률",
         "정배열 수익률",
         "200일 수익률",
-        "변돌 수익률",
     ]
     assert "const DEFAULT_SORT = { key: 'strategy_return_pct', dir: 'desc' }" in app
     assert "key: 'volatility_breakout_return_pct', label: '변돌 수익률'" in app
@@ -30,6 +30,36 @@ def test_table_columns_and_default_sort_match_current_dashboard_contract():
     combined = html + app + generator
     for token in ["5/20 괴리율", "5/200 괴리율", "MDD", "mdd", "drawdown"]:
         assert token not in combined
+
+
+def test_detail_has_two_clear_strategy_backtest_journals():
+    app = read("app.js")
+    css = read("style.css")
+
+    for token in [
+        "renderBacktestJournals",
+        "backtest_journals",
+        "변동성 돌파",
+        "정배열",
+        "단기",
+        "중기",
+        "진입일",
+        "진입가",
+        "청산일",
+        "청산가",
+        "수익률",
+    ]:
+        assert token in app
+
+    for selector in [
+        ".backtest-journal-section",
+        ".journal-grid",
+        ".journal-card",
+        ".journal-summary",
+        ".journal-table-wrap",
+        ".journal-table",
+    ]:
+        assert selector in css
 
 
 def test_ea_lm_columns_and_lifecycle_score_code_are_removed():

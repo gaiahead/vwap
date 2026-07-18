@@ -68,6 +68,7 @@ def test_strategy_available_for_newer_assets_inside_recent_200_day_scope():
     assert signal["backtest"]["volatility_breakout"] == {
         "k": 0.5,
         "trades": len(df) - 2,
+        "win_rate_pct": 0.0,
         "entry": "today_open + previous_range * k",
         "exit": "next_day_open",
         "fee_one_way_pct": 0.03,
@@ -95,9 +96,29 @@ def test_volatility_breakout_k_half_compounds_completed_next_open_trades():
         * (130.0 / 127.0)
         * fee_multiplier**4
     )
+    expected_first_trade_return = round(((121.0 / 110.0) * fee_multiplier**2 - 1) * 100, 2)
     assert gen.VOLATILITY_BREAKOUT_K == 0.5
     assert result["k"] == 0.5
     assert result["trades"] == 2
+    assert result["journal"] == [
+        {
+            "entry_date": "2026-01-06",
+            "entry_price": 110.0,
+            "exit_date": "2026-01-07",
+            "exit_price": 121.0,
+            "return_pct": expected_first_trade_return,
+            "status": "CLOSED",
+        },
+        {
+            "entry_date": "2026-01-07",
+            "entry_price": 127.0,
+            "exit_date": "2026-01-08",
+            "exit_price": 130.0,
+            "return_pct": round(((130.0 / 127.0) * fee_multiplier**2 - 1) * 100, 2),
+            "status": "CLOSED",
+        },
+    ]
+    assert expected_first_trade_return > 0
     assert math.isclose(result["final_equity"], expected_equity)
     assert math.isclose(result["strategy_return_pct"], (expected_equity - 1) * 100)
 
@@ -117,6 +138,7 @@ def test_volatility_breakout_skips_final_day_without_next_open():
     result = gen.simulate_volatility_breakout_strategy(context, visible_days=2)
 
     assert result["trades"] == 0
+    assert result["journal"] == []
     assert result["final_equity"] == 1.0
     assert result["strategy_return_pct"] == 0.0
 
@@ -161,6 +183,16 @@ def test_alignment_strategy_marks_transitions_and_executes_next_day_vwap():
         else:
             assert not (confirmed["vwap_1d"] > confirmed["vwap_5d"] > confirmed["vwap_20d"] > confirmed["vwap_200d"])
         assert signal["price"] == round(float(execution["vwap_1d"]), 4)
+
+    journal = gen.build_full_alignment_journal(work, simulation)
+    assert [row["status"] for row in journal] == ["CLOSED", "OPEN"]
+    assert journal[0]["entry_date"] == dates[3]
+    assert journal[0]["exit_date"] == dates[5]
+    assert journal[0]["holding_days"] == 3
+    assert journal[1]["entry_date"] == dates[7]
+    assert journal[1]["exit_date"] is None
+    assert journal[1]["valuation_date"] == dates[-1]
+    assert journal[1]["status"] == "OPEN"
 
 
 def test_last_day_transition_is_marked_even_without_a_next_day_execution():
@@ -285,6 +317,10 @@ def test_build_asset_outputs_keeps_trend_and_detail_strategy_contract_in_sync():
     assert trend["ticker"] == detail["ticker"] == "TEST"
     assert "group" not in trend
     assert trend["strategy_signal"] == detail["strategy_signal"]
+    assert "backtest_journals" not in trend
+    assert set(detail["backtest_journals"]) == {"volatility_breakout", "full_alignment"}
+    assert detail["backtest_journals"]["volatility_breakout"]
+    assert all(row["status"] == "CLOSED" for row in detail["backtest_journals"]["volatility_breakout"])
     assert "mdd" not in json.dumps(trend["strategy_signal"], ensure_ascii=False).lower()
     assert trend["lookback_trading_days"] == detail["lookback_trading_days"] == gen.LOOKBACK_TRADING_DAYS
     assert trend["latest_price"] == detail["latest_price"] == round(float(df["close"].iloc[-1]), 2)

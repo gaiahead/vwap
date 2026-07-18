@@ -50,3 +50,64 @@ header p{font-size:0.74rem;color:#64748b;margin-top:4px}
 .vp-tab{background:#f8fafc;border:1px solid #dbe6f3;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:0.68rem;font-weight:600;color:#475569;transition:all .2s;font-family:inherit}
 .vp-tab:hover{background:#eff6ff;border-color:#93c5fd;color:#1e293b}
 .vp-tab.active{background:#dbeafe;border-color:#60a5fa;color:#1d4ed8}
+
+/* Strategy backtest journals */
+.backtest-journal-section{margin-top:16px;padding:20px;background:rgba(255,255,255,.96);border:1px solid #dbe6f3;border-radius:14px;box-shadow:0 10px 26px rgba(15,23,42,.06)}
+.journal-section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:14px}
+.journal-eyebrow{font-size:.62rem;font-weight:900;letter-spacing:.12em;color:#2563eb;margin-bottom:5px}
+.journal-section-head h3{font-size:1.02rem;color:#0f172a;line-height:1.25}
+.journal-section-head p{font-size:.72rem;color:#64748b;line-height:1.5;margin-top:5px}
+.journal-period{flex:none;padding:5px 9px;border:1px solid #bfdbfe;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-size:.65rem;font-weight:800;white-space:nowrap}
+.journal-horizon-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:16px}
+.journal-horizon-item{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;min-width:0;padding:9px 11px;border:1px solid #e2e8f0;border-radius:9px;background:#f8fafc}
+.journal-horizon-item span{font-size:.6rem;font-weight:900;padding:3px 6px;border-radius:999px}
+.journal-horizon-item strong{font-size:.72rem;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.journal-horizon-item em{font:800 .72rem 'SF Mono','Consolas','Menlo',monospace;font-style:normal;white-space:nowrap}
+.journal-horizon-short span{background:#dbeafe;color:#1d4ed8}
+.journal-horizon-medium span{background:#ede9fe;color:#6d28d9}
+.journal-horizon-long span{background:#e2e8f0;color:#475569}
+.journal-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
+.journal-card{min-width:0;border:1px solid #dbe6f3;border-top-width:3px;border-radius:12px;padding:14px;background:#fff;box-shadow:0 5px 16px rgba(15,23,42,.04)}
+.journal-card-short{border-top-color:#2563eb}
+.journal-card-medium{border-top-color:#7c3aed}
+.journal-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.journal-card-head>div{display:flex;align-items:center;gap:7px;min-width:0}
+.journal-card-head h4{font-size:.88rem;color:#0f172a;white-space:nowrap}
+.journal-horizon-badge{font-size:.58rem;font-weight:900;padding:3px 6px;border-radius:999px;background:#e2e8f0;color:#475569;white-space:nowrap}
+.journal-card-short .journal-horizon-badge{background:#dbeafe;color:#1d4ed8}
+.journal-card-medium .journal-horizon-badge{background:#ede9fe;color:#6d28d9}
+.journal-count{font-size:.62rem;font-weight:700;color:#94a3b8;white-space:nowrap}
+.journal-rule{font-size:.67rem;color:#64748b;line-height:1.45;margin:7px 0 10px}
+.journal-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:10px}
+.journal-metric{display:flex;flex-direction:column;gap:3px;padding:8px 9px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;min-width:0}
+.journal-metric span{font-size:.58rem;font-weight:700;color:#64748b;white-space:nowrap}
+.journal-metric strong{font:800 .76rem 'SF Mono','Consolas','Menlo',monospace;color:#0f172a;white-space:nowrap}
+.journal-table-wrap{max-height:360px;overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid #e2e8f0;border-radius:9px;background:#fff}
+.journal-table{width:100%;min-width:510px;border-collapse:separate;border-spacing:0;table-layout:fixed;font-size:.67rem}
+.journal-table th{position:sticky;top:0;z-index:2;padding:7px 6px;background:#f1f5f9;border-bottom:1px solid #cbd5e1;color:#64748b;font-size:.58rem;font-weight:900;text-align:center;white-space:nowrap}
+.journal-table td{padding:7px 6px;border-top:1px solid #eef2f7;color:#334155;text-align:right;font-family:'SF Mono','Consolas','Menlo',monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
+.journal-table td:nth-child(1),.journal-table td:nth-child(3){text-align:center;color:#475569}
+.journal-table tbody tr:first-child td{border-top:0}
+.journal-table tbody tr:hover td{background:#f8fafc}
+.journal-return{font-weight:900}
+.journal-open-row td{background:#fffbeb}
+.journal-open-label{color:#b45309!important;font-weight:900}
+.journal-empty{padding:36px 16px;text-align:center;color:#94a3b8;font-size:.68rem}
+.journal-note{font-size:.59rem;color:#94a3b8;line-height:1.45;margin-top:8px}
+
+@media (max-width:960px){
+  .journal-grid{grid-template-columns:1fr}
+  .journal-table-wrap{max-height:320px}
+}
+@media (max-width:640px){
+  header{padding:16px 14px 12px}
+  .section-box{margin:12px 12px 0;padding:14px}
+  .detail-section{padding:16px 12px 0}
+  .chart-wrap{height:360px}
+  .backtest-journal-section{padding:14px}
+  .journal-section-head{align-items:center}
+  .journal-section-head p{max-width:250px}
+  .journal-horizon-strip{grid-template-columns:1fr;gap:6px}
+  .journal-summary{gap:5px}
+  .journal-metric{padding:7px}
+}

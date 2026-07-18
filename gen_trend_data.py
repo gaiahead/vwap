@@ -429,6 +429,7 @@ def simulate_volatility_breakout_strategy(
     """
     cash = 1.0
     trades = 0
+    journal: list[dict[str, Any]] = []
     visible_days = max(1, int(visible_days))
     first_visible_index = max(0, len(context) - visible_days)
 
@@ -458,13 +459,69 @@ def simulate_volatility_breakout_strategy(
         shares = cash * (1 - STRATEGY_FEE_ONE_WAY) / target_price
         cash = shares * exit_price * (1 - STRATEGY_FEE_ONE_WAY)
         trades += 1
+        trade_return = (
+            (exit_price / target_price) * (1 - STRATEGY_FEE_ONE_WAY) ** 2 - 1
+        ) * 100
+        journal.append({
+            "entry_date": date_key(context.index[i]),
+            "entry_price": safe_round(target_price),
+            "exit_date": date_key(context.index[i + 1]),
+            "exit_price": safe_round(exit_price),
+            "return_pct": safe_round(trade_return, 2),
+            "status": "CLOSED",
+        })
 
     return {
         "k": float(k),
         "trades": trades,
+        "journal": journal,
         "final_equity": cash,
         "strategy_return_pct": (cash - 1) * 100,
     }
+
+
+def build_full_alignment_journal(
+    work: pd.DataFrame,
+    simulation: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """완료 거래와 현재 보유 포지션을 공통 일지 형식으로 직렬화한다."""
+    journal: list[dict[str, Any]] = []
+    for trade in simulation["trades"]:
+        holding_days = len(
+            work.loc[pd.Timestamp(trade["entry_date"]):pd.Timestamp(trade["exit_date"])]
+        )
+        journal.append({
+            "entry_date": trade["entry_date"],
+            "entry_price": trade["entry_price"],
+            "exit_date": trade["exit_date"],
+            "exit_price": trade["exit_price"],
+            "return_pct": trade["return_pct"],
+            "holding_days": holding_days,
+            "status": "CLOSED",
+        })
+
+    if simulation["in_position"] and simulation["entry_date"] and simulation["entry_price"]:
+        valuation_date = date_key(work.index[-1])
+        valuation_price = float(work["vwap_1d"].iloc[-1])
+        current_return = (
+            valuation_price
+            / float(simulation["entry_price"])
+            * (1 - STRATEGY_FEE_ONE_WAY)
+            - 1
+        ) * 100
+        journal.append({
+            "entry_date": simulation["entry_date"],
+            "entry_price": safe_round(simulation["entry_price"]),
+            "exit_date": None,
+            "exit_price": None,
+            "valuation_date": valuation_date,
+            "valuation_price": safe_round(valuation_price),
+            "return_pct": safe_round(current_return, 2),
+            "holding_days": len(work.loc[pd.Timestamp(simulation["entry_date"]):]),
+            "status": "OPEN",
+        })
+
+    return journal
 
 
 def calc_trade_holding_stats(trades: list[dict[str, Any]], work: pd.DataFrame) -> tuple[float | None, int | None]:
@@ -545,6 +602,10 @@ def build_backtest_summary(
     strategy_return = safe_round(strategy_return, 2)
     buy_hold_return = safe_round(buy_hold_return, 2)
     volatility_breakout_return = safe_round(volatility_breakout["strategy_return_pct"], 2)
+    volatility_breakout_wins = [
+        trade for trade in volatility_breakout["journal"]
+        if trade.get("return_pct") is not None and trade["return_pct"] > 0
+    ]
 
     return {
         "period": f"recent_{LOOKBACK_TRADING_DAYS}_trading_days",
@@ -560,6 +621,11 @@ def build_backtest_summary(
         "volatility_breakout": {
             "k": volatility_breakout["k"],
             "trades": volatility_breakout["trades"],
+            "win_rate_pct": safe_round(
+                len(volatility_breakout_wins) / volatility_breakout["trades"] * 100
+                if volatility_breakout["trades"] else None,
+                2,
+            ),
             "entry": "today_open + previous_range * k",
             "exit": "next_day_open",
             "fee_one_way_pct": STRATEGY_RULES["fee_one_way_pct"],
@@ -594,6 +660,10 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
         "rules": dict(STRATEGY_RULES),
         "latest": build_latest_strategy_snapshot(work, simulation),
         "backtest": build_backtest_summary(work, simulation, volatility_breakout),
+        "backtest_journals": {
+            "volatility_breakout": volatility_breakout["journal"],
+            "full_alignment": build_full_alignment_journal(work, simulation),
+        },
         "signals": simulation["signals"],
     }
 
@@ -746,8 +816,18 @@ def build_detail_data(
     ticker: str,
     df: pd.DataFrame,
     strategy_signal: dict[str, Any] | None = None,
+    backtest_journals: dict[str, list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
     """상세 데이터 생성: 최근 200거래일, VWAP line/Volume Profile은 1/5/20/200d만 표시."""
+    if strategy_signal is None:
+        strategy_payload = build_strategy_signal(df)
+        if backtest_journals is None:
+            backtest_journals = strategy_payload.get("backtest_journals")
+        strategy_signal = {
+            key: value for key, value in strategy_payload.items()
+            if key != "backtest_journals"
+        }
+
     work = prepare_strategy_frame(df)
     ohlcv = []
     for _i, (dt, row) in enumerate(work.iterrows()):
@@ -779,6 +859,10 @@ def build_detail_data(
         "ohlcv": ohlcv,
         "volume_profile": volume_profile,
         "strategy_signal": strategy_signal if strategy_signal is not None else build_strategy_signal(df),
+        "backtest_journals": backtest_journals or {
+            "volatility_breakout": [],
+            "full_alignment": [],
+        },
         "lookback_trading_days": LOOKBACK_TRADING_DAYS,
         "latest_price": round(float(df["close"].iloc[-1]), 2),
     }
@@ -812,7 +896,15 @@ def build_asset_outputs(name: str, ticker: str, df: pd.DataFrame) -> tuple[dict[
     df = df.tail(HISTORY_TRADING_DAYS).copy()
     vwap_structure, _ = build_vwap_structure(df)
     records = build_recent_records(df)
-    strategy_signal = build_strategy_signal(df)
+    strategy_payload = build_strategy_signal(df)
+    backtest_journals = strategy_payload.get("backtest_journals", {
+        "volatility_breakout": [],
+        "full_alignment": [],
+    })
+    strategy_signal = {
+        key: value for key, value in strategy_payload.items()
+        if key != "backtest_journals"
+    }
 
     asset_result = {
         "ticker": ticker,
@@ -823,7 +915,13 @@ def build_asset_outputs(name: str, ticker: str, df: pd.DataFrame) -> tuple[dict[
         "latest_price": round(float(df["close"].iloc[-1]), 2),
     }
     attach_krx_data_source(asset_result, df)
-    detail_result = build_detail_data(name, ticker, df, strategy_signal=strategy_signal)
+    detail_result = build_detail_data(
+        name,
+        ticker,
+        df,
+        strategy_signal=strategy_signal,
+        backtest_journals=backtest_journals,
+    )
     return asset_result, detail_result
 
 

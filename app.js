@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260718-1710';
+const DATA_VERSION = 'data-20260718-1755';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -20,9 +20,9 @@ const PRICE_DATASET_ORDER = ['BUY', 'SELL', ...PRICE_LINE_DEFS.map(def => def.la
 const MOMENTUM_COLUMNS = [
   { key: 'name', label: '종목', type: 'text', get: row => row.name },
   { key: 'signal', label: '신호', type: 'text', get: row => row.strategy.latest?.signal },
+  { key: 'volatility_breakout_return_pct', label: '변돌 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.volatility_breakout_return_pct },
   { key: 'strategy_return_pct', label: '정배열 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.strategy_return_pct },
-  { key: 'buy_hold_return_pct', label: '200일 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.buy_hold_return_pct },
-  { key: 'volatility_breakout_return_pct', label: '변돌 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.volatility_breakout_return_pct }
+  { key: 'buy_hold_return_pct', label: '200일 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.buy_hold_return_pct }
 ];
 const SORT_FIELDS = Object.fromEntries(MOMENTUM_COLUMNS.map(column => [column.key, column.get]));
 const NUMERIC_SORT_FIELDS = new Set(MOMENTUM_COLUMNS.filter(column => column.type === 'number').map(column => column.key));
@@ -140,9 +140,9 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       tr.append(
         createCell(name),
         createSignalCell(latest.signal),
+        createCell(fmtPct(rolling200.volatility_breakout_return_pct), { color: statColor(rolling200.volatility_breakout_return_pct), weight: '800' }),
         createCell(fmtPct(rolling200.strategy_return_pct), { color: statColor(rolling200.strategy_return_pct), weight: '800' }),
-        createCell(fmtPct(rolling200.buy_hold_return_pct), { color: statColor(rolling200.buy_hold_return_pct), weight: '800' }),
-        createCell(fmtPct(rolling200.volatility_breakout_return_pct), { color: statColor(rolling200.volatility_breakout_return_pct), weight: '800' })
+        createCell(fmtPct(rolling200.buy_hold_return_pct), { color: statColor(rolling200.buy_hold_return_pct), weight: '800' })
       );
       tr.addEventListener('click', () => {
         if (!ticker) return;
@@ -220,10 +220,208 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     return panel;
   }
 
+  function fmtJournalDate(value) {
+    return value ? String(value).replaceAll('-', '.') : '–';
+  }
+
+  function fmtJournalPrice(value) {
+    return value == null ? '–' : Number(value).toLocaleString('ko-KR', { maximumFractionDigits: 2 });
+  }
+
+  function fmtWinRate(value) {
+    return value == null ? '–' : `${Number(value).toFixed(2)}%`;
+  }
+
+  function createJournalMetric(label, value, color=null) {
+    const metric = document.createElement('div');
+    metric.className = 'journal-metric';
+    const metricLabel = document.createElement('span');
+    metricLabel.textContent = label;
+    const metricValue = document.createElement('strong');
+    metricValue.textContent = value;
+    if (color) metricValue.style.color = color;
+    metric.append(metricLabel, metricValue);
+    return metric;
+  }
+
+  function createJournalTable(records) {
+    const wrap = document.createElement('div');
+    wrap.className = 'journal-table-wrap';
+    if (!records.length) {
+      const empty = document.createElement('div');
+      empty.className = 'journal-empty';
+      empty.textContent = '해당 기간에 체결된 거래가 없습니다.';
+      wrap.appendChild(empty);
+      return wrap;
+    }
+
+    const table = document.createElement('table');
+    table.className = 'journal-table';
+    const thead = document.createElement('thead');
+    const headerRow = document.createElement('tr');
+    ['진입일', '진입가', '청산일', '청산가', '수익률'].forEach(label => {
+      const th = document.createElement('th');
+      th.textContent = label;
+      headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+
+    const tbody = document.createElement('tbody');
+    [...records].reverse().forEach(record => {
+      const isOpen = record.status === 'OPEN';
+      const tr = document.createElement('tr');
+      tr.className = isOpen ? 'journal-open-row' : '';
+      const values = [
+        fmtJournalDate(record.entry_date),
+        fmtJournalPrice(record.entry_price),
+        isOpen ? '보유 중' : fmtJournalDate(record.exit_date),
+        isOpen ? `${fmtJournalPrice(record.valuation_price)}*` : fmtJournalPrice(record.exit_price),
+        fmtPct(record.return_pct),
+      ];
+      values.forEach((value, index) => {
+        const td = document.createElement('td');
+        td.textContent = value;
+        if (index === 2 && isOpen) td.className = 'journal-open-label';
+        if (index === 4) {
+          td.classList.add('journal-return');
+          td.style.color = statColor(record.return_pct);
+        }
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+
+    table.append(thead, tbody);
+    wrap.appendChild(table);
+    return wrap;
+  }
+
+  function createJournalCard({tone, horizon, title, rule, metrics, records, note}) {
+    const card = document.createElement('article');
+    card.className = `journal-card journal-card-${tone}`;
+
+    const header = document.createElement('div');
+    header.className = 'journal-card-head';
+    const titleWrap = document.createElement('div');
+    const badge = document.createElement('span');
+    badge.className = 'journal-horizon-badge';
+    badge.textContent = horizon;
+    const heading = document.createElement('h4');
+    heading.textContent = title;
+    titleWrap.append(badge, heading);
+    const count = document.createElement('span');
+    count.className = 'journal-count';
+    count.textContent = `${records.length}개 기록 · 최신순`;
+    header.append(titleWrap, count);
+
+    const ruleText = document.createElement('p');
+    ruleText.className = 'journal-rule';
+    ruleText.textContent = rule;
+
+    const summary = document.createElement('div');
+    summary.className = 'journal-summary';
+    metrics.forEach(metric => summary.appendChild(createJournalMetric(metric.label, metric.value, metric.color)));
+
+    const footnote = document.createElement('p');
+    footnote.className = 'journal-note';
+    footnote.textContent = note;
+
+    card.append(header, ruleText, summary, createJournalTable(records), footnote);
+    return card;
+  }
+
+  function createHorizonItem(horizon, label, value, tone) {
+    const item = document.createElement('div');
+    item.className = `journal-horizon-item journal-horizon-${tone}`;
+    const badge = document.createElement('span');
+    badge.textContent = horizon;
+    const name = document.createElement('strong');
+    name.textContent = label;
+    const result = document.createElement('em');
+    result.textContent = fmtPct(value);
+    result.style.color = statColor(value);
+    item.append(badge, name, result);
+    return item;
+  }
+
+  function renderBacktestJournals(detailData) {
+    const section = document.getElementById('backtest-journal-section');
+    if (!section) return;
+    section.replaceChildren();
+
+    const strategy = detailData.strategy_signal || {};
+    const backtest = strategy.backtest || {};
+    const rolling = backtest.rolling_200d || {};
+    const journals = detailData.backtest_journals || {};
+    const breakoutRecords = journals.volatility_breakout || [];
+    const alignmentRecords = journals.full_alignment || [];
+    const breakout = backtest.volatility_breakout || {};
+
+    const sectionHead = document.createElement('div');
+    sectionHead.className = 'journal-section-head';
+    const copy = document.createElement('div');
+    const eyebrow = document.createElement('div');
+    eyebrow.className = 'journal-eyebrow';
+    eyebrow.textContent = 'STRATEGY REVIEW';
+    const title = document.createElement('h3');
+    title.textContent = '전략 백테스트 일지';
+    const description = document.createElement('p');
+    description.textContent = '최근 200거래일의 진입·청산 기록을 최신 거래부터 비교합니다.';
+    copy.append(eyebrow, title, description);
+    const period = document.createElement('span');
+    period.className = 'journal-period';
+    period.textContent = '최근 200 거래일';
+    sectionHead.append(copy, period);
+
+    const horizons = document.createElement('div');
+    horizons.className = 'journal-horizon-strip';
+    horizons.append(
+      createHorizonItem('단기', '변동성 돌파', rolling.volatility_breakout_return_pct, 'short'),
+      createHorizonItem('중기', '정배열', rolling.strategy_return_pct, 'medium'),
+      createHorizonItem('장기', '200일 보유', rolling.buy_hold_return_pct, 'long')
+    );
+
+    const grid = document.createElement('div');
+    grid.className = 'journal-grid';
+    grid.append(
+      createJournalCard({
+        tone: 'short',
+        horizon: '단기',
+        title: '변동성 돌파',
+        rule: '오늘 돌파가 진입 → 다음 거래일 시가 청산',
+        metrics: [
+          {label: '누적 수익률', value: fmtPct(rolling.volatility_breakout_return_pct), color: statColor(rolling.volatility_breakout_return_pct)},
+          {label: '완료 거래', value: `${breakout.trades ?? 0}건`},
+          {label: '승률', value: fmtWinRate(breakout.win_rate_pct)},
+        ],
+        records: breakoutRecords,
+        note: `k ${breakout.k ?? 0.5} · 편도 수수료 0.03% · 마지막 날 신규 진입 제외`,
+      }),
+      createJournalCard({
+        tone: 'medium',
+        horizon: '중기',
+        title: '정배열',
+        rule: '정배열 전환 확인 → 다음 거래일 1d VWAP 체결',
+        metrics: [
+          {label: '누적 수익률', value: fmtPct(rolling.strategy_return_pct), color: statColor(rolling.strategy_return_pct)},
+          {label: '완료 거래', value: `${backtest.trades ?? 0}건`},
+          {label: '승률', value: fmtWinRate(backtest.win_rate_pct)},
+        ],
+        records: alignmentRecords,
+        note: '1d > 5d > 20d > 200d · 편도 수수료 0.03% · *보유 중은 최신 1d VWAP 평가',
+      })
+    );
+
+    section.append(sectionHead, horizons, grid);
+  }
+
   function renderDetailPanels() {
     const pricePanel = createChartPanel('', 'chart-price');
     const vpPanel = createChartPanel('Volume Profile', 'chart-vp');
     vpPanel.classList.add('volume-profile-panel');
+    const journalSection = document.createElement('section');
+    journalSection.className = 'backtest-journal-section';
+    journalSection.id = 'backtest-journal-section';
 
     const tabs = document.createElement('div');
     tabs.className = 'vp-tabs';
@@ -236,7 +434,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       tabs.appendChild(button);
     });
     vpPanel.insertBefore(tabs, vpPanel.querySelector('.chart-wrap'));
-    view.detailContent.replaceChildren(pricePanel, vpPanel);
+    view.detailContent.replaceChildren(pricePanel, vpPanel, journalSection);
   }
 
   function initVpTabs() {
@@ -256,6 +454,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     setDetailHeader(ticker, name, detailData);
     renderPriceChart(detailData);
     renderVpChart(detailData, currentVpPeriod);
+    renderBacktestJournals(detailData);
     view.detailSection.scrollIntoView({behavior:'smooth', block:'start'});
   }
 
