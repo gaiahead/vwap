@@ -1,4 +1,4 @@
-const DATA_VERSION = 'code-refactor-20260718';
+const DATA_VERSION = 'data-20260718-1505';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {

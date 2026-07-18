@@ -59,6 +59,43 @@ def test_requested_world_healthcare_biotech_financial_etfs_are_registered():
     assert requested_assets <= set(gen.ASSETS)
 
 
+def test_requested_korean_listed_expansion_assets_are_registered():
+    requested_assets = {
+        ("KODEX 미국S&P500", "379800.KS"),
+        ("KODEX 미국나스닥100", "379810.KS"),
+        ("HANARO 원자력iSelect", "434730.KS"),
+        ("KODEX 증권", "102970.KS"),
+        ("KODEX 보험", "140700.KS"),
+        ("KODEX 건설", "117700.KS"),
+        ("KODEX 운송", "140710.KS"),
+        ("TIGER 화장품", "228790.KS"),
+        ("KODEX 필수소비재", "266410.KS"),
+        ("KODEX 철강", "117680.KS"),
+        ("NAVER", "035420.KS"),
+        ("카카오", "035720.KS"),
+        ("현대차", "005380.KS"),
+        ("기아", "000270.KS"),
+        ("삼성바이오로직스", "207940.KS"),
+        ("셀트리온", "068270.KS"),
+        ("알테오젠", "196170.KQ"),
+        ("유한양행", "000100.KS"),
+        ("두산에너빌리티", "034020.KS"),
+        ("HD현대일렉트릭", "267260.KS"),
+        ("LS ELECTRIC", "010120.KS"),
+        ("효성중공업", "298040.KS"),
+        ("한국전력", "015760.KS"),
+        ("LG에너지솔루션", "373220.KS"),
+        ("POSCO홀딩스", "005490.KS"),
+        ("삼성SDI", "006400.KS"),
+        ("KB금융", "105560.KS"),
+        ("SK텔레콤", "017670.KS"),
+        ("삼양식품", "003230.KS"),
+        ("크래프톤", "259960.KS"),
+    }
+
+    assert requested_assets <= set(gen.ASSETS)
+
+
 def test_leeno_industrial_uses_kosdaq_ticker():
     assert ("리노공업", "058470.KQ") in gen.ASSETS
     assert ("리노공업", "058470.KS") not in gen.ASSETS
