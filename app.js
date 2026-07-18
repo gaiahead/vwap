@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260718-1600';
+const DATA_VERSION = 'data-20260718-1710';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -21,7 +21,8 @@ const MOMENTUM_COLUMNS = [
   { key: 'name', label: '종목', type: 'text', get: row => row.name },
   { key: 'signal', label: '신호', type: 'text', get: row => row.strategy.latest?.signal },
   { key: 'strategy_return_pct', label: '정배열 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.strategy_return_pct },
-  { key: 'buy_hold_return_pct', label: '200일 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.buy_hold_return_pct }
+  { key: 'buy_hold_return_pct', label: '200일 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.buy_hold_return_pct },
+  { key: 'volatility_breakout_return_pct', label: '변돌 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.volatility_breakout_return_pct }
 ];
 const SORT_FIELDS = Object.fromEntries(MOMENTUM_COLUMNS.map(column => [column.key, column.get]));
 const NUMERIC_SORT_FIELDS = new Set(MOMENTUM_COLUMNS.filter(column => column.type === 'number').map(column => column.key));
@@ -140,7 +141,8 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
         createCell(name),
         createSignalCell(latest.signal),
         createCell(fmtPct(rolling200.strategy_return_pct), { color: statColor(rolling200.strategy_return_pct), weight: '800' }),
-        createCell(fmtPct(rolling200.buy_hold_return_pct), { color: statColor(rolling200.buy_hold_return_pct), weight: '800' })
+        createCell(fmtPct(rolling200.buy_hold_return_pct), { color: statColor(rolling200.buy_hold_return_pct), weight: '800' }),
+        createCell(fmtPct(rolling200.volatility_breakout_return_pct), { color: statColor(rolling200.volatility_breakout_return_pct), weight: '800' })
       );
       tr.addEventListener('click', () => {
         if (!ticker) return;

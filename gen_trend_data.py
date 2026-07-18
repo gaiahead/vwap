@@ -239,6 +239,7 @@ def date_key(value: Any) -> str:
 
 
 STRATEGY_FEE_ONE_WAY = 0.0003
+VOLATILITY_BREAKOUT_K = 0.5
 STRATEGY_RULES: dict[str, Any] = {
     "buy": "VWAP1 > VWAP5 > VWAP20 > VWAP200 alignment starts",
     "sell": "full alignment breaks",
@@ -414,6 +415,58 @@ def simulate_full_alignment_strategy(
     }
 
 
+def simulate_volatility_breakout_strategy(
+    context: pd.DataFrame,
+    visible_days: int = LOOKBACK_TRADING_DAYS,
+    k: float = VOLATILITY_BREAKOUT_K,
+) -> dict[str, Any]:
+    """전일 변동폭 기반 돌파 매수 후 다음 거래일 시가에 청산한다.
+
+    돌파가는 `당일 시가 + (전일 고가 - 전일 저가) * k`다. 최근 표시
+    구간의 첫날은 직전 한 행을 돌파가 계산에만 사용하고, 마지막 날은 다음
+    거래일 시가가 없으므로 신규 진입하지 않는다. 매 거래마다 전액을
+    재투자하고 매수·매도 양쪽에 동일한 편도 수수료를 적용한다.
+    """
+    cash = 1.0
+    trades = 0
+    visible_days = max(1, int(visible_days))
+    first_visible_index = max(0, len(context) - visible_days)
+
+    for i in range(max(1, first_visible_index), len(context) - 1):
+        previous = context.iloc[i - 1]
+        today = context.iloc[i]
+        next_day = context.iloc[i + 1]
+        values = [
+            previous.get("high"),
+            previous.get("low"),
+            today.get("open"),
+            today.get("high"),
+            next_day.get("open"),
+        ]
+        if any(is_missing(value) for value in values):
+            continue
+
+        previous_range = float(previous["high"]) - float(previous["low"])
+        if previous_range <= 0:
+            continue
+
+        target_price = float(today["open"]) + previous_range * float(k)
+        exit_price = float(next_day["open"])
+        if target_price <= 0 or exit_price <= 0 or float(today["high"]) < target_price:
+            continue
+
+        shares = cash * (1 - STRATEGY_FEE_ONE_WAY) / target_price
+        cash = shares * exit_price * (1 - STRATEGY_FEE_ONE_WAY)
+        trades += 1
+
+    return {
+        "k": float(k),
+        "trades": trades,
+        "final_equity": cash,
+        "strategy_return_pct": (cash - 1) * 100,
+    }
+
+
 def calc_trade_holding_stats(trades: list[dict[str, Any]], work: pd.DataFrame) -> tuple[float | None, int | None]:
     hold_lengths: list[int] = []
     for trade in trades:
@@ -478,6 +531,7 @@ def build_latest_strategy_snapshot(
 def build_backtest_summary(
     work: pd.DataFrame,
     simulation: dict[str, Any],
+    volatility_breakout: dict[str, Any],
 ) -> dict[str, Any]:
     """최근 표시 구간의 전략·단순보유 수익률과 거래 통계를 요약한다."""
     trades = simulation["trades"]
@@ -490,6 +544,7 @@ def build_backtest_summary(
     )
     strategy_return = safe_round(strategy_return, 2)
     buy_hold_return = safe_round(buy_hold_return, 2)
+    volatility_breakout_return = safe_round(volatility_breakout["strategy_return_pct"], 2)
 
     return {
         "period": f"recent_{LOOKBACK_TRADING_DAYS}_trading_days",
@@ -502,10 +557,19 @@ def build_backtest_summary(
         "exposure_pct": safe_round(simulation["position_days"] / len(work) * 100 if len(work) else None, 2),
         "avg_holding_days": safe_round(avg_holding_days, 1),
         "max_holding_days": max_holding_days,
+        "volatility_breakout": {
+            "k": volatility_breakout["k"],
+            "trades": volatility_breakout["trades"],
+            "entry": "today_open + previous_range * k",
+            "exit": "next_day_open",
+            "fee_one_way_pct": STRATEGY_RULES["fee_one_way_pct"],
+            "final_day_entry": "skipped_without_next_open",
+        },
         "rolling_200d": {
             "window_days": len(work),
             "strategy_return_pct": strategy_return,
             "buy_hold_return_pct": buy_hold_return,
+            "volatility_breakout_return_pct": volatility_breakout_return,
         },
     }
 
@@ -522,13 +586,14 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
     work = context.tail(LOOKBACK_TRADING_DAYS).copy()
     previous_state = alignment_state(context.iloc[-len(work) - 1]) if len(context) > len(work) else None
     simulation = simulate_full_alignment_strategy(work, previous_state=previous_state)
+    volatility_breakout = simulate_volatility_breakout_strategy(context, visible_days=len(work))
 
     return {
         "available": True,
         "strategy": "VWAP 1/5/20/200 full alignment",
         "rules": dict(STRATEGY_RULES),
         "latest": build_latest_strategy_snapshot(work, simulation),
-        "backtest": build_backtest_summary(work, simulation),
+        "backtest": build_backtest_summary(work, simulation, volatility_breakout),
         "signals": simulation["signals"],
     }
 

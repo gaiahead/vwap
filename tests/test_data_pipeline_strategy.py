@@ -63,7 +63,62 @@ def test_strategy_available_for_newer_assets_inside_recent_200_day_scope():
         "window_days",
         "strategy_return_pct",
         "buy_hold_return_pct",
+        "volatility_breakout_return_pct",
     }
+    assert signal["backtest"]["volatility_breakout"] == {
+        "k": 0.5,
+        "trades": len(df) - 2,
+        "entry": "today_open + previous_range * k",
+        "exit": "next_day_open",
+        "fee_one_way_pct": 0.03,
+        "final_day_entry": "skipped_without_next_open",
+    }
+
+
+def test_volatility_breakout_k_half_compounds_completed_next_open_trades():
+    idx = pd.bdate_range(start="2026-01-05", periods=5)
+    context = pd.DataFrame(
+        {
+            "open": [100.0, 100.0, 121.0, 130.0, 130.0],
+            "high": [110.0, 111.0, 128.0, 131.0, 200.0],
+            "low": [90.0, 99.0, 120.0, 129.0, 120.0],
+            "close": [100.0, 105.0, 127.0, 130.0, 190.0],
+        },
+        index=idx,
+    )
+
+    result = gen.simulate_volatility_breakout_strategy(context, visible_days=4)
+
+    fee_multiplier = 1 - gen.STRATEGY_FEE_ONE_WAY
+    expected_equity = (
+        (121.0 / 110.0)
+        * (130.0 / 127.0)
+        * fee_multiplier**4
+    )
+    assert gen.VOLATILITY_BREAKOUT_K == 0.5
+    assert result["k"] == 0.5
+    assert result["trades"] == 2
+    assert math.isclose(result["final_equity"], expected_equity)
+    assert math.isclose(result["strategy_return_pct"], (expected_equity - 1) * 100)
+
+
+def test_volatility_breakout_skips_final_day_without_next_open():
+    idx = pd.bdate_range(start="2026-02-02", periods=3)
+    context = pd.DataFrame(
+        {
+            "open": [100.0, 100.0, 100.0],
+            "high": [110.0, 104.0, 200.0],
+            "low": [90.0, 96.0, 90.0],
+            "close": [100.0, 100.0, 190.0],
+        },
+        index=idx,
+    )
+
+    result = gen.simulate_volatility_breakout_strategy(context, visible_days=2)
+
+    assert result["trades"] == 0
+    assert result["final_equity"] == 1.0
+    assert result["strategy_return_pct"] == 0.0
 
 
 def test_full_alignment_signal_requires_1_above_5_above_20_above_200():

@@ -20,8 +20,11 @@ def test_table_columns_and_default_sort_match_current_dashboard_contract():
         "신호",
         "정배열 수익률",
         "200일 수익률",
+        "변돌 수익률",
     ]
     assert "const DEFAULT_SORT = { key: 'strategy_return_pct', dir: 'desc' }" in app
+    assert "key: 'volatility_breakout_return_pct', label: '변돌 수익률'" in app
+    assert "rolling200.volatility_breakout_return_pct" in app
     assert "1d &gt; 5d &gt; 20d &gt; 200d" in html
     assert "다음 거래일 1d VWAP" in html
     combined = html + app + generator
