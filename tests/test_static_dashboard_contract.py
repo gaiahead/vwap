@@ -138,3 +138,17 @@ def test_old_matrix_vms_and_strategy_card_ui_are_not_reintroduced():
     combined = app + css
     for token in legacy_tokens:
         assert token not in combined
+
+
+def test_refactor_removes_obsolete_frontend_fallbacks_and_gates():
+    app = read("app.js")
+
+    for token in [
+        "rollingProxyVwap",
+        "legendKey",
+        "hasMomentumTargets",
+        "const targets =",
+    ]:
+        assert token not in app
+
+    assert app.count("const annotations = {};") == 1

@@ -88,7 +88,7 @@ def test_alignment_strategy_marks_transitions_and_executes_next_day_vwap():
         })
     work = pd.DataFrame(rows, index=idx)
 
-    simulation = gen.simulate_full_alignment_strategy(work, record_signals=True)
+    simulation = gen.simulate_full_alignment_strategy(work)
     signals = simulation["signals"]
 
     assert [signal["type"] for signal in signals] == ["BUY", "SELL", "BUY"]
@@ -120,7 +120,7 @@ def test_last_day_transition_is_marked_even_without_a_next_day_execution():
         index=idx,
     )
 
-    simulation = gen.simulate_full_alignment_strategy(work, record_signals=True)
+    simulation = gen.simulate_full_alignment_strategy(work)
 
     assert simulation["signals"] == [{
         "date": "2026-01-07",
@@ -149,7 +149,7 @@ def test_alignment_strategy_does_not_carry_a_pre_window_position():
         index=idx,
     )
 
-    simulation = gen.simulate_full_alignment_strategy(work, record_signals=True)
+    simulation = gen.simulate_full_alignment_strategy(work)
 
     assert simulation["signals"] == []
     assert simulation["in_position"] is False
@@ -194,7 +194,7 @@ def test_trade_return_and_win_rate_include_both_one_way_fees(monkeypatch):
         index=idx,
     )
 
-    simulation = gen.simulate_full_alignment_strategy(work, record_signals=True)
+    simulation = gen.simulate_full_alignment_strategy(work)
     assert simulation["trades"][0]["return_pct"] < 0
     assert simulation["final_equity"] < 1
 
@@ -202,6 +202,24 @@ def test_trade_return_and_win_rate_include_both_one_way_fees(monkeypatch):
     result = gen.build_strategy_signal(make_ohlcv(range(100, 125)))
     assert result["backtest"]["trades"] == 1
     assert result["backtest"]["win_rate_pct"] == 0.0
+
+
+def test_build_strategy_simulates_visible_window_once(monkeypatch):
+    df = make_ohlcv(range(100, 520))
+    original = gen.simulate_full_alignment_strategy
+    calls = 0
+
+    def counted_simulation(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(gen, "simulate_full_alignment_strategy", counted_simulation)
+
+    result = gen.build_strategy_signal(df)
+
+    assert result["available"] is True
+    assert calls == 1
 
 
 def test_build_asset_outputs_keeps_trend_and_detail_strategy_contract_in_sync():

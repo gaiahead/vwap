@@ -112,31 +112,8 @@ DETAIL_DIR: str = "detail_data"
 # ──────────────────────────────────────────────────────────
 def compute_vwap(df_window: pd.DataFrame) -> float:
     """정규분포 기반 Volume Profile VWAP."""
-    lo = float(df_window["low"].min())
-    hi = float(df_window["high"].max())
-    if hi == lo:
-        return float(df_window["close"].mean())
-
-    bsize = (hi - lo) / N_BUCKETS
-    bucket_prices = np.array([lo + (b + 0.5) * bsize for b in range(N_BUCKETS)])
-    bvol = np.zeros(N_BUCKETS)
-
-    for _, r in df_window.iterrows():
-        mu = (float(r["high"]) + float(r["low"]) + float(r["close"])) / 3
-        sigma = (float(r["high"]) - float(r["low"])) / 4
-        if sigma == 0:
-            idx = min(N_BUCKETS - 1, int((mu - lo) / bsize))
-            bvol[idx] += float(r["volume"])
-            continue
-        weights = norm.pdf(bucket_prices, mu, sigma)
-        total_w = weights.sum()
-        if total_w > 0:
-            bvol += float(r["volume"]) * (weights / total_w)
-
-    total_vol = bvol.sum()
-    if total_vol == 0:
-        return float(df_window["close"].iloc[-1])
-    return float((bucket_prices * bvol).sum() / total_vol)
+    vwap, _ = compute_vwap_with_profile(df_window)
+    return vwap
 
 
 def compute_vwap_with_profile(
@@ -147,8 +124,6 @@ def compute_vwap_with_profile(
     hi = float(df_window["high"].max())
     if hi == lo:
         mid = float(df_window["close"].mean())
-        bsize = 1.0
-        bucket_prices = [mid] * N_BUCKETS
         return mid, [{"price": mid, "volume": 0.0} for _ in range(N_BUCKETS)]
 
     bsize = (hi - lo) / N_BUCKETS
@@ -180,15 +155,13 @@ def compute_vwap_with_profile(
     return vwap, buckets
 
 
-def compute_vwap_series(df: pd.DataFrame, window: int = 20) -> list[float | None]:
-    """롤링 윈도우 VWAP 시계열. 현재 봉 포함 (i-window+1 : i+1)."""
-    vwaps: list[float | None] = []
-    for i in range(len(df)):
-        if i < window - 1:
-            vwaps.append(None)
-            continue
-        vwaps.append(compute_vwap(df.iloc[i - window + 1 : i + 1]))
-    return vwaps
+def typical_price_series(df: pd.DataFrame) -> pd.Series:
+    """일봉 OHLC의 대표가격 `(high + low + close) / 3`."""
+    return (
+        cast(pd.Series, df["high"])
+        + cast(pd.Series, df["low"])
+        + cast(pd.Series, df["close"])
+    ) / 3
 
 
 def compute_proxy_vwap_series(df: pd.DataFrame, window: int) -> list[float | None]:
@@ -198,32 +171,11 @@ def compute_proxy_vwap_series(df: pd.DataFrame, window: int) -> list[float | Non
     거래량 합계가 0인 구간은 JSON에 NaN/Infinity가 새지 않도록 None으로 둔다.
     """
     volume = cast(pd.Series, df["volume"])
-    typical = (cast(pd.Series, df["high"]) + cast(pd.Series, df["low"]) + cast(pd.Series, df["close"])) / 3
+    typical = typical_price_series(df)
     pv = typical * volume
     denom = cast(pd.Series, volume.rolling(window).sum()).replace(0, np.nan)
     series = pv.rolling(window).sum() / denom
     return [None if pd.isna(v) else float(v) for v in series.tolist()]
-
-
-def strength_score(arr: list[float | None], norm_window: int = 52) -> list[float | None]:
-    """백분위 기반 강도 점수 (-100 ~ +100)."""
-    scores: list[float | None] = []
-    for i in range(len(arr)):
-        v = arr[i]
-        if v is None or (isinstance(v, float) and np.isnan(v)):
-            scores.append(None)
-            continue
-        window_vals = [
-            x
-            for x in arr[max(0, i - norm_window) : i + 1]
-            if x is not None and not (isinstance(x, float) and np.isnan(x))
-        ]
-        if len(window_vals) < 5:
-            scores.append(None)
-            continue
-        pct = sum(1 for x in window_vals if x <= v) / len(window_vals)
-        scores.append(round((pct * 2 - 1) * 100, 1))
-    return scores
 
 
 def is_missing(value: Any) -> bool:
@@ -284,7 +236,7 @@ def prepare_strategy_frame(
     """
     source_days = max(1, int(output_days)) + max(WINDOWS) - 1
     source = df.tail(source_days).copy()
-    source["vwap_1d"] = ((source["high"] + source["low"] + source["close"]) / 3).astype(float)
+    source["vwap_1d"] = typical_price_series(source).astype(float)
     for window in WINDOWS:
         source[f"vwap_{window}d"] = compute_proxy_vwap_series(source, window)
     return source.tail(output_days).copy()
@@ -299,6 +251,19 @@ def full_alignment_signal(vwap1: Any, vwap5: Any, vwap20: Any, vwap200: Any) -> 
     if v1 > v5 > v20 > v200:
         return "BUY"
     return "SELL"
+
+
+def alignment_state(row: pd.Series) -> bool | None:
+    """한 행의 정배열 상태를 `True`/`False`/미산출 `None`으로 반환."""
+    signal = full_alignment_signal(
+        row.get("vwap_1d"),
+        row.get("vwap_5d"),
+        row.get("vwap_20d"),
+        row.get("vwap_200d"),
+    )
+    if signal == "WAIT":
+        return None
+    return signal == "BUY"
 
 
 def make_signal_record(
@@ -329,10 +294,7 @@ def build_full_alignment_events(
     """최근 구간 안에서 발생한 정배열 시작/해제 전환만 추출한다."""
     events: list[dict[str, Any]] = []
     for i, (dt, row) in enumerate(work.iterrows()):
-        signal = full_alignment_signal(
-            row.get("vwap_1d"), row.get("vwap_5d"), row.get("vwap_20d"), row.get("vwap_200d")
-        )
-        current_state = None if signal == "WAIT" else signal == "BUY"
+        current_state = alignment_state(row)
         if previous_state is not None and current_state is not None and current_state != previous_state:
             execution_date = date_key(work.index[i + 1]) if i + 1 < len(work) else None
             execution_price = float(work.iloc[i + 1]["vwap_1d"]) if i + 1 < len(work) else None
@@ -346,7 +308,6 @@ def build_full_alignment_events(
 
 def simulate_full_alignment_strategy(
     work: pd.DataFrame,
-    record_signals: bool = True,
     previous_state: bool | None = None,
 ) -> dict[str, Any]:
     """1d > 5d > 20d > 200d 정배열 전략을 최근 구간에서 시뮬레이션한다.
@@ -363,9 +324,8 @@ def simulate_full_alignment_strategy(
     last_signal = "WAIT"
     last_signal_date: str | None = None
     trades: list[dict[str, Any]] = []
-    all_signals = build_full_alignment_events(work, previous_state=previous_state)
-    signals = all_signals if record_signals else []
-    executions = {event["execution_date"]: event for event in all_signals if event.get("execution_date")}
+    signals = build_full_alignment_events(work, previous_state=previous_state)
+    executions = {event["execution_date"]: event for event in signals if event.get("execution_date")}
     equity_curve: list[float] = []
     position_days = 0
 
@@ -434,33 +394,89 @@ def calc_trade_holding_stats(trades: list[dict[str, Any]], work: pd.DataFrame) -
     return sum(hold_lengths) / len(hold_lengths), max(hold_lengths)
 
 
-def calc_strategy_window_stats(
+def build_latest_strategy_snapshot(
     work: pd.DataFrame,
-    window: int = 200,
-    previous_state: bool | None = None,
+    simulation: dict[str, Any],
 ) -> dict[str, Any]:
-    """최근 최대 window 거래일 기준 정배열 전략과 단순보유 수익률."""
-    if len(work) < MIN_STRATEGY_TRADING_DAYS:
-        return {
-            "window_days": min(window, len(work)),
-            "strategy_return_pct": None,
-            "buy_hold_return_pct": None,
-        }
-
-    sub = work.iloc[-min(window, len(work)):].copy()
-    simulation = simulate_full_alignment_strategy(
-        sub,
-        record_signals=False,
-        previous_state=previous_state,
+    """최신 거래일의 정배열 상태와 현재 포지션을 직렬화한다."""
+    latest = work.iloc[-1]
+    current_signal = full_alignment_signal(
+        latest["vwap_1d"],
+        latest["vwap_5d"],
+        latest["vwap_20d"],
+        latest["vwap_200d"],
     )
-    strategy_curve = simulation["equity_curve"]
-    base_price = float(sub["vwap_1d"].iloc[0])
-    final_price = float(sub["vwap_1d"].iloc[-1])
+    alignment = {
+        "WAIT": "N/A",
+        "BUY": "1 > 5 > 20 > 200",
+        "SELL": "정배열 아님",
+    }[current_signal]
+    action = {"WAIT": "대기", "BUY": "매수", "SELL": "매도"}[current_signal]
+
+    current_trade_return = None
+    if simulation["in_position"] and simulation["entry_price"]:
+        current_trade_return = (
+            float(work["vwap_1d"].iloc[-1])
+            / simulation["entry_price"]
+            * (1 - STRATEGY_FEE_ONE_WAY)
+            - 1
+        ) * 100
+
+    holding_days = None
+    if simulation["in_position"] and simulation["entry_date"]:
+        holding_days = len(work.loc[pd.Timestamp(simulation["entry_date"]):])
 
     return {
-        "window_days": len(sub),
-        "strategy_return_pct": safe_round((strategy_curve[-1] - 1) * 100 if strategy_curve else None, 2),
-        "buy_hold_return_pct": safe_round(pct_change(base_price, final_price), 2),
+        "date": date_key(work.index[-1]),
+        "vwap1": safe_round(latest["vwap_1d"]),
+        "vwap5": safe_round(latest["vwap_5d"]),
+        "vwap20": safe_round(latest["vwap_20d"]),
+        "vwap200": safe_round(latest["vwap_200d"]),
+        "signal": current_signal,
+        "alignment": alignment,
+        "in_position": simulation["in_position"],
+        "action": action,
+        "last_signal": simulation["last_signal"],
+        "last_signal_date": simulation["last_signal_date"],
+        "holding_days": holding_days,
+        "entry_date": simulation["entry_date"],
+        "entry_price": safe_round(simulation["entry_price"]),
+        "current_trade_return_pct": safe_round(current_trade_return, 2),
+    }
+
+
+def build_backtest_summary(
+    work: pd.DataFrame,
+    simulation: dict[str, Any],
+) -> dict[str, Any]:
+    """최근 표시 구간의 전략·단순보유 수익률과 거래 통계를 요약한다."""
+    trades = simulation["trades"]
+    wins = [trade for trade in trades if trade.get("return_pct") is not None and trade["return_pct"] > 0]
+    avg_holding_days, max_holding_days = calc_trade_holding_stats(trades, work)
+    strategy_return = (simulation["final_equity"] - 1) * 100
+    buy_hold_return = pct_change(
+        float(work["vwap_1d"].iloc[0]),
+        float(work["vwap_1d"].iloc[-1]),
+    )
+    strategy_return = safe_round(strategy_return, 2)
+    buy_hold_return = safe_round(buy_hold_return, 2)
+
+    return {
+        "period": f"recent_{LOOKBACK_TRADING_DAYS}_trading_days",
+        "start_date": date_key(work.index[0]),
+        "end_date": date_key(work.index[-1]),
+        "strategy_return_pct": strategy_return,
+        "buy_hold_return_pct": buy_hold_return,
+        "trades": len(trades),
+        "win_rate_pct": safe_round(len(wins) / len(trades) * 100 if trades else None, 2),
+        "exposure_pct": safe_round(simulation["position_days"] / len(work) * 100 if len(work) else None, 2),
+        "avg_holding_days": safe_round(avg_holding_days, 1),
+        "max_holding_days": max_holding_days,
+        "rolling_200d": {
+            "window_days": len(work),
+            "strategy_return_pct": strategy_return,
+            "buy_hold_return_pct": buy_hold_return,
+        },
     }
 
 
@@ -474,78 +490,15 @@ def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
 
     context = prepare_strategy_frame(df, LOOKBACK_TRADING_DAYS + 1)
     work = context.tail(LOOKBACK_TRADING_DAYS).copy()
-    previous_state: bool | None = None
-    if len(context) > len(work):
-        prior = context.iloc[-len(work) - 1]
-        prior_signal = full_alignment_signal(
-            prior.get("vwap_1d"), prior.get("vwap_5d"), prior.get("vwap_20d"), prior.get("vwap_200d")
-        )
-        previous_state = None if prior_signal == "WAIT" else prior_signal == "BUY"
-    simulation = simulate_full_alignment_strategy(
-        work,
-        record_signals=True,
-        previous_state=previous_state,
-    )
-    latest = work.iloc[-1]
-
-    v1 = safe_round(latest["vwap_1d"])
-    v5 = safe_round(latest["vwap_5d"])
-    v20 = safe_round(latest["vwap_20d"])
-    v200 = safe_round(latest["vwap_200d"])
-    latest_date = date_key(work.index[-1])
-    current_signal = full_alignment_signal(
-        latest["vwap_1d"], latest["vwap_5d"], latest["vwap_20d"], latest["vwap_200d"]
-    )
-    if current_signal == "WAIT":
-        alignment = "N/A"
-    elif current_signal == "BUY":
-        alignment = "1 > 5 > 20 > 200"
-    else:
-        alignment = "정배열 아님"
-    action = "매수" if current_signal == "BUY" else "매도" if current_signal == "SELL" else "대기"
-
-    final_vwap_1d = float(work["vwap_1d"].iloc[-1])
-    current_trade_return = None
-    if simulation["in_position"] and simulation["entry_price"]:
-        current_trade_return = (
-            final_vwap_1d / simulation["entry_price"] * (1 - STRATEGY_FEE_ONE_WAY) - 1
-        ) * 100
-    holding_days = None
-    if simulation["in_position"] and simulation["entry_date"]:
-        holding_days = len(work.loc[pd.Timestamp(simulation["entry_date"]):])
-
-    trades = simulation["trades"]
-    wins = [t for t in trades if t.get("return_pct") is not None and t["return_pct"] > 0]
-    avg_holding_days, max_holding_days = calc_trade_holding_stats(trades, work)
-    strategy_return = (simulation["final_equity"] - 1) * 100
-    bh_return = pct_change(float(work["vwap_1d"].iloc[0]), final_vwap_1d)
+    previous_state = alignment_state(context.iloc[-len(work) - 1]) if len(context) > len(work) else None
+    simulation = simulate_full_alignment_strategy(work, previous_state=previous_state)
 
     return {
         "available": True,
         "strategy": "VWAP 1/5/20/200 full alignment",
         "rules": dict(STRATEGY_RULES),
-        "latest": {
-            "date": latest_date,
-            "vwap1": v1, "vwap5": v5, "vwap20": v20, "vwap200": v200,
-            "signal": current_signal,
-            "alignment": alignment, "in_position": simulation["in_position"], "action": action,
-            "last_signal": simulation["last_signal"], "last_signal_date": simulation["last_signal_date"],
-            "holding_days": holding_days,
-            "entry_date": simulation["entry_date"], "entry_price": safe_round(simulation["entry_price"]),
-            "current_trade_return_pct": safe_round(current_trade_return, 2),
-        },
-        "backtest": {
-            "period": f"recent_{LOOKBACK_TRADING_DAYS}_trading_days",
-            "start_date": date_key(work.index[0]), "end_date": latest_date,
-            "strategy_return_pct": safe_round(strategy_return, 2),
-            "buy_hold_return_pct": safe_round(bh_return, 2),
-            "trades": len(trades),
-            "win_rate_pct": safe_round(len(wins) / len(trades) * 100 if trades else None, 2),
-            "exposure_pct": safe_round(simulation["position_days"] / len(work) * 100 if len(work) else None, 2),
-            "avg_holding_days": safe_round(avg_holding_days, 1),
-            "max_holding_days": max_holding_days,
-            "rolling_200d": calc_strategy_window_stats(work, 200, previous_state=previous_state),
-        },
+        "latest": build_latest_strategy_snapshot(work, simulation),
+        "backtest": build_backtest_summary(work, simulation),
         "signals": simulation["signals"],
     }
 
@@ -816,43 +769,66 @@ def remove_unregistered_detail_files() -> list[str]:
     return sorted(removed)
 
 
-# ──────────────────────────────────────────────────────────
-# 메인
-# ──────────────────────────────────────────────────────────
-def main() -> None:
-    run_time = datetime.now(KST).strftime("%Y-%m-%d %H:%M")
-    end_date = datetime.now(KST).strftime("%Y-%m-%d")
-
-    result: dict[str, Any] = {"_meta": {"updated_at": run_time, "lookback_trading_days": LOOKBACK_TRADING_DAYS}}
+def collect_asset_outputs(
+    run_time: str,
+    end_date: str,
+) -> tuple[dict[str, Any], dict[str, dict[str, Any]], list[str]]:
+    """등록 종목을 처리해 trend/detail 결과와 실패 종목을 수집한다."""
+    result: dict[str, Any] = {
+        "_meta": {
+            "updated_at": run_time,
+            "lookback_trading_days": LOOKBACK_TRADING_DAYS,
+        }
+    }
     detail_results: dict[str, dict[str, Any]] = {}
     failed: list[str] = []
 
     for name, ticker in ASSETS:
         outputs = process_asset(name, ticker, end_date)
-        if outputs is not None:
-            asset_data, detail_data = outputs
-            result[name] = asset_data
-            detail_results[ticker] = detail_data
-        else:
+        if outputs is None:
             failed.append(name)
+            continue
+        asset_data, detail_data = outputs
+        result[name] = asset_data
+        detail_results[ticker] = detail_data
 
-    krx_patched_assets = [
-        name for name, data in result.items()
-        if not name.startswith("_") and isinstance(data, dict) and data.get("data_source", {}).get("latest_krx_daily") == "naver_siseJson"
-    ]
-    if krx_patched_assets:
+    return result, detail_results, failed
+
+
+def attach_run_krx_metadata(result: dict[str, Any], end_date: str) -> None:
+    """Naver 당일 보강 현황을 trend 최상위 메타에 요약한다."""
+    patched_count = sum(
+        1
+        for name, data in result.items()
+        if not name.startswith("_")
+        and isinstance(data, dict)
+        and data.get("data_source", {}).get("latest_krx_daily") == "naver_siseJson"
+    )
+    if patched_count:
         result["_meta"].update({
             "krx_today_source": "naver_siseJson",
             "krx_today_date": end_date,
-            "krx_today_patched_count": len(krx_patched_assets),
+            "krx_today_patched_count": patched_count,
         })
-    with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
-        json.dump(result, f, ensure_ascii=False, allow_nan=False)
 
-    # detail_data/ 생성: 등록 목록에서 제거된 종목의 파일은 먼저 정리한다.
+
+def write_json_file(path: str, payload: dict[str, Any]) -> None:
+    """브라우저에서 파싱 가능한 strict JSON으로 저장한다."""
+    with open(path, "w", encoding="utf-8") as file:
+        json.dump(payload, file, ensure_ascii=False, allow_nan=False)
+
+
+def write_detail_files(
+    run_time: str,
+    result: dict[str, Any],
+    detail_results: dict[str, dict[str, Any]],
+    failed: list[str],
+) -> None:
+    """stale 상세 파일을 정리하고 성공한 종목의 상세 결과를 저장한다."""
     removed_tickers = remove_unregistered_detail_files()
     if removed_tickers:
         print(f"\n🗑️ 미등록 상세 데이터 삭제: {', '.join(removed_tickers)}")
+
     print("\n📊 detail_data 생성 중...")
     for name, ticker in ASSETS:
         if name in failed or ticker not in detail_results:
@@ -861,11 +837,24 @@ def main() -> None:
             detail = detail_results[ticker]
             detail["_meta"] = build_detail_meta(run_time, result.get(name, {}))
             out_path = os.path.join(DETAIL_DIR, f"{ticker}.json")
-            with open(out_path, "w", encoding="utf-8") as f:
-                json.dump(detail, f, ensure_ascii=False, allow_nan=False)
+            write_json_file(out_path, detail)
             print(f"  ✅ {name} → {out_path}")
-        except Exception as e:
-            print(f"  [ERROR] detail {name}: {e}")
+        except Exception as error:
+            print(f"  [ERROR] detail {name}: {error}")
+
+
+# ──────────────────────────────────────────────────────────
+# 메인
+# ──────────────────────────────────────────────────────────
+def main() -> None:
+    now = datetime.now(KST)
+    run_time = now.strftime("%Y-%m-%d %H:%M")
+    end_date = now.strftime("%Y-%m-%d")
+
+    result, detail_results, failed = collect_asset_outputs(run_time, end_date)
+    attach_run_krx_metadata(result, end_date)
+    write_json_file(OUTPUT_PATH, result)
+    write_detail_files(run_time, result, detail_results, failed)
 
     print(f"\n✅ 저장 완료: {OUTPUT_PATH}  (기준: {run_time})")
     if failed:

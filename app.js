@@ -1,4 +1,4 @@
-const DATA_VERSION = 'korean-listings-only-20260718';
+const DATA_VERSION = 'code-refactor-20260718';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -26,7 +26,6 @@ const MOMENTUM_COLUMNS = [
 const SORT_FIELDS = Object.fromEntries(MOMENTUM_COLUMNS.map(column => [column.key, column.get]));
 const NUMERIC_SORT_FIELDS = new Set(MOMENTUM_COLUMNS.filter(column => column.type === 'number').map(column => column.key));
 
-
 let priceChart = null;
 let vpChart = null;
 let currentVpPeriod = '1d';
@@ -35,9 +34,19 @@ const detailCache = {};
 
 fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json()).then(data=>{
   const allNames = Object.keys(data).filter(k => k !== '_meta');
+  const view = {
+    updated: document.getElementById('updated'),
+    momentumSection: document.getElementById('momentum-section'),
+    momentumBody: document.getElementById('momentum-body'),
+    detailSection: document.getElementById('detail-section'),
+    detailContent: document.getElementById('detail-content'),
+    detailTitle: document.getElementById('detail-title'),
+    detailSymbol: document.getElementById('detail-symbol'),
+    detailClose: document.getElementById('detail-close')
+  };
+  let sortState = { ...DEFAULT_SORT };
 
-  document.getElementById('updated').textContent =
-    (data._meta?.updated_at || '') + ' 기준';
+  view.updated.textContent = (data._meta?.updated_at || '') + ' 기준';
 
   // ─── Formatting helpers ──────────────────────────────────────────
   function fmtPct(v) { return v == null ? '–' : `${v > 0 ? '+' : ''}${Number(v).toFixed(2)}%`; }
@@ -54,12 +63,6 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     return td;
   }
 
-  function createNameCell(name) {
-    const td = document.createElement('td');
-    td.textContent = name;
-    return td;
-  }
-
   function createSignalCell(signal) {
     if (signal === 'BUY') return createCell('BUY', { className: 'signal-cell buy', color: COLOR.positive, weight: '900' });
     if (signal === 'SELL') return createCell('SELL', { className: 'signal-cell sell', color: COLOR.negative, weight: '900' });
@@ -68,14 +71,12 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
 
 
   function setLoading(text) {
-    detailContent.replaceChildren();
+    view.detailContent.replaceChildren();
     const loading = document.createElement('div');
     loading.className = 'loading';
     loading.textContent = text;
-    detailContent.appendChild(loading);
+    view.detailContent.appendChild(loading);
   }
-
-  let sortState = { ...DEFAULT_SORT };
 
   function compareRows(a, b) {
     const getter = SORT_FIELDS[sortState.key] || SORT_FIELDS.strategy_return_pct;
@@ -119,18 +120,14 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
   });
 
   function renderMomentum() {
-    const targets = ['삼성전자','SK하이닉스','한미반도체','리노공업'];
-    const hasMomentumTargets = targets.some(n => data[n]);
-    if (!hasMomentumTargets) return;
-
-    document.getElementById('momentum-section').style.display = '';
-    const tbody = document.getElementById('momentum-body');
-    tbody.replaceChildren();
-
     const rows = allNames
       .map(n => ({ name: n, strategy: data[n]?.strategy_signal }))
       .filter(r => r.strategy?.available)
       .sort(compareRows);
+    view.momentumSection.style.display = rows.length ? '' : 'none';
+    view.momentumBody.replaceChildren();
+    if (!rows.length) return;
+
     updateSortHeaders();
 
     rows.forEach(({name, strategy}) => {
@@ -140,7 +137,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       const tr = document.createElement('tr');
       tr.className = 'momentum-row' + (name === currentDetailName ? ' detail-active' : '');
       tr.append(
-        createNameCell(name),
+        createCell(name),
         createSignalCell(latest.signal),
         createCell(fmtPct(rolling200.strategy_return_pct), { color: statColor(rolling200.strategy_return_pct), weight: '800' }),
         createCell(fmtPct(rolling200.buy_hold_return_pct), { color: statColor(rolling200.buy_hold_return_pct), weight: '800' })
@@ -151,35 +148,30 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
         location.hash = encodeURIComponent(ticker);
         fetchDetail(ticker, name);
       });
-      tbody.appendChild(tr);
+      view.momentumBody.appendChild(tr);
     });
   }
 
   // ─── Detail section ────────────────────────────────────
-  const detailSection = document.getElementById('detail-section');
-  const detailContent = document.getElementById('detail-content');
-  const detailTitle = document.getElementById('detail-title');
-  const detailSymbol = document.getElementById('detail-symbol');
-
   function getDetailDisplayName(ticker, name, detailData=null) {
     return detailData?.name || name || ticker;
   }
 
   function setDetailHeader(ticker, name, detailData=null) {
     const displayName = getDetailDisplayName(ticker, name, detailData);
-    detailTitle.textContent = displayName;
-    detailSymbol.textContent = ticker && ticker !== displayName ? ticker : '';
+    view.detailTitle.textContent = displayName;
+    view.detailSymbol.textContent = ticker && ticker !== displayName ? ticker : '';
   }
 
-  document.getElementById('detail-close').addEventListener('click', () => {
-    detailSection.style.display = 'none';
+  view.detailClose.addEventListener('click', () => {
+    view.detailSection.style.display = 'none';
     currentDetailName = null;
     location.hash = '';
     renderMomentum();
   });
 
   async function fetchDetail(ticker, name) {
-    detailSection.style.display = '';
+    view.detailSection.style.display = '';
     currentDetailName = name;
     renderMomentum();
 
@@ -242,7 +234,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       tabs.appendChild(button);
     });
     vpPanel.insertBefore(tabs, vpPanel.querySelector('.chart-wrap'));
-    detailContent.replaceChildren(pricePanel, vpPanel);
+    view.detailContent.replaceChildren(pricePanel, vpPanel);
   }
 
   function initVpTabs() {
@@ -262,28 +254,10 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     setDetailHeader(ticker, name, detailData);
     renderPriceChart(detailData);
     renderVpChart(detailData, currentVpPeriod);
-    detailSection.scrollIntoView({behavior:'smooth', block:'start'});
+    view.detailSection.scrollIntoView({behavior:'smooth', block:'start'});
   }
-
 
   // ─── Panel A: Price + VWAP ─────────────────────────────
-  function rollingProxyVwap(ohlcv, windowSize) {
-    return ohlcv.map((_, i) => {
-      if (i < windowSize - 1) return null;
-      const rows = ohlcv.slice(i - windowSize + 1, i + 1);
-      let pvSum = 0;
-      let volumeSum = 0;
-      for (const row of rows) {
-        const vwap1d = Number(row.vwap_1d ?? ((row.high + row.low + row.close) / 3));
-        const volume = Number(row.volume);
-        if (!Number.isFinite(vwap1d) || !Number.isFinite(volume)) return null;
-        pvSum += vwap1d * volume;
-        volumeSum += volume;
-      }
-      return volumeSum > 0 ? pvSum / volumeSum : null;
-    });
-  }
-
   function renderPriceChart(detailData) {
     const ohlcv = detailData.ohlcv;
     const labels = ohlcv.map(d => d.date);
@@ -293,9 +267,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       if (signal?.type !== type) return null;
       return signal.marker_price ?? ohlcv[i]?.vwap_5d ?? null;
     });
-    const lineData = def => ohlcv.map(d => d[`vwap_${def.window}d`] ?? null).some(v => v != null)
-      ? ohlcv.map(d => d[`vwap_${def.window}d`] ?? null)
-      : rollingProxyVwap(ohlcv, def.window);
+    const lineData = def => ohlcv.map(d => d[`vwap_${def.window}d`] ?? null);
     const vwapLineDatasets = PRICE_LINE_DEFS.map((def, idx) => ({
       label: def.label,
       data: lineData(def),
@@ -313,8 +285,6 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       { label: 'SELL', data: markerData('SELL'), type: 'line', showLine: false, pointStyle: 'triangle', pointRotation: 180, pointRadius: 7, pointHoverRadius: 9, pointBackgroundColor: COLOR.negative, pointBorderColor: '#991b1b', pointBorderWidth: 1.5, order: 1 }
     ];
     const legendOrder = new Map(PRICE_DATASET_ORDER.map((label, idx) => [label, idx]));
-    const legendKey = label => legendOrder.has(label) ? label : label;
-    const annotations = {};
 
     const config = {
       type: 'line',
@@ -341,9 +311,8 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
                 fillStyle: dataset.pointBackgroundColor || dataset.borderColor
               };
             }),
-            sort: (a, b) => (legendOrder.get(legendKey(a.text)) ?? 999) - (legendOrder.get(legendKey(b.text)) ?? 999)
+            sort: (a, b) => (legendOrder.get(a.text) ?? 999) - (legendOrder.get(b.text) ?? 999)
           }},
-          annotation: {annotations},
           tooltip: {callbacks: {label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y?.toLocaleString(undefined, {maximumFractionDigits: 2})}`}}
         },
         scales: {
