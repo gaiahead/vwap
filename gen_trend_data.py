@@ -123,6 +123,30 @@ ASSETS: list[AssetTuple] = [
     ("삼양식품",                        "003230.KS"),
     ("SK텔레콤",                        "017670.KS"),
 ]
+
+# 계좌·상품유형별 세금 가정을 ASSETS의 2-tuple 계약과 분리해 관리한다.
+# 국내 개별주식만 일반계좌 매도 거래세를 거래별로 차감하고, ETF는
+# 사용자가 지정한 계좌(일반/ISA/연금저축·IRP) 안에서 수수료만 반영한다.
+DOMESTIC_STOCK_TICKERS: frozenset[str] = frozenset({
+    "005930.KS", "009150.KS", "000660.KS", "042700.KS", "058470.KQ",
+    "034020.KS", "267260.KS", "010120.KS", "298040.KS", "015760.KS",
+    "009830.KS", "010060.KS", "322000.KS", "112610.KS", "297090.KQ",
+    "475150.KS", "005380.KS", "000270.KS", "105560.KS", "373220.KS",
+    "005490.KS", "006400.KS", "207940.KS", "068270.KS", "196170.KQ",
+    "000100.KS", "329180.KS", "010140.KS", "042660.KS", "012450.KS",
+    "064350.KS", "079550.KS", "047810.KS", "272210.KS", "103140.KS",
+    "005870.KS", "035420.KS", "035720.KS", "259960.KS", "003230.KS",
+    "017670.KS",
+})
+LEVERAGED_ETF_TICKERS: frozenset[str] = frozenset({
+    "122630.KS", "233740.KS",
+})
+PENSION_ETF_TICKERS: frozenset[str] = frozenset({
+    "0060H0.KS", "379800.KS", "379810.KS", "458730.KS", "453650.KS",
+    "453640.KS", "203780.KS", "481190.KS", "456600.KS", "381180.KS",
+    "390390.KS", "446770.KS", "474800.KS", "497780.KS", "0036Z0.KS",
+    "415920.KS",
+})
 WINDOWS: list[int] = [5, 20, 200]  # 1d는 명시적 proxy, 나머지는 상세 차트용 롤링 VWAP 기간
 VOLUME_PROFILE_WINDOWS: list[int] = [1, 5, 20, 200]  # 하단 Volume Profile 기간
 LOOKBACK_TRADING_DAYS: int = 200
@@ -239,6 +263,7 @@ def date_key(value: Any) -> str:
 
 
 STRATEGY_FEE_ONE_WAY = 0.0003
+DOMESTIC_STOCK_TRANSACTION_TAX_SELL = 0.002
 VOLATILITY_BREAKOUT_K = 0.5
 STRATEGY_RULES: dict[str, Any] = {
     "buy": "VWAP1 > VWAP5 > VWAP20 > VWAP200 alignment starts",
@@ -250,6 +275,39 @@ STRATEGY_RULES: dict[str, Any] = {
     "backtest_window_trading_days": LOOKBACK_TRADING_DAYS,
     "carry_in_position": False,
 }
+
+
+def build_strategy_cost_model(ticker: str | None) -> dict[str, Any]:
+    """사용자가 지정한 상품별 운용계좌와 거래단계 비용 정책을 반환한다."""
+    if ticker in DOMESTIC_STOCK_TICKERS:
+        return {
+            "product_class": "DOMESTIC_STOCK",
+            "account_basis": "TAXABLE_BROKERAGE",
+            "account_label": "일반계좌",
+            "fee_one_way_pct": STRATEGY_FEE_ONE_WAY * 100,
+            "transaction_tax_sell_pct": DOMESTIC_STOCK_TRANSACTION_TAX_SELL * 100,
+            "income_tax_per_trade_pct": 0.0,
+        }
+    if ticker in LEVERAGED_ETF_TICKERS:
+        product_class = "LEVERAGED_ETF"
+        account_basis = "ISA"
+        account_label = "ISA"
+    elif ticker in PENSION_ETF_TICKERS:
+        product_class = "OVERSEAS_OR_OTHER_ETF"
+        account_basis = "PENSION_OR_IRP"
+        account_label = "연금저축/IRP"
+    else:
+        product_class = "DOMESTIC_EQUITY_ETF"
+        account_basis = "TAXABLE_BROKERAGE"
+        account_label = "일반계좌"
+    return {
+        "product_class": product_class,
+        "account_basis": account_basis,
+        "account_label": account_label,
+        "fee_one_way_pct": STRATEGY_FEE_ONE_WAY * 100,
+        "transaction_tax_sell_pct": 0.0,
+        "income_tax_per_trade_pct": 0.0,
+    }
 
 
 def prepare_strategy_frame(
@@ -340,6 +398,7 @@ def build_full_alignment_events(
 def simulate_full_alignment_strategy(
     work: pd.DataFrame,
     previous_state: bool | None = None,
+    transaction_tax_sell: float = 0.0,
 ) -> dict[str, Any]:
     """1d > 5d > 20d > 200d 정배열 전략을 최근 구간에서 시뮬레이션한다.
 
@@ -379,10 +438,17 @@ def simulate_full_alignment_strategy(
             elif in_position and signal == "SELL":
                 assert entry_price is not None
                 exit_price = valuation_price
-                cash = shares * exit_price * (1 - STRATEGY_FEE_ONE_WAY)
+                cash = shares * exit_price * (
+                    1 - STRATEGY_FEE_ONE_WAY - transaction_tax_sell
+                )
                 shares = 0.0
                 in_position = False
-                ret = ((exit_price / entry_price) * (1 - STRATEGY_FEE_ONE_WAY) ** 2 - 1) * 100
+                ret = (
+                    (exit_price / entry_price)
+                    * (1 - STRATEGY_FEE_ONE_WAY)
+                    * (1 - STRATEGY_FEE_ONE_WAY - transaction_tax_sell)
+                    - 1
+                ) * 100
                 trades.append({
                     "entry_date": entry_date,
                     "exit_date": execution_dt,
@@ -419,6 +485,7 @@ def simulate_volatility_breakout_strategy(
     context: pd.DataFrame,
     visible_days: int = LOOKBACK_TRADING_DAYS,
     k: float = VOLATILITY_BREAKOUT_K,
+    transaction_tax_sell: float = 0.0,
 ) -> dict[str, Any]:
     """전일 변동폭 기반 돌파 매수 후 다음 거래일 시가에 청산한다.
 
@@ -457,10 +524,15 @@ def simulate_volatility_breakout_strategy(
             continue
 
         shares = cash * (1 - STRATEGY_FEE_ONE_WAY) / target_price
-        cash = shares * exit_price * (1 - STRATEGY_FEE_ONE_WAY)
+        cash = shares * exit_price * (
+            1 - STRATEGY_FEE_ONE_WAY - transaction_tax_sell
+        )
         trades += 1
         trade_return = (
-            (exit_price / target_price) * (1 - STRATEGY_FEE_ONE_WAY) ** 2 - 1
+            (exit_price / target_price)
+            * (1 - STRATEGY_FEE_ONE_WAY)
+            * (1 - STRATEGY_FEE_ONE_WAY - transaction_tax_sell)
+            - 1
         ) * 100
         journal.append({
             "entry_date": date_key(context.index[i]),
@@ -640,24 +712,39 @@ def build_backtest_summary(
     }
 
 
-def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
+def build_strategy_signal(df: pd.DataFrame, ticker: str | None = None) -> dict[str, Any]:
     """최근 200거래일 기준 1d/5d/20d/200d 정배열 전략 요약.
 
     신호: 당일 종가 확정 후 판단. 백테스트 체결: 신호 다음 거래일 1일 VWAP proxy, 편도 수수료 0.03%.
     """
+    cost_model = build_strategy_cost_model(ticker)
     if len(df) < MIN_STRATEGY_TRADING_DAYS:
-        return {"available": False, "reason": "insufficient_recent_history"}
+        return {
+            "available": False,
+            "reason": "insufficient_recent_history",
+            "cost_model": cost_model,
+        }
 
     context = prepare_strategy_frame(df, LOOKBACK_TRADING_DAYS + 1)
     work = context.tail(LOOKBACK_TRADING_DAYS).copy()
     previous_state = alignment_state(context.iloc[-len(work) - 1]) if len(context) > len(work) else None
-    simulation = simulate_full_alignment_strategy(work, previous_state=previous_state)
-    volatility_breakout = simulate_volatility_breakout_strategy(context, visible_days=len(work))
+    transaction_tax_sell = cost_model["transaction_tax_sell_pct"] / 100
+    simulation = simulate_full_alignment_strategy(
+        work,
+        previous_state=previous_state,
+        transaction_tax_sell=transaction_tax_sell,
+    )
+    volatility_breakout = simulate_volatility_breakout_strategy(
+        context,
+        visible_days=len(work),
+        transaction_tax_sell=transaction_tax_sell,
+    )
 
     return {
         "available": True,
         "strategy": "VWAP 1/5/20/200 full alignment",
         "rules": dict(STRATEGY_RULES),
+        "cost_model": cost_model,
         "latest": build_latest_strategy_snapshot(work, simulation),
         "backtest": build_backtest_summary(work, simulation, volatility_breakout),
         "backtest_journals": {
@@ -820,7 +907,7 @@ def build_detail_data(
 ) -> dict[str, Any]:
     """상세 데이터 생성: 최근 200거래일, VWAP line/Volume Profile은 1/5/20/200d만 표시."""
     if strategy_signal is None:
-        strategy_payload = build_strategy_signal(df)
+        strategy_payload = build_strategy_signal(df, ticker=ticker)
         if backtest_journals is None:
             backtest_journals = strategy_payload.get("backtest_journals")
         strategy_signal = {
@@ -858,7 +945,7 @@ def build_detail_data(
         "ticker": ticker,
         "ohlcv": ohlcv,
         "volume_profile": volume_profile,
-        "strategy_signal": strategy_signal if strategy_signal is not None else build_strategy_signal(df),
+        "strategy_signal": strategy_signal if strategy_signal is not None else build_strategy_signal(df, ticker=ticker),
         "backtest_journals": backtest_journals or {
             "volatility_breakout": [],
             "full_alignment": [],
@@ -896,7 +983,7 @@ def build_asset_outputs(name: str, ticker: str, df: pd.DataFrame) -> tuple[dict[
     df = df.tail(HISTORY_TRADING_DAYS).copy()
     vwap_structure, _ = build_vwap_structure(df)
     records = build_recent_records(df)
-    strategy_payload = build_strategy_signal(df)
+    strategy_payload = build_strategy_signal(df, ticker=ticker)
     backtest_journals = strategy_payload.get("backtest_journals", {
         "volatility_breakout": [],
         "full_alignment": [],

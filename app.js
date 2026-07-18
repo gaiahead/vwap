@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260718-1755';
+const DATA_VERSION = 'data-20260718-2156';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -225,7 +225,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
   }
 
   function fmtJournalPrice(value) {
-    return value == null ? '–' : Number(value).toLocaleString('ko-KR', { maximumFractionDigits: 2 });
+    return value == null ? '–' : Number(value).toLocaleString('ko-KR', { maximumFractionDigits: 0 });
   }
 
   function fmtWinRate(value) {
@@ -356,6 +356,13 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     const breakoutRecords = journals.volatility_breakout || [];
     const alignmentRecords = journals.full_alignment || [];
     const breakout = backtest.volatility_breakout || {};
+    const costModel = strategy.cost_model || {};
+    const accountLabel = costModel.account_label || '추천계좌';
+    const transactionTax = Number(costModel.transaction_tax_sell_pct || 0);
+    const transactionTaxNote = transactionTax > 0
+      ? `매도 거래세 ${transactionTax.toFixed(2)}%`
+      : '거래별 소득세 없음';
+    const costNote = `${accountLabel} · 편도 수수료 0.03% · ${transactionTaxNote}`;
 
     const sectionHead = document.createElement('div');
     sectionHead.className = 'journal-section-head';
@@ -395,7 +402,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
           {label: '승률', value: fmtWinRate(breakout.win_rate_pct)},
         ],
         records: breakoutRecords,
-        note: `k ${breakout.k ?? 0.5} · 편도 수수료 0.03% · 마지막 날 신규 진입 제외`,
+        note: `k ${breakout.k ?? 0.5} · ${costNote} · 마지막 날 신규 진입 제외`,
       }),
       createJournalCard({
         tone: 'medium',
@@ -408,7 +415,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
           {label: '승률', value: fmtWinRate(backtest.win_rate_pct)},
         ],
         records: alignmentRecords,
-        note: '1d > 5d > 20d > 200d · 편도 수수료 0.03% · *보유 중은 최신 1d VWAP 평가',
+        note: `1d > 5d > 20d > 200d · ${costNote} · *보유 중은 최신 1d VWAP 평가`,
       })
     );
 

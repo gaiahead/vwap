@@ -123,6 +123,98 @@ def test_volatility_breakout_k_half_compounds_completed_next_open_trades():
     assert math.isclose(result["strategy_return_pct"], (expected_equity - 1) * 100)
 
 
+def test_volatility_breakout_charges_stock_transaction_tax_even_on_a_loss():
+    idx = pd.bdate_range(start="2026-01-05", periods=3)
+    context = pd.DataFrame(
+        {
+            "open": [100.0, 100.0, 100.0],
+            "high": [110.0, 111.0, 101.0],
+            "low": [90.0, 99.0, 99.0],
+            "close": [100.0, 105.0, 100.0],
+        },
+        index=idx,
+    )
+
+    result = gen.simulate_volatility_breakout_strategy(
+        context,
+        visible_days=2,
+        transaction_tax_sell=gen.DOMESTIC_STOCK_TRANSACTION_TAX_SELL,
+    )
+
+    expected_equity = (
+        (100.0 / 110.0)
+        * (1 - gen.STRATEGY_FEE_ONE_WAY)
+        * (
+            1
+            - gen.STRATEGY_FEE_ONE_WAY
+            - gen.DOMESTIC_STOCK_TRANSACTION_TAX_SELL
+        )
+    )
+    assert result["trades"] == 1
+    assert result["journal"][0]["return_pct"] < 0
+    assert math.isclose(result["final_equity"], expected_equity)
+
+
+def test_full_alignment_charges_stock_transaction_tax_only_when_closed():
+    idx = pd.bdate_range(start="2026-01-05", periods=5)
+    work = pd.DataFrame(
+        {
+            "vwap_1d": [110.0, 140.0, 142.0, 110.0, 100.0],
+            "vwap_5d": [120.0, 130.0, 130.0, 120.0, 120.0],
+            "vwap_20d": [125.0, 120.0, 120.0, 125.0, 125.0],
+            "vwap_200d": [100.0] * 5,
+        },
+        index=idx,
+    )
+
+    taxable = gen.simulate_full_alignment_strategy(
+        work,
+        transaction_tax_sell=gen.DOMESTIC_STOCK_TRANSACTION_TAX_SELL,
+    )
+    fee_only = gen.simulate_full_alignment_strategy(work)
+    expected_equity = (
+        (100.0 / 142.0)
+        * (1 - gen.STRATEGY_FEE_ONE_WAY)
+        * (
+            1
+            - gen.STRATEGY_FEE_ONE_WAY
+            - gen.DOMESTIC_STOCK_TRANSACTION_TAX_SELL
+        )
+    )
+
+    assert taxable["in_position"] is False
+    assert len(taxable["trades"]) == 1
+    assert math.isclose(taxable["final_equity"], expected_equity)
+    assert taxable["final_equity"] < fee_only["final_equity"]
+
+    open_work = work.iloc[:3]
+    taxable_open = gen.simulate_full_alignment_strategy(
+        open_work,
+        transaction_tax_sell=gen.DOMESTIC_STOCK_TRANSACTION_TAX_SELL,
+    )
+    fee_only_open = gen.simulate_full_alignment_strategy(open_work)
+    assert taxable_open["in_position"] is True
+    assert math.isclose(taxable_open["final_equity"], fee_only_open["final_equity"])
+
+
+def test_build_strategy_signal_applies_ticker_cost_model_to_both_strategies():
+    df = make_ohlcv([100] * 220 + [130] * 80 + [82] * 60 + [150] * 60)
+
+    stock = gen.build_strategy_signal(df, ticker="005930.KS")
+    etf = gen.build_strategy_signal(df, ticker="069500.KS")
+
+    assert stock["cost_model"]["transaction_tax_sell_pct"] == 0.2
+    assert etf["cost_model"]["transaction_tax_sell_pct"] == 0.0
+    assert (
+        stock["backtest"]["rolling_200d"]["volatility_breakout_return_pct"]
+        <= etf["backtest"]["rolling_200d"]["volatility_breakout_return_pct"]
+    )
+    assert (
+        stock["backtest"]["rolling_200d"]["strategy_return_pct"]
+        <= etf["backtest"]["rolling_200d"]["strategy_return_pct"]
+    )
+
+
 def test_volatility_breakout_skips_final_day_without_next_open():
     idx = pd.bdate_range(start="2026-02-02", periods=3)
     context = pd.DataFrame(

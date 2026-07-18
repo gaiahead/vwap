@@ -62,6 +62,16 @@ def test_detail_has_two_clear_strategy_backtest_journals():
         assert selector in css
 
 
+def test_journal_entry_and_exit_prices_render_as_rounded_integers():
+    app = read("app.js")
+
+    assert "function fmtJournalPrice(value)" in app
+    assert "toLocaleString('ko-KR', { maximumFractionDigits: 0 })" in app
+    assert "fmtJournalPrice(record.entry_price)" in app
+    assert "fmtJournalPrice(record.exit_price)" in app
+    assert "fmtJournalPrice(record.valuation_price)" in app
+
+
 def test_ea_lm_columns_and_lifecycle_score_code_are_removed():
     html = read("index.html")
     app = read("app.js")
