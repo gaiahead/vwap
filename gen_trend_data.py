@@ -26,100 +26,17 @@ from scipy.stats import norm
 AssetTuple = tuple[str, str]  # (표시명, 티커)
 
 ASSETS: list[AssetTuple] = [
-    # 핵심 매크로 / 시장 폭 / 크레딧
-    ("TLT",                        "TLT"),
-    ("GLD",                        "GLD"),
-    ("IBIT",                       "IBIT"),
-    ("SPY",                        "SPY"),
-    ("QQQ",                        "QQQ"),
+    # 국내 상장 해외시장 / 글로벌 산업 ETF
     ("TIGER 토탈월드스탁액티브",       "0060H0.KS"),
-    ("SCHD",                       "SCHD"),
     ("TIGER 미국배당다우존스",         "458730.KS"),
-    ("XLE",                        "XLE"),
-    ("GUNR",                       "GUNR"),
-    ("IXC",                        "IXC"),  # 글로벌 에너지
-    ("XOP",                        "XOP"),  # 미국 석유·가스 E&P
-    ("OIH",                        "OIH"),  # 오일서비스
-    ("Exxon Mobil",                "XOM"),
-    ("Shell",                      "SHEL"),
-    ("SLB",                        "SLB"),
-    ("UPRO",                       "UPRO"),  # S&P500 3배 레버리지
-    ("RSP",                        "RSP"),  # S&P500 동일가중
-    ("IWM",                        "IWM"),  # 러셀2000
-    ("IEF",                        "IEF"),  # 미국 7-10년 국채
-    ("SHY",                        "SHY"),  # 미국 단기국채
-    ("TIP",                        "TIP"),  # 물가연동채
-    ("HYG",                        "HYG"),  # 하이일드 채권
-    ("LQD",                        "LQD"),  # 투자등급 회사채
-    ("UUP",                        "UUP"),  # 달러 인덱스 ETF
-    ("FXY",                        "FXY"),  # 엔화 ETF
-
-    # 미국 섹터 / 원자재 / 글로벌 지역
-    ("XLK",                        "XLK"),  # 기술
-    ("ITA",                        "ITA"),  # 미국 대형 방산 ETF
-    ("XAR",                        "XAR"),  # 미국 중소형 방산 ETF
-    ("Lockheed Martin",            "LMT"),
-    ("RTX",                        "RTX"),
-    ("Rheinmetall",                "RHM.DE"),
-    ("BAE Systems",                "BA.L"),
-    ("Saab",                       "SAAB-B.ST"),
-    ("XLF",                        "XLF"),  # 금융
     ("KODEX 미국S&P500금융",          "453650.KS"),
-    ("XLV",                        "XLV"),  # 헬스케어
     ("KODEX 미국S&P500헬스케어",       "453640.KS"),
     ("TIGER 미국나스닥바이오",         "203780.KS"),
-    ("XLI",                        "XLI"),  # 산업재
-    ("XLY",                        "XLY"),  # 경기소비재
-    ("XLP",                        "XLP"),  # 필수소비재
-    ("XLU",                        "XLU"),  # 유틸리티
-    ("XLRE",                       "XLRE"),  # 부동산
-    ("XLB",                        "XLB"),  # 소재
-    ("USO",                        "USO"),  # 원유
-    ("UCO",                        "UCO"),  # 원유 2배 레버리지
-    ("NUGT",                       "NUGT"),  # 금광주 2배 레버리지
-    ("CPER",                       "CPER"),  # 구리
-    ("COPX",                       "COPX"),  # 구리 광산
-    ("DBA",                        "DBA"),  # 농산물
-    ("URA",                        "URA"),  # 우라늄/원전
-    ("SLV",                        "SLV"),  # 은
-    ("EFA",                        "EFA"),  # 선진국 ex-US
-    ("EEM",                        "EEM"),  # 신흥국
-    ("EWJ",                        "EWJ"),  # 일본
-    ("FXI",                        "FXI"),  # 중국 대형주
-    ("INDA",                       "INDA"),  # 인도
-    ("EWT",                        "EWT"),  # 대만
-
-    # 미국/글로벌 AI·기술주와 관련 ETF
-    ("TQQQ",                       "TQQQ"),  # 나스닥100 3배 레버리지
-    ("SOXL",                       "SOXL"),  # 반도체 3배 레버리지
-    ("TECL",                       "TECL"),  # 기술섹터 3배 레버리지
     ("SOL 미국테크TOP10",            "481190.KS"),
     ("TIME 글로벌AI인공지능액티브",     "456600.KS"),
     ("TIGER 미국필라델피아반도체나스닥", "381180.KS"),
     ("KODEX 미국반도체",              "390390.KS"),
     ("ACE 글로벌반도체TOP4 Plus",     "446770.KS"),
-    ("엔비디아",                      "NVDA"),
-    ("Marvell",                     "MRVL"),
-    ("Sandisk",                     "SNDK"),
-    ("ASML",                        "ASML"),
-    ("TSMC",                        "TSM"),
-    ("Dell Technologies",           "DELL"),
-    ("TCAI",                         "TCAI"),
-    ("Snowflake",                    "SNOW"),
-    ("PANW",                         "PANW"),
-    ("FTNT",                         "FTNT"),
-    ("DDOG",                         "DDOG"),
-    ("CRWD",                         "CRWD"),
-    ("알파벳",                        "GOOGL"),
-    ("애플",                          "AAPL"),
-    ("마이크로소프트",                 "MSFT"),
-    ("아마존",                        "AMZN"),
-    ("메타",                          "META"),
-    ("브로드컴",                      "AVGO"),
-    ("테슬라",                        "TSLA"),
-    ("넷플릭스",                      "NFLX"),
-    ("팔란티어",                      "PLTR"),
-    ("시스코",                        "CSCO"),
 
     # 한국 대표지수 / 반도체
     ("KODEX 200",                    "069500.KS"),
@@ -883,6 +800,22 @@ def process_asset(
     return asset_result, detail_result
 
 
+def remove_unregistered_detail_files() -> list[str]:
+    """등록 목록에서 제거된 종목의 오래된 상세 JSON을 삭제한다."""
+    os.makedirs(DETAIL_DIR, exist_ok=True)
+    registered_tickers = {ticker for _, ticker in ASSETS}
+    removed: list[str] = []
+    for filename in os.listdir(DETAIL_DIR):
+        if not filename.endswith(".json"):
+            continue
+        ticker = filename[:-5]
+        if ticker in registered_tickers:
+            continue
+        os.remove(os.path.join(DETAIL_DIR, filename))
+        removed.append(ticker)
+    return sorted(removed)
+
+
 # ──────────────────────────────────────────────────────────
 # 메인
 # ──────────────────────────────────────────────────────────
@@ -916,8 +849,10 @@ def main() -> None:
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
         json.dump(result, f, ensure_ascii=False, allow_nan=False)
 
-    # detail_data/ 생성
-    os.makedirs(DETAIL_DIR, exist_ok=True)
+    # detail_data/ 생성: 등록 목록에서 제거된 종목의 파일은 먼저 정리한다.
+    removed_tickers = remove_unregistered_detail_files()
+    if removed_tickers:
+        print(f"\n🗑️ 미등록 상세 데이터 삭제: {', '.join(removed_tickers)}")
     print("\n📊 detail_data 생성 중...")
     for name, ticker in ASSETS:
         if name in failed or ticker not in detail_results:

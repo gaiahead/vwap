@@ -1,12 +1,28 @@
+import json
+from pathlib import Path
+
 import gen_trend_data as gen
 
 
-def test_marvell_mrvl_is_registered():
-    assert ("Marvell", "MRVL") in gen.ASSETS
+ROOT = Path(__file__).resolve().parents[1]
+KOREAN_SUFFIXES = (".KS", ".KQ")
 
 
-def test_sandisk_sndk_is_registered():
-    assert ("Sandisk", "SNDK") in gen.ASSETS
+def test_only_korean_exchange_listings_are_registered():
+    assert gen.ASSETS
+    assert all(ticker.endswith(KOREAN_SUFFIXES) for _, ticker in gen.ASSETS)
+
+
+def test_generated_data_matches_registered_korean_listings():
+    expected_names = {name for name, _ in gen.ASSETS}
+    expected_tickers = {ticker for _, ticker in gen.ASSETS}
+    trend = json.loads((ROOT / "trend_data.json").read_text(encoding="utf-8"))
+    actual_names = {name for name in trend if not name.startswith("_")}
+    actual_detail_tickers = {path.stem for path in (ROOT / "detail_data").glob("*.json")}
+
+    assert actual_names == expected_names
+    assert actual_detail_tickers == expected_tickers
+    assert all(ticker.endswith(KOREAN_SUFFIXES) for ticker in actual_detail_tickers)
 
 
 def test_tiger_us_dividend_dow_jones_is_registered():

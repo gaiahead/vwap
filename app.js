@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260718-0700';
+const DATA_VERSION = 'korean-listings-only-20260718';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -25,67 +25,7 @@ const MOMENTUM_COLUMNS = [
 ];
 const SORT_FIELDS = Object.fromEntries(MOMENTUM_COLUMNS.map(column => [column.key, column.get]));
 const NUMERIC_SORT_FIELDS = new Set(MOMENTUM_COLUMNS.filter(column => column.type === 'number').map(column => column.key));
-const DETAIL_NAME_OVERRIDES = {
-  TLT: 'iShares 20+ Year Treasury Bond ETF',
-  GLD: 'SPDR Gold Shares',
-  IBIT: 'iShares Bitcoin Trust ETF',
-  SPY: 'State Street SPDR S&P 500 ETF Trust',
-  QQQ: 'Invesco QQQ Trust',
-  SCHD: 'Schwab U.S. Dividend Equity ETF',
-  XLE: 'State Street Energy Select Sector SPDR ETF',
-  GUNR: 'FlexShares Morningstar Global Upstream Natural Resources Index Fund',
-  IXC: 'iShares Global Energy ETF',
-  XOP: 'State Street SPDR S&P Oil & Gas Exploration & Production ETF',
-  OIH: 'VanEck Oil Services ETF',
-  SLB: 'SLB N.V.',
-  UPRO: 'ProShares UltraPro S&P500',
-  RSP: 'Invesco S&P 500 Equal Weight ETF',
-  IWM: 'iShares Russell 2000 ETF',
-  IEF: 'iShares 7-10 Year Treasury Bond ETF',
-  SHY: 'iShares 1-3 Year Treasury Bond ETF',
-  TIP: 'iShares TIPS Bond ETF',
-  HYG: 'iShares iBoxx $ High Yield Corporate Bond ETF',
-  LQD: 'iShares iBoxx $ Investment Grade Corporate Bond ETF',
-  UUP: 'Invesco DB US Dollar Index Bullish Fund',
-  FXY: 'Invesco CurrencyShares Japanese Yen Trust',
-  XLK: 'State Street Technology Select Sector SPDR ETF',
-  ITA: 'iShares U.S. Aerospace & Defense ETF',
-  XAR: 'State Street SPDR S&P Aerospace & Defense ETF',
-  RTX: 'RTX Corporation',
-  XLF: 'State Street Financial Select Sector SPDR ETF',
-  XLV: 'State Street Health Care Select Sector SPDR ETF',
-  XLI: 'State Street Industrial Select Sector SPDR ETF',
-  XLY: 'State Street Consumer Discretionary Select Sector SPDR ETF',
-  XLP: 'State Street Consumer Staples Select Sector SPDR ETF',
-  XLU: 'State Street Utilities Select Sector SPDR ETF',
-  XLRE: 'State Street Real Estate Select Sector SPDR ETF',
-  XLB: 'State Street Materials Select Sector SPDR ETF',
-  USO: 'United States Oil Fund, LP',
-  UCO: 'ProShares Ultra Bloomberg Crude Oil',
-  NUGT: 'Direxion Daily Gold Miners Index Bull 2X Shares',
-  CPER: 'United States Copper Index Fund, LP',
-  COPX: 'Global X Copper Miners ETF',
-  DBA: 'Invesco DB Agriculture Fund',
-  URA: 'Global X Uranium ETF',
-  SLV: 'iShares Silver Trust',
-  EFA: 'iShares MSCI EAFE ETF',
-  EEM: 'iShares MSCI Emerging Markets ETF',
-  EWJ: 'iShares MSCI Japan ETF',
-  FXI: 'iShares China Large-Cap ETF',
-  INDA: 'iShares MSCI India ETF',
-  EWT: 'iShares MSCI Taiwan ETF',
-  TQQQ: 'ProShares UltraPro QQQ',
-  SOXL: 'Direxion Daily Semiconductor Bull 3X Shares',
-  TECL: 'Direxion Daily Technology Bull 3X Shares',
-  MRVL: 'Marvell Technology, Inc.',
-  SNDK: 'Sandisk Corporation',
-  ASML: 'ASML Holding N.V.',
-  TCAI: 'Tortoise AI Infrastructure ETF',
-  PANW: 'Palo Alto Networks, Inc.',
-  FTNT: 'Fortinet, Inc.',
-  DDOG: 'Datadog, Inc.',
-  CRWD: 'CrowdStrike Holdings, Inc.'
-};
+
 
 let priceChart = null;
 let vpChart = null;
@@ -222,7 +162,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
   const detailSymbol = document.getElementById('detail-symbol');
 
   function getDetailDisplayName(ticker, name, detailData=null) {
-    return DETAIL_NAME_OVERRIDES[ticker] || detailData?.name || name || ticker;
+    return detailData?.name || name || ticker;
   }
 
   function setDetailHeader(ticker, name, detailData=null) {
