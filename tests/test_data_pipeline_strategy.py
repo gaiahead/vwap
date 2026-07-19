@@ -215,6 +215,40 @@ def test_build_strategy_signal_applies_ticker_cost_model_to_both_strategies():
     )
 
 
+def test_win_rates_use_unrounded_trade_returns():
+    fee_multiplier = 1 - gen.STRATEGY_FEE_ONE_WAY
+    tiny_winner_exit = 100.0 / (fee_multiplier**2) * 1.000001
+
+    idx = pd.bdate_range(start="2026-04-01", periods=5)
+    work = pd.DataFrame(
+        {
+            "vwap_1d": [99.0, 101.0, 100.0, 99.0, tiny_winner_exit],
+            "vwap_5d": [110.0, 90.0, 90.0, 110.0, 110.0],
+            "vwap_20d": [80.0] * 5,
+            "vwap_200d": [70.0] * 5,
+        },
+        index=idx,
+    )
+    alignment = gen.simulate_full_alignment_strategy(work)
+    assert alignment["trades"][0]["return_pct"] == 0.0
+
+    breakout_context = pd.DataFrame(
+        {
+            "open": [100.0, 100.0, tiny_winner_exit * 1.1],
+            "high": [110.0, 111.0, tiny_winner_exit * 1.11],
+            "low": [90.0, 99.0, tiny_winner_exit],
+            "close": [100.0, 105.0, tiny_winner_exit * 1.1],
+        },
+        index=pd.bdate_range(start="2026-05-04", periods=3),
+    )
+    breakout = gen.simulate_volatility_breakout_strategy(breakout_context, visible_days=2)
+    assert breakout["journal"][0]["return_pct"] == 0.0
+
+    summary = gen.build_backtest_summary(work, alignment, breakout)
+    assert summary["win_rate_pct"] == 100.0
+    assert summary["volatility_breakout"]["win_rate_pct"] == 100.0
+
+
 def test_volatility_breakout_skips_final_day_without_next_open():
     idx = pd.bdate_range(start="2026-02-02", periods=3)
     context = pd.DataFrame(

@@ -414,6 +414,7 @@ def simulate_full_alignment_strategy(
     last_signal = "WAIT"
     last_signal_date: str | None = None
     trades: list[dict[str, Any]] = []
+    wins = 0
     signals = build_full_alignment_events(work, previous_state=previous_state)
     executions = {event["execution_date"]: event for event in signals if event.get("execution_date")}
     equity_curve: list[float] = []
@@ -449,6 +450,8 @@ def simulate_full_alignment_strategy(
                     * (1 - STRATEGY_FEE_ONE_WAY - transaction_tax_sell)
                     - 1
                 ) * 100
+                if ret > 0:
+                    wins += 1
                 trades.append({
                     "entry_date": entry_date,
                     "exit_date": execution_dt,
@@ -474,6 +477,7 @@ def simulate_full_alignment_strategy(
         "last_signal": last_signal,
         "last_signal_date": last_signal_date,
         "trades": trades,
+        "wins": wins,
         "signals": signals,
         "equity_curve": equity_curve,
         "position_days": position_days,
@@ -496,6 +500,7 @@ def simulate_volatility_breakout_strategy(
     """
     cash = 1.0
     trades = 0
+    wins = 0
     journal: list[dict[str, Any]] = []
     visible_days = max(1, int(visible_days))
     first_visible_index = max(0, len(context) - visible_days)
@@ -534,6 +539,8 @@ def simulate_volatility_breakout_strategy(
             * (1 - STRATEGY_FEE_ONE_WAY - transaction_tax_sell)
             - 1
         ) * 100
+        if trade_return > 0:
+            wins += 1
         journal.append({
             "entry_date": date_key(context.index[i]),
             "entry_price": safe_round(target_price),
@@ -546,6 +553,7 @@ def simulate_volatility_breakout_strategy(
     return {
         "k": float(k),
         "trades": trades,
+        "wins": wins,
         "journal": journal,
         "final_equity": cash,
         "strategy_return_pct": (cash - 1) * 100,
@@ -664,7 +672,6 @@ def build_backtest_summary(
 ) -> dict[str, Any]:
     """최근 표시 구간의 전략·단순보유 수익률과 거래 통계를 요약한다."""
     trades = simulation["trades"]
-    wins = [trade for trade in trades if trade.get("return_pct") is not None and trade["return_pct"] > 0]
     avg_holding_days, max_holding_days = calc_trade_holding_stats(trades, work)
     strategy_return = (simulation["final_equity"] - 1) * 100
     buy_hold_return = pct_change(
@@ -674,10 +681,6 @@ def build_backtest_summary(
     strategy_return = safe_round(strategy_return, 2)
     buy_hold_return = safe_round(buy_hold_return, 2)
     volatility_breakout_return = safe_round(volatility_breakout["strategy_return_pct"], 2)
-    volatility_breakout_wins = [
-        trade for trade in volatility_breakout["journal"]
-        if trade.get("return_pct") is not None and trade["return_pct"] > 0
-    ]
 
     return {
         "period": f"recent_{LOOKBACK_TRADING_DAYS}_trading_days",
@@ -686,7 +689,7 @@ def build_backtest_summary(
         "strategy_return_pct": strategy_return,
         "buy_hold_return_pct": buy_hold_return,
         "trades": len(trades),
-        "win_rate_pct": safe_round(len(wins) / len(trades) * 100 if trades else None, 2),
+        "win_rate_pct": safe_round(simulation["wins"] / len(trades) * 100 if trades else None, 2),
         "exposure_pct": safe_round(simulation["position_days"] / len(work) * 100 if len(work) else None, 2),
         "avg_holding_days": safe_round(avg_holding_days, 1),
         "max_holding_days": max_holding_days,
@@ -694,7 +697,7 @@ def build_backtest_summary(
             "k": volatility_breakout["k"],
             "trades": volatility_breakout["trades"],
             "win_rate_pct": safe_round(
-                len(volatility_breakout_wins) / volatility_breakout["trades"] * 100
+                volatility_breakout["wins"] / volatility_breakout["trades"] * 100
                 if volatility_breakout["trades"] else None,
                 2,
             ),
