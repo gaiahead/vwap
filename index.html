@@ -6,7 +6,7 @@
   <title>VWAP 추세 모니터</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
-  <link rel="stylesheet" href="style.css?v=dual-align-20260720"/>
+  <link rel="stylesheet" href="style.css?v=three-horizon-20260720"/>
 </head>
 <body>
 
@@ -17,12 +17,13 @@
 
 <div class="section-box momentum-monitor" id="momentum-section" style="display:none">
   <div class="panel-title">📐 VWAP 정배열 MONITOR</div>
-  <div class="momentum-monitor-sub">1d &gt; 5d &gt; 20d &gt; 200d와 5d &gt; 20d &gt; 200d를 따로 계산합니다. 신호 확정 후 다음 거래일 1d VWAP으로 매매합니다.</div>
+  <div class="momentum-monitor-sub">신호 1은 1d &gt; 5d &gt; 20d &gt; 200d, 신호 2는 5d &gt; 20d &gt; 200d입니다. 신호 확정 후 다음 거래일 1d VWAP으로 매매합니다.</div>
   <div class="momentum-table-wrap"><table class="momentum-table">
     <thead>
       <tr>
         <th data-sort="name">종목</th>
-        <th data-sort="signal">1&gt;5&gt;20&gt;200 신호</th>
+        <th data-sort="signal_1">신호 1</th>
+        <th data-sort="signal_2">신호 2</th>
         <th data-sort="volatility_breakout_return_pct">변돌 수익률</th>
         <th data-sort="alignment_1_5_20_200_return_pct">1&gt;5&gt;20&gt;200 수익률</th>
         <th data-sort="alignment_5_20_200_return_pct">5&gt;20&gt;200 수익률</th>
@@ -44,6 +45,6 @@
   <div id="detail-content"></div>
 </div>
 
-<script src="app.js?v=dual-align-20260720"></script>
+<script src="app.js?v=three-horizon-20260720"></script>
 </body>
 </html>
