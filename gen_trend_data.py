@@ -293,6 +293,7 @@ STRATEGY_RULES: dict[str, Any] = {
     "fee_one_way_pct": 0.03,
     "backtest_window_trading_days": LOOKBACK_TRADING_DAYS,
     "carry_in_position": False,
+    "initial_entry": "first_evaluable_buy_signal_executes_next_day_vwap_1d_proxy",
 }
 
 
@@ -339,6 +340,7 @@ def prepare_strategy_frame(
     - 수익률·신호 이벤트 범위는 최근 200거래일만 사용한다.
     - VWAP200은 미래 참조 없이 계산하기 위해 이전 199거래일을 지표 warm-up으로만 사용한다.
     - 최근 200일 시작 전 포지션은 이월하지 않는다.
+    - 평가 구간의 첫 산출 가능 상태가 정배열이면 초기 BUY로 보고 다음 거래일에 진입한다.
     - 1일 VWAP proxy = (High + Low + Close) / 3.
     - 정배열은 단기/중기/장기별 정의에 60d를 포함한다.
     """
@@ -385,12 +387,14 @@ def make_signal_record(
     signal_type: str,
     execution_price: float | None,
     confirmed: pd.Series,
+    initial_entry: bool = False,
 ) -> dict[str, Any]:
     """차트 마커와 익일 체결 검증에 사용하는 정배열 전환 레코드."""
     return {
         "date": signal_date,
         "execution_date": execution_date,
         "type": signal_type,
+        "initial_entry": initial_entry,
         "price": safe_round(execution_price, 4),
         "marker_price": safe_round(confirmed.get("vwap_5d"), 4),
         "vwap1": safe_round(confirmed.get("vwap_1d"), 8),
@@ -403,33 +407,45 @@ def make_signal_record(
 
 def build_alignment_events(
     work: pd.DataFrame,
-    previous_state: bool | None = None,
     strategy_key: str = DEFAULT_ALIGNMENT_STRATEGY,
 ) -> list[dict[str, Any]]:
-    """선택 전략의 최근 구간 정배열 시작/해제 전환만 추출한다."""
+    """첫 산출 가능 정배열의 초기 진입과 이후 시작/해제 전환을 추출한다."""
     events: list[dict[str, Any]] = []
+    previous_state: bool | None = None
+    has_evaluable_state = False
     for i, (dt, row) in enumerate(work.iterrows()):
         current_state = alignment_state(row, strategy_key)
-        if previous_state is not None and current_state is not None and current_state != previous_state:
+        if current_state is None:
+            continue
+
+        initial_entry = not has_evaluable_state and current_state
+        transition = has_evaluable_state and current_state != previous_state
+        if initial_entry or transition:
             execution_date = date_key(work.index[i + 1]) if i + 1 < len(work) else None
             execution_price = float(work.iloc[i + 1]["vwap_1d"]) if i + 1 < len(work) else None
             events.append(make_signal_record(
-                date_key(dt), execution_date, "BUY" if current_state else "SELL", execution_price, row
+                date_key(dt),
+                execution_date,
+                "BUY" if current_state else "SELL",
+                execution_price,
+                row,
+                initial_entry=bool(initial_entry),
             ))
         previous_state = current_state
+        has_evaluable_state = True
 
     return events
 
 
 def simulate_alignment_strategy(
     work: pd.DataFrame,
-    previous_state: bool | None = None,
     transaction_tax_sell: float = 0.0,
     strategy_key: str = DEFAULT_ALIGNMENT_STRATEGY,
 ) -> dict[str, Any]:
     """선택한 정배열 전략을 최근 구간에서 시뮬레이션한다.
 
-    전환 신호를 확정한 다음 거래일의 1일 VWAP proxy 가격으로 체결한다.
+    첫 산출 가능 상태가 정배열이면 초기 BUY로 보고 다음 거래일에 진입한다.
+    이후 전환 신호도 확정한 다음 거래일의 1일 VWAP proxy 가격으로 체결한다.
     최근 구간 시작 전 포지션은 이월하지 않는다.
     반환값은 JSON 직렬화 가능한 dict로 유지해 trend/detail 생성 로직에서 공유한다.
     """
@@ -438,13 +454,13 @@ def simulate_alignment_strategy(
     in_position = False
     entry_price: float | None = None
     entry_date: str | None = None
+    entry_is_initial = False
     last_signal = "WAIT"
     last_signal_date: str | None = None
     trades: list[dict[str, Any]] = []
     wins = 0
     signals = build_alignment_events(
         work,
-        previous_state=previous_state,
         strategy_key=strategy_key,
     )
     executions = {event["execution_date"]: event for event in signals if event.get("execution_date")}
@@ -467,6 +483,7 @@ def simulate_alignment_strategy(
                 in_position = True
                 entry_price = valuation_price
                 entry_date = execution_dt
+                entry_is_initial = bool(event.get("initial_entry"))
             elif in_position and signal == "SELL":
                 assert entry_price is not None
                 exit_price = valuation_price
@@ -489,9 +506,11 @@ def simulate_alignment_strategy(
                     "entry_price": safe_round(entry_price),
                     "exit_price": round(exit_price, 4),
                     "return_pct": safe_round(ret, 2),
+                    "initial_entry": entry_is_initial,
                 })
                 entry_price = None
                 entry_date = None
+                entry_is_initial = False
 
         if in_position:
             position_days += 1
@@ -505,6 +524,7 @@ def simulate_alignment_strategy(
         "in_position": in_position,
         "entry_price": entry_price,
         "entry_date": entry_date,
+        "entry_is_initial": entry_is_initial,
         "last_signal": last_signal,
         "last_signal_date": last_signal_date,
         "trades": trades,
@@ -609,6 +629,7 @@ def build_alignment_journal(
             "return_pct": trade["return_pct"],
             "holding_days": holding_days,
             "status": "CLOSED",
+            "initial_entry": bool(trade.get("initial_entry")),
         })
 
     if simulation["in_position"] and simulation["entry_date"] and simulation["entry_price"]:
@@ -630,6 +651,7 @@ def build_alignment_journal(
             "return_pct": safe_round(current_return, 2),
             "holding_days": len(work.loc[pd.Timestamp(simulation["entry_date"]):]),
             "status": "OPEN",
+            "initial_entry": bool(simulation.get("entry_is_initial")),
         })
 
     return journal
@@ -690,6 +712,7 @@ def build_latest_strategy_snapshot(
         "holding_days": holding_days,
         "entry_date": simulation["entry_date"],
         "entry_price": safe_round(simulation["entry_price"]),
+        "entry_is_initial": bool(simulation.get("entry_is_initial")),
         "current_trade_return_pct": safe_round(current_trade_return, 2),
     }
 
@@ -776,17 +799,10 @@ def build_strategy_signal(df: pd.DataFrame, ticker: str | None = None) -> dict[s
     context = prepare_strategy_frame(df, LOOKBACK_TRADING_DAYS + 1)
     work = context.tail(LOOKBACK_TRADING_DAYS).copy()
     transaction_tax_sell = cost_model["transaction_tax_sell_pct"] / 100
-    previous_row = context.iloc[-len(work) - 1] if len(context) > len(work) else None
     simulations: dict[str, dict[str, Any]] = {}
     for strategy_key in ALIGNMENT_STRATEGIES:
-        previous_state = (
-            alignment_state(previous_row, strategy_key)
-            if previous_row is not None
-            else None
-        )
         simulations[strategy_key] = simulate_alignment_strategy(
             work,
-            previous_state=previous_state,
             transaction_tax_sell=transaction_tax_sell,
             strategy_key=strategy_key,
         )

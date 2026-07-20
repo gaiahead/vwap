@@ -41,6 +41,7 @@ def test_table_columns_and_default_sort_match_current_dashboard_contract():
     assert "신호 1은 1d &gt; 5d &gt; 20d &gt; 60d &gt; 200d" in html
     assert "신호 2는 5d &gt; 20d &gt; 60d &gt; 200d" in html
     assert "신호 3은 20d &gt; 60d &gt; 200d" in html
+    assert "평가 첫날 정배열이면 초기 신호" in html
     assert "다음 거래일 1d VWAP" in html
     combined = html + app + generator
     for token in ["5/20 괴리율", "5/200 괴리율", "MDD", "mdd", "drawdown"]:
@@ -105,6 +106,8 @@ def test_journal_entry_and_exit_prices_render_as_rounded_integers():
     assert "fmtJournalPrice(record.entry_price)" in app
     assert "fmtJournalPrice(record.exit_price)" in app
     assert "fmtJournalPrice(record.valuation_price)" in app
+    assert "? `초기 · ${fmtJournalDate(record.entry_date)}`" in app
+    assert "journal-initial-label" in app
 
 
 def test_ea_lm_columns_and_lifecycle_score_code_are_removed():

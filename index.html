@@ -6,7 +6,7 @@
   <title>VWAP 추세 모니터</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
-  <link rel="stylesheet" href="style.css?v=vwap60-20260720"/>
+  <link rel="stylesheet" href="style.css?v=vwap60-initial-20260720"/>
 </head>
 <body>
 
@@ -17,7 +17,7 @@
 
 <div class="section-box momentum-monitor" id="momentum-section" style="display:none">
   <div class="panel-title">📐 VWAP 정배열 MONITOR</div>
-  <div class="momentum-monitor-sub">신호 1은 1d &gt; 5d &gt; 20d &gt; 60d &gt; 200d, 신호 2는 5d &gt; 20d &gt; 60d &gt; 200d, 신호 3은 20d &gt; 60d &gt; 200d입니다. 신호 확정 후 다음 거래일 1d VWAP으로 매매합니다.</div>
+  <div class="momentum-monitor-sub">신호 1은 1d &gt; 5d &gt; 20d &gt; 60d &gt; 200d, 신호 2는 5d &gt; 20d &gt; 60d &gt; 200d, 신호 3은 20d &gt; 60d &gt; 200d입니다. 평가 첫날 정배열이면 초기 신호로 간주하며, 모든 신호는 다음 거래일 1d VWAP으로 매매합니다.</div>
   <div class="momentum-table-wrap"><table class="momentum-table">
     <thead>
       <tr>
@@ -47,6 +47,6 @@
   <div id="detail-content"></div>
 </div>
 
-<script src="app.js?v=vwap60-20260720"></script>
+<script src="app.js?v=vwap60-initial-20260720"></script>
 </body>
 </html>

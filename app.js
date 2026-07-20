@@ -1,4 +1,4 @@
-const DATA_VERSION = 'vwap60-20260720';
+const DATA_VERSION = 'vwap60-initial-20260720';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -294,8 +294,11 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       const isOpen = record.status === 'OPEN';
       const tr = document.createElement('tr');
       tr.className = isOpen ? 'journal-open-row' : '';
+      const entryLabel = record.initial_entry
+        ? `초기 · ${fmtJournalDate(record.entry_date)}`
+        : fmtJournalDate(record.entry_date);
       const values = [
-        fmtJournalDate(record.entry_date),
+        entryLabel,
         fmtJournalPrice(record.entry_price),
         isOpen ? '보유 중' : fmtJournalDate(record.exit_date),
         isOpen ? `${fmtJournalPrice(record.valuation_price)}*` : fmtJournalPrice(record.exit_price),
@@ -304,6 +307,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       values.forEach((value, index) => {
         const td = document.createElement('td');
         td.textContent = value;
+        if (index === 0 && record.initial_entry) td.className = 'journal-initial-label';
         if (index === 2 && isOpen) td.className = 'journal-open-label';
         if (index === 4) {
           td.classList.add('journal-return');
@@ -407,7 +411,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     const title = document.createElement('h3');
     title.textContent = '전략 백테스트 일지';
     const description = document.createElement('p');
-    description.textContent = '최근 200거래일의 진입·청산 기록을 최신 거래부터 비교합니다.';
+    description.textContent = '최근 200거래일의 초기 진입·전환 매매 기록을 최신 거래부터 비교합니다.';
     copy.append(eyebrow, title, description);
     const period = document.createElement('span');
     period.className = 'journal-period';
@@ -443,7 +447,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
         tone: 'short',
         horizon: '단기',
         title: `정배열 ${shortLabel}`,
-        rule: '정배열 전환 확인 → 다음 거래일 1d VWAP 체결',
+        rule: '첫 평가 정배열은 초기 진입 · 이후 전환 확인 → 다음 거래일 1d VWAP 체결',
         metrics: [
           {label: '누적 수익률', value: fmtPct(shortBacktest.return_pct), color: statColor(shortBacktest.return_pct)},
           {label: '완료 거래', value: `${shortBacktest.trades ?? 0}건`},
@@ -456,7 +460,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
         tone: 'medium',
         horizon: '중기',
         title: `정배열 ${mediumLabel}`,
-        rule: '정배열 전환 확인 → 다음 거래일 1d VWAP 체결',
+        rule: '첫 평가 정배열은 초기 진입 · 이후 전환 확인 → 다음 거래일 1d VWAP 체결',
         metrics: [
           {label: '누적 수익률', value: fmtPct(mediumBacktest.return_pct), color: statColor(mediumBacktest.return_pct)},
           {label: '완료 거래', value: `${mediumBacktest.trades ?? 0}건`},
@@ -469,7 +473,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
         tone: 'long',
         horizon: '장기',
         title: `정배열 ${longLabel}`,
-        rule: '정배열 전환 확인 → 다음 거래일 1d VWAP 체결',
+        rule: '첫 평가 정배열은 초기 진입 · 이후 전환 확인 → 다음 거래일 1d VWAP 체결',
         metrics: [
           {label: '누적 수익률', value: fmtPct(longBacktest.return_pct), color: statColor(longBacktest.return_pct)},
           {label: '완료 거래', value: `${longBacktest.trades ?? 0}건`},
@@ -618,7 +622,11 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
             }),
             sort: (a, b) => (legendOrder.get(a.text) ?? 999) - (legendOrder.get(b.text) ?? 999)
           }},
-          tooltip: {callbacks: {label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y?.toLocaleString(undefined, {maximumFractionDigits: 2})}`}}
+          tooltip: {callbacks: {label: ctx => {
+            const signal = signalMap.get(labels[ctx.dataIndex]);
+            const label = ctx.dataset.label === 'BUY' && signal?.initial_entry ? 'INITIAL BUY' : ctx.dataset.label;
+            return ` ${label}: ${ctx.parsed.y?.toLocaleString(undefined, {maximumFractionDigits: 2})}`;
+          }}}
         },
         scales: {
           x: {ticks: {color: TICK, font: {size: 9}, maxTicksLimit: 12, maxRotation: 0}, grid: {color: GRID}},

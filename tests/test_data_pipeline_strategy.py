@@ -6,6 +6,7 @@ from datetime import date, datetime
 from typing import Iterable
 
 import pandas as pd
+import pytest
 
 import gen_trend_data as gen
 
@@ -351,7 +352,6 @@ def test_three_alignment_strategies_have_independent_events_and_returns():
     simulations = {
         strategy_key: gen.simulate_alignment_strategy(
             work,
-            previous_state=False,
             strategy_key=strategy_key,
         )
         for strategy_key in gen.ALIGNMENT_STRATEGIES
@@ -387,6 +387,7 @@ def test_alignment_strategy_marks_transitions_and_executes_next_day_vwap():
     signals = simulation["signals"]
 
     assert [signal["type"] for signal in signals] == ["BUY", "SELL", "BUY"]
+    assert all(signal["initial_entry"] is False for signal in signals)
     by_date = {str(dt.date()): row for dt, row in work.iterrows()}
     dates = [str(dt.date()) for dt in work.index]
 
@@ -432,6 +433,7 @@ def test_last_day_transition_is_marked_even_without_a_next_day_execution():
         "date": "2026-01-07",
         "execution_date": None,
         "type": "BUY",
+        "initial_entry": False,
         "price": None,
         "marker_price": 130.0,
         "vwap1": 142.0,
@@ -444,7 +446,7 @@ def test_last_day_transition_is_marked_even_without_a_next_day_execution():
     assert simulation["final_equity"] == 1.0
 
 
-def test_alignment_strategy_does_not_carry_a_pre_window_position():
+def test_alignment_strategies_enter_next_day_when_first_visible_state_is_aligned():
     idx = pd.bdate_range(start="2026-02-02", periods=4)
     work = pd.DataFrame(
         {
@@ -457,10 +459,83 @@ def test_alignment_strategy_does_not_carry_a_pre_window_position():
         index=idx,
     )
 
+    for strategy_key in gen.ALIGNMENT_STRATEGIES:
+        simulation = gen.simulate_alignment_strategy(work, strategy_key=strategy_key)
+        signal = simulation["signals"][0]
+
+        assert signal["date"] == gen.date_key(idx[0])
+        assert signal["execution_date"] == gen.date_key(idx[1])
+        assert signal["type"] == "BUY"
+        assert signal["initial_entry"] is True
+        assert signal["price"] == 141.0
+        assert simulation["in_position"] is True
+        assert simulation["entry_date"] == gen.date_key(idx[1])
+        assert simulation["entry_is_initial"] is True
+        assert simulation["final_equity"] == pytest.approx(
+            (1 - gen.STRATEGY_FEE_ONE_WAY) * 143.0 / 141.0
+        )
+
+        journal = gen.build_alignment_journal(work, simulation)
+        assert journal == [{
+            "entry_date": gen.date_key(idx[1]),
+            "entry_price": 141.0,
+            "exit_date": None,
+            "exit_price": None,
+            "valuation_date": gen.date_key(idx[-1]),
+            "valuation_price": 143.0,
+            "return_pct": pytest.approx(round(((143.0 / 141.0) * (1 - gen.STRATEGY_FEE_ONE_WAY) - 1) * 100, 2)),
+            "holding_days": 3,
+            "status": "OPEN",
+            "initial_entry": True,
+        }]
+
+
+def test_first_evaluable_aligned_state_after_wait_is_an_initial_entry():
+    idx = pd.bdate_range(start="2026-02-09", periods=4)
+    work = pd.DataFrame(
+        {
+            "vwap_1d": [140.0, 141.0, 142.0, 143.0],
+            "vwap_5d": [130.0] * 4,
+            "vwap_20d": [120.0] * 4,
+            "vwap_60d": [110.0] * 4,
+            "vwap_200d": [None, None, 100.0, 100.0],
+        },
+        index=idx,
+    )
+
     simulation = gen.simulate_alignment_strategy(work)
 
-    assert simulation["signals"] == []
+    assert simulation["signals"] == [gen.make_signal_record(
+        gen.date_key(idx[2]),
+        gen.date_key(idx[3]),
+        "BUY",
+        143.0,
+        work.iloc[2],
+        initial_entry=True,
+    )]
+    assert simulation["entry_date"] == gen.date_key(idx[3])
+    assert simulation["entry_is_initial"] is True
+
+
+def test_last_day_first_evaluable_alignment_is_marked_but_not_executed():
+    idx = pd.bdate_range(start="2026-02-16", periods=3)
+    work = pd.DataFrame(
+        {
+            "vwap_1d": [140.0, 141.0, 142.0],
+            "vwap_5d": [130.0] * 3,
+            "vwap_20d": [120.0] * 3,
+            "vwap_60d": [110.0] * 3,
+            "vwap_200d": [None, None, 100.0],
+        },
+        index=idx,
+    )
+
+    simulation = gen.simulate_alignment_strategy(work)
+
+    assert simulation["signals"][0]["initial_entry"] is True
+    assert simulation["signals"][0]["execution_date"] is None
     assert simulation["in_position"] is False
+    assert simulation["entry_is_initial"] is False
     assert simulation["final_equity"] == 1.0
 
 
@@ -491,6 +566,7 @@ def test_build_strategy_keeps_first_day_transition_and_all_200_visible_events(mo
         assert signals[0]["date"] == gen.date_key(idx[1])
         assert signals[0]["execution_date"] == gen.date_key(idx[2])
         assert signals[0]["type"] == "BUY"
+        assert signals[0]["initial_entry"] is True
 
 
 def test_trade_return_and_win_rate_include_both_one_way_fees(monkeypatch):
