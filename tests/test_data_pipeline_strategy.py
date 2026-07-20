@@ -284,6 +284,29 @@ def test_win_rates_use_unrounded_trade_returns():
     assert summary["volatility_breakout"]["win_rate_pct"] == 100.0
 
 
+def test_strategy_signal_reuses_each_alignment_summary(monkeypatch):
+    df = make_ohlcv(range(1, 421))
+    original = gen.build_alignment_summary
+    calls: list[int] = []
+
+    def counting_summary(work, simulation):
+        calls.append(id(simulation))
+        return original(work, simulation)
+
+    monkeypatch.setattr(gen, "build_alignment_summary", counting_summary)
+
+    result = gen.build_strategy_signal(df, ticker="069500.KS")
+
+    assert result["available"] is True
+    assert len(calls) == len(gen.ALIGNMENT_STRATEGIES)
+    assert len(set(calls)) == len(gen.ALIGNMENT_STRATEGIES)
+    assert all(
+        result["strategies"][key]["backtest"]["return_pct"]
+        == result["backtest"]["rolling_200d"][f"{key}_return_pct"]
+        for key in gen.ALIGNMENT_STRATEGIES
+    )
+
+
 def test_volatility_breakout_skips_final_day_without_next_open():
     idx = pd.bdate_range(start="2026-02-02", periods=3)
     context = pd.DataFrame(

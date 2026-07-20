@@ -14,6 +14,7 @@ def test_table_columns_and_default_sort_match_current_dashboard_contract():
     app = read("app.js")
     generator = read("gen_trend_data.py")
     headers = re.findall(r"<th data-sort=\"[^\"]+\">([^<]+)</th>", html)
+    sort_keys = re.findall(r"<th data-sort=\"([^\"]+)\">", html)
 
     assert headers == [
         "종목",
@@ -26,17 +27,36 @@ def test_table_columns_and_default_sort_match_current_dashboard_contract():
         "20&gt;60&gt;200 수익률",
         "200일 수익률",
     ]
+    assert sort_keys == [
+        "name",
+        "signal_1",
+        "signal_2",
+        "signal_3",
+        "volatility_breakout_return_pct",
+        "alignment_1_5_20_60_200_return_pct",
+        "alignment_5_20_60_200_return_pct",
+        "alignment_20_60_200_return_pct",
+        "buy_hold_return_pct",
+    ]
     assert "const DEFAULT_SORT = { key: 'alignment_1_5_20_60_200_return_pct', dir: 'desc' }" in app
     assert "key: 'volatility_breakout_return_pct', label: '변돌 수익률'" in app
-    assert "key: 'signal_1', label: '신호 1'" in app
-    assert "key: 'signal_2', label: '신호 2'" in app
-    assert "key: 'signal_3', label: '신호 3'" in app
-    assert "strategies?.[ALIGNMENT_1_5_20_60_200]?.latest?.signal" in app
-    assert "strategies?.[ALIGNMENT_5_20_60_200]?.latest?.signal" in app
-    assert "strategies?.[ALIGNMENT_20_60_200]?.latest?.signal" in app
-    assert "key: 'alignment_1_5_20_60_200_return_pct', label: '1>5>20>60>200 수익률'" in app
-    assert "key: 'alignment_5_20_60_200_return_pct', label: '5>20>60>200 수익률'" in app
-    assert "key: 'alignment_20_60_200_return_pct', label: '20>60>200 수익률'" in app
+    assert "const ALIGNMENT_SIGNAL_COLUMNS = ALIGNMENT_OPTIONS.map" in app
+    assert "const ALIGNMENT_RETURN_COLUMNS = ALIGNMENT_OPTIONS.map" in app
+    assert "strategies?.[option.key]?.latest?.signal" in app
+    assert "key: `signal_${index + 1}`" in app
+    assert "label: `신호 ${index + 1}`" in app
+    assert "key: `${option.key}_return_pct`" in app
+    assert "label: `${option.label} 수익률`" in app
+    assert "rolling_200d?.[`${option.key}_return_pct`]" in app
+    for strategy_constant, label, horizon, tone in [
+        ("ALIGNMENT_1_5_20_60_200", "1>5>20>60>200", "단기", "short"),
+        ("ALIGNMENT_5_20_60_200", "5>20>60>200", "중기", "medium"),
+        ("ALIGNMENT_20_60_200", "20>60>200", "장기", "long"),
+    ]:
+        assert re.search(
+            rf"\{{ key: {strategy_constant}, label: '{label}'.+horizon: '{horizon}', tone: '{tone}' \}}",
+            app,
+        )
     assert "rolling200.volatility_breakout_return_pct" in app
     assert "신호 1은 1d &gt; 5d &gt; 20d &gt; 60d &gt; 200d" in html
     assert "신호 2는 5d &gt; 20d &gt; 60d &gt; 200d" in html
@@ -71,14 +91,15 @@ def test_detail_has_four_clear_strategy_backtest_journals():
     ]:
         assert token in app
 
-    assert app.count("\n      createJournalCard({") == 4
+    assert "function createAlignmentJournalCard" in app
+    assert "...alignmentContexts.map(context => createAlignmentJournalCard(context, costNote))" in app
+    assert "const alignmentContexts = ALIGNMENT_OPTIONS.map" in app
     assert "createHorizonItem('초단기', '변동성 돌파'" in app
-    assert "createHorizonItem('단기', shortLabel" in app
-    assert "createHorizonItem('중기', mediumLabel" in app
-    assert "createHorizonItem('장기', longLabel" in app
-    assert "journals[ALIGNMENT_1_5_20_60_200]" in app
-    assert "journals[ALIGNMENT_5_20_60_200]" in app
-    assert "journals[ALIGNMENT_20_60_200]" in app
+    assert "createHorizonItem(option.horizon, label, backtest.return_pct, option.tone)" in app
+    assert "records: journals[option.key] || []" in app
+    for horizon, tone in [("단기", "short"), ("중기", "medium"), ("장기", "long")]:
+        assert f"horizon: '{horizon}'" in app
+        assert f"tone: '{tone}'" in app
     assert ".journal-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))" in css
 
     for selector in [

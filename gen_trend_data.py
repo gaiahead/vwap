@@ -736,16 +736,27 @@ def build_alignment_summary(
     }
 
 
+def build_alignment_summaries(
+    work: pd.DataFrame,
+    simulations: dict[str, dict[str, Any]],
+) -> dict[str, dict[str, Any]]:
+    """모든 정배열 시뮬레이션의 요약을 한 번씩만 계산한다."""
+    return {
+        strategy_key: build_alignment_summary(work, simulation)
+        for strategy_key, simulation in simulations.items()
+    }
+
+
 def build_backtest_summary(
     work: pd.DataFrame,
     simulations: dict[str, dict[str, Any]],
     volatility_breakout: dict[str, Any],
+    *,
+    alignment_summaries: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """세 정배열·변동성 돌파·단순보유의 최근 구간 결과를 요약한다."""
-    alignment_summaries = {
-        key: build_alignment_summary(work, simulation)
-        for key, simulation in simulations.items()
-    }
+    if alignment_summaries is None:
+        alignment_summaries = build_alignment_summaries(work, simulations)
     buy_hold_return = pct_change(
         float(work["vwap_1d"].iloc[0]),
         float(work["vwap_1d"].iloc[-1]),
@@ -783,6 +794,23 @@ def build_backtest_summary(
     }
 
 
+def build_alignment_strategy_payload(
+    work: pd.DataFrame,
+    strategy_key: str,
+    definition: dict[str, Any],
+    simulation: dict[str, Any],
+    summary: dict[str, Any],
+) -> dict[str, Any]:
+    """정배열 전략 하나의 최신 상태·요약·신호를 공통 스키마로 조립한다."""
+    return {
+        "label": definition["label"],
+        "rule": definition["rule"],
+        "latest": build_latest_strategy_snapshot(work, simulation, strategy_key),
+        "backtest": summary,
+        "signals": simulation["signals"],
+    }
+
+
 def build_strategy_signal(df: pd.DataFrame, ticker: str | None = None) -> dict[str, Any]:
     """최근 200거래일 기준 세 정배열 전략을 독립적으로 요약한다.
 
@@ -812,19 +840,21 @@ def build_strategy_signal(df: pd.DataFrame, ticker: str | None = None) -> dict[s
         transaction_tax_sell=transaction_tax_sell,
     )
 
-    backtest = build_backtest_summary(work, simulations, volatility_breakout)
+    alignment_summaries = build_alignment_summaries(work, simulations)
+    backtest = build_backtest_summary(
+        work,
+        simulations,
+        volatility_breakout,
+        alignment_summaries=alignment_summaries,
+    )
     strategies = {
-        strategy_key: {
-            "label": definition["label"],
-            "rule": definition["rule"],
-            "latest": build_latest_strategy_snapshot(
-                work,
-                simulations[strategy_key],
-                strategy_key,
-            ),
-            "backtest": build_alignment_summary(work, simulations[strategy_key]),
-            "signals": simulations[strategy_key]["signals"],
-        }
+        strategy_key: build_alignment_strategy_payload(
+            work,
+            strategy_key,
+            definition,
+            simulations[strategy_key],
+            alignment_summaries[strategy_key],
+        )
         for strategy_key, definition in ALIGNMENT_STRATEGIES.items()
     }
 

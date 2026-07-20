@@ -1,4 +1,4 @@
-const DATA_VERSION = 'vwap60-initial-20260720';
+const DATA_VERSION = 'vwap-refactor-20260720';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -11,11 +11,12 @@ const ALIGNMENT_1_5_20_60_200 = 'alignment_1_5_20_60_200';
 const ALIGNMENT_5_20_60_200 = 'alignment_5_20_60_200';
 const ALIGNMENT_20_60_200 = 'alignment_20_60_200';
 const ALIGNMENT_OPTIONS = [
-  { key: ALIGNMENT_1_5_20_60_200, label: '1>5>20>60>200' },
-  { key: ALIGNMENT_5_20_60_200, label: '5>20>60>200' },
-  { key: ALIGNMENT_20_60_200, label: '20>60>200' }
+  { key: ALIGNMENT_1_5_20_60_200, label: '1>5>20>60>200', fallbackLabel: '1 > 5 > 20 > 60 > 200', horizon: '단기', tone: 'short' },
+  { key: ALIGNMENT_5_20_60_200, label: '5>20>60>200', fallbackLabel: '5 > 20 > 60 > 200', horizon: '중기', tone: 'medium' },
+  { key: ALIGNMENT_20_60_200, label: '20>60>200', fallbackLabel: '20 > 60 > 200', horizon: '장기', tone: 'long' }
 ];
 const DEFAULT_ALIGNMENT_STRATEGY = ALIGNMENT_1_5_20_60_200;
+const ALIGNMENT_ENTRY_RULE = '첫 평가 정배열은 초기 진입 · 이후 전환 확인 → 다음 거래일 1d VWAP 체결';
 const DEFAULT_SORT = { key: 'alignment_1_5_20_60_200_return_pct', dir: 'desc' };
 const VP_PERIODS = ['1d', '5d', '20d', '60d', '200d'];
 const PRICE_LINE_DEFS = [
@@ -27,15 +28,23 @@ const PRICE_LINE_DEFS = [
 ];
 const PRICE_DATASET_ORDER = ['BUY', 'SELL', ...PRICE_LINE_DEFS.map(def => def.label)];
 
+const ALIGNMENT_SIGNAL_COLUMNS = ALIGNMENT_OPTIONS.map((option, index) => ({
+  key: `signal_${index + 1}`,
+  label: `신호 ${index + 1}`,
+  type: 'text',
+  get: row => row.strategy.strategies?.[option.key]?.latest?.signal
+}));
+const ALIGNMENT_RETURN_COLUMNS = ALIGNMENT_OPTIONS.map(option => ({
+  key: `${option.key}_return_pct`,
+  label: `${option.label} 수익률`,
+  type: 'number',
+  get: row => row.strategy.backtest?.rolling_200d?.[`${option.key}_return_pct`]
+}));
 const MOMENTUM_COLUMNS = [
   { key: 'name', label: '종목', type: 'text', get: row => row.name },
-  { key: 'signal_1', label: '신호 1', type: 'text', get: row => row.strategy.strategies?.[ALIGNMENT_1_5_20_60_200]?.latest?.signal },
-  { key: 'signal_2', label: '신호 2', type: 'text', get: row => row.strategy.strategies?.[ALIGNMENT_5_20_60_200]?.latest?.signal },
-  { key: 'signal_3', label: '신호 3', type: 'text', get: row => row.strategy.strategies?.[ALIGNMENT_20_60_200]?.latest?.signal },
+  ...ALIGNMENT_SIGNAL_COLUMNS,
   { key: 'volatility_breakout_return_pct', label: '변돌 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.volatility_breakout_return_pct },
-  { key: 'alignment_1_5_20_60_200_return_pct', label: '1>5>20>60>200 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.alignment_1_5_20_60_200_return_pct },
-  { key: 'alignment_5_20_60_200_return_pct', label: '5>20>60>200 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.alignment_5_20_60_200_return_pct },
-  { key: 'alignment_20_60_200_return_pct', label: '20>60>200 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.alignment_20_60_200_return_pct },
+  ...ALIGNMENT_RETURN_COLUMNS,
   { key: 'buy_hold_return_pct', label: '200일 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.buy_hold_return_pct }
 ];
 const SORT_FIELDS = Object.fromEntries(MOMENTUM_COLUMNS.map(column => [column.key, column.get]));
@@ -371,6 +380,22 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     return item;
   }
 
+  function createAlignmentJournalCard({ option, label, backtest, records }, costNote) {
+    return createJournalCard({
+      tone: option.tone,
+      horizon: option.horizon,
+      title: `정배열 ${label}`,
+      rule: ALIGNMENT_ENTRY_RULE,
+      metrics: [
+        {label: '누적 수익률', value: fmtPct(backtest.return_pct), color: statColor(backtest.return_pct)},
+        {label: '완료 거래', value: `${backtest.trades ?? 0}건`},
+        {label: '승률', value: fmtWinRate(backtest.win_rate_pct)},
+      ],
+      records,
+      note: `${label} · ${costNote} · *보유 중은 최신 1d VWAP 평가`,
+    });
+  }
+
   function renderBacktestJournals(detailData) {
     const section = document.getElementById('backtest-journal-section');
     if (!section) return;
@@ -381,18 +406,15 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     const rolling = backtest.rolling_200d || {};
     const journals = detailData.backtest_journals || {};
     const breakoutRecords = journals.volatility_breakout || [];
-    const shortStrategy = strategy.strategies?.[ALIGNMENT_1_5_20_60_200] || {};
-    const mediumStrategy = strategy.strategies?.[ALIGNMENT_5_20_60_200] || {};
-    const longStrategy = strategy.strategies?.[ALIGNMENT_20_60_200] || {};
-    const shortRecords = journals[ALIGNMENT_1_5_20_60_200] || [];
-    const mediumRecords = journals[ALIGNMENT_5_20_60_200] || [];
-    const longRecords = journals[ALIGNMENT_20_60_200] || [];
-    const shortBacktest = shortStrategy.backtest || {};
-    const mediumBacktest = mediumStrategy.backtest || {};
-    const longBacktest = longStrategy.backtest || {};
-    const shortLabel = shortStrategy.label || '1 > 5 > 20 > 60 > 200';
-    const mediumLabel = mediumStrategy.label || '5 > 20 > 60 > 200';
-    const longLabel = longStrategy.label || '20 > 60 > 200';
+    const alignmentContexts = ALIGNMENT_OPTIONS.map(option => {
+      const payload = strategy.strategies?.[option.key] || {};
+      return {
+        option,
+        label: payload.label || option.fallbackLabel,
+        backtest: payload.backtest || {},
+        records: journals[option.key] || [],
+      };
+    });
     const breakout = backtest.volatility_breakout || {};
     const costModel = strategy.cost_model || {};
     const accountLabel = costModel.account_label || '추천계좌';
@@ -422,9 +444,9 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     horizons.className = 'journal-horizon-strip';
     horizons.append(
       createHorizonItem('초단기', '변동성 돌파', rolling.volatility_breakout_return_pct, 'ultra'),
-      createHorizonItem('단기', shortLabel, shortBacktest.return_pct, 'short'),
-      createHorizonItem('중기', mediumLabel, mediumBacktest.return_pct, 'medium'),
-      createHorizonItem('장기', longLabel, longBacktest.return_pct, 'long')
+      ...alignmentContexts.map(({ option, label, backtest }) => (
+        createHorizonItem(option.horizon, label, backtest.return_pct, option.tone)
+      ))
     );
 
     const grid = document.createElement('div');
@@ -443,45 +465,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
         records: breakoutRecords,
         note: `k ${breakout.k ?? 0.5} · ${costNote} · 마지막 날 신규 진입 제외`,
       }),
-      createJournalCard({
-        tone: 'short',
-        horizon: '단기',
-        title: `정배열 ${shortLabel}`,
-        rule: '첫 평가 정배열은 초기 진입 · 이후 전환 확인 → 다음 거래일 1d VWAP 체결',
-        metrics: [
-          {label: '누적 수익률', value: fmtPct(shortBacktest.return_pct), color: statColor(shortBacktest.return_pct)},
-          {label: '완료 거래', value: `${shortBacktest.trades ?? 0}건`},
-          {label: '승률', value: fmtWinRate(shortBacktest.win_rate_pct)},
-        ],
-        records: shortRecords,
-        note: `${shortLabel} · ${costNote} · *보유 중은 최신 1d VWAP 평가`,
-      }),
-      createJournalCard({
-        tone: 'medium',
-        horizon: '중기',
-        title: `정배열 ${mediumLabel}`,
-        rule: '첫 평가 정배열은 초기 진입 · 이후 전환 확인 → 다음 거래일 1d VWAP 체결',
-        metrics: [
-          {label: '누적 수익률', value: fmtPct(mediumBacktest.return_pct), color: statColor(mediumBacktest.return_pct)},
-          {label: '완료 거래', value: `${mediumBacktest.trades ?? 0}건`},
-          {label: '승률', value: fmtWinRate(mediumBacktest.win_rate_pct)},
-        ],
-        records: mediumRecords,
-        note: `${mediumLabel} · ${costNote} · *보유 중은 최신 1d VWAP 평가`,
-      }),
-      createJournalCard({
-        tone: 'long',
-        horizon: '장기',
-        title: `정배열 ${longLabel}`,
-        rule: '첫 평가 정배열은 초기 진입 · 이후 전환 확인 → 다음 거래일 1d VWAP 체결',
-        metrics: [
-          {label: '누적 수익률', value: fmtPct(longBacktest.return_pct), color: statColor(longBacktest.return_pct)},
-          {label: '완료 거래', value: `${longBacktest.trades ?? 0}건`},
-          {label: '승률', value: fmtWinRate(longBacktest.win_rate_pct)},
-        ],
-        records: longRecords,
-        note: `${longLabel} · ${costNote} · *보유 중은 최신 1d VWAP 평가`,
-      })
+      ...alignmentContexts.map(context => createAlignmentJournalCard(context, costNote))
     );
 
     section.append(sectionHead, horizons, grid);
