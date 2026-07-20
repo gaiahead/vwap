@@ -1,4 +1,4 @@
-const DATA_VERSION = 'vwap-refactor-20260720';
+const DATA_VERSION = 'data-20260721-0701';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
