@@ -1,4 +1,4 @@
-const DATA_VERSION = 'three-horizon-20260720';
+const DATA_VERSION = 'vwap60-20260720';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -7,30 +7,35 @@ const COLOR = {
   muted: '#64748b',
   blue: '#2563eb'
 };
-const ALIGNMENT_1_5_20_200 = 'alignment_1_5_20_200';
-const ALIGNMENT_5_20_200 = 'alignment_5_20_200';
+const ALIGNMENT_1_5_20_60_200 = 'alignment_1_5_20_60_200';
+const ALIGNMENT_5_20_60_200 = 'alignment_5_20_60_200';
+const ALIGNMENT_20_60_200 = 'alignment_20_60_200';
 const ALIGNMENT_OPTIONS = [
-  { key: ALIGNMENT_1_5_20_200, label: '1>5>20>200' },
-  { key: ALIGNMENT_5_20_200, label: '5>20>200' }
+  { key: ALIGNMENT_1_5_20_60_200, label: '1>5>20>60>200' },
+  { key: ALIGNMENT_5_20_60_200, label: '5>20>60>200' },
+  { key: ALIGNMENT_20_60_200, label: '20>60>200' }
 ];
-const DEFAULT_ALIGNMENT_STRATEGY = ALIGNMENT_1_5_20_200;
-const DEFAULT_SORT = { key: 'alignment_1_5_20_200_return_pct', dir: 'desc' };
-const VP_PERIODS = ['1d', '5d', '20d', '200d'];
+const DEFAULT_ALIGNMENT_STRATEGY = ALIGNMENT_1_5_20_60_200;
+const DEFAULT_SORT = { key: 'alignment_1_5_20_60_200_return_pct', dir: 'desc' };
+const VP_PERIODS = ['1d', '5d', '20d', '60d', '200d'];
 const PRICE_LINE_DEFS = [
   { label: '1d', window: 1, color: '#eab308', dash: [], width: 1.15 },
   { label: '5d', window: 5, color: '#dc2626', dash: [], width: 1.15 },
   { label: '20d', window: 20, color: '#16a34a', dash: [], width: 1.15 },
+  { label: '60d', window: 60, color: '#2563eb', dash: [], width: 1.15 },
   { label: '200d', window: 200, color: '#000000', dash: [], width: 1.15 }
 ];
 const PRICE_DATASET_ORDER = ['BUY', 'SELL', ...PRICE_LINE_DEFS.map(def => def.label)];
 
 const MOMENTUM_COLUMNS = [
   { key: 'name', label: '종목', type: 'text', get: row => row.name },
-  { key: 'signal_1', label: '신호 1', type: 'text', get: row => row.strategy.strategies?.[ALIGNMENT_1_5_20_200]?.latest?.signal },
-  { key: 'signal_2', label: '신호 2', type: 'text', get: row => row.strategy.strategies?.[ALIGNMENT_5_20_200]?.latest?.signal },
+  { key: 'signal_1', label: '신호 1', type: 'text', get: row => row.strategy.strategies?.[ALIGNMENT_1_5_20_60_200]?.latest?.signal },
+  { key: 'signal_2', label: '신호 2', type: 'text', get: row => row.strategy.strategies?.[ALIGNMENT_5_20_60_200]?.latest?.signal },
+  { key: 'signal_3', label: '신호 3', type: 'text', get: row => row.strategy.strategies?.[ALIGNMENT_20_60_200]?.latest?.signal },
   { key: 'volatility_breakout_return_pct', label: '변돌 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.volatility_breakout_return_pct },
-  { key: 'alignment_1_5_20_200_return_pct', label: '1>5>20>200 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.alignment_1_5_20_200_return_pct },
-  { key: 'alignment_5_20_200_return_pct', label: '5>20>200 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.alignment_5_20_200_return_pct },
+  { key: 'alignment_1_5_20_60_200_return_pct', label: '1>5>20>60>200 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.alignment_1_5_20_60_200_return_pct },
+  { key: 'alignment_5_20_60_200_return_pct', label: '5>20>60>200 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.alignment_5_20_60_200_return_pct },
+  { key: 'alignment_20_60_200_return_pct', label: '20>60>200 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.alignment_20_60_200_return_pct },
   { key: 'buy_hold_return_pct', label: '200일 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.buy_hold_return_pct }
 ];
 const SORT_FIELDS = Object.fromEntries(MOMENTUM_COLUMNS.map(column => [column.key, column.get]));
@@ -90,7 +95,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
   }
 
   function compareRows(a, b) {
-    const getter = SORT_FIELDS[sortState.key] || SORT_FIELDS.alignment_1_5_20_200_return_pct;
+    const getter = SORT_FIELDS[sortState.key] || SORT_FIELDS.alignment_1_5_20_60_200_return_pct;
     const av = getter(a);
     const bv = getter(b);
     const dir = sortState.dir === 'asc' ? 1 : -1;
@@ -143,18 +148,21 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
 
     rows.forEach(({name, strategy}) => {
       const ticker = data[name]?.ticker;
-      const latestStrict = strategy?.strategies?.[ALIGNMENT_1_5_20_200]?.latest || {};
-      const latestMedium = strategy?.strategies?.[ALIGNMENT_5_20_200]?.latest || {};
+      const latestShort = strategy?.strategies?.[ALIGNMENT_1_5_20_60_200]?.latest || {};
+      const latestMedium = strategy?.strategies?.[ALIGNMENT_5_20_60_200]?.latest || {};
+      const latestLong = strategy?.strategies?.[ALIGNMENT_20_60_200]?.latest || {};
       const rolling200 = strategy?.backtest?.rolling_200d || {};
       const tr = document.createElement('tr');
       tr.className = 'momentum-row' + (name === currentDetailName ? ' detail-active' : '');
       tr.append(
         createCell(name),
-        createSignalCell(latestStrict.signal),
+        createSignalCell(latestShort.signal),
         createSignalCell(latestMedium.signal),
+        createSignalCell(latestLong.signal),
         createCell(fmtPct(rolling200.volatility_breakout_return_pct), { color: statColor(rolling200.volatility_breakout_return_pct), weight: '800' }),
-        createCell(fmtPct(rolling200.alignment_1_5_20_200_return_pct), { color: statColor(rolling200.alignment_1_5_20_200_return_pct), weight: '800' }),
-        createCell(fmtPct(rolling200.alignment_5_20_200_return_pct), { color: statColor(rolling200.alignment_5_20_200_return_pct), weight: '800' }),
+        createCell(fmtPct(rolling200.alignment_1_5_20_60_200_return_pct), { color: statColor(rolling200.alignment_1_5_20_60_200_return_pct), weight: '800' }),
+        createCell(fmtPct(rolling200.alignment_5_20_60_200_return_pct), { color: statColor(rolling200.alignment_5_20_60_200_return_pct), weight: '800' }),
+        createCell(fmtPct(rolling200.alignment_20_60_200_return_pct), { color: statColor(rolling200.alignment_20_60_200_return_pct), weight: '800' }),
         createCell(fmtPct(rolling200.buy_hold_return_pct), { color: statColor(rolling200.buy_hold_return_pct), weight: '800' })
       );
       tr.addEventListener('click', () => {
@@ -369,14 +377,18 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     const rolling = backtest.rolling_200d || {};
     const journals = detailData.backtest_journals || {};
     const breakoutRecords = journals.volatility_breakout || [];
-    const strictStrategy = strategy.strategies?.[ALIGNMENT_1_5_20_200] || {};
-    const mediumStrategy = strategy.strategies?.[ALIGNMENT_5_20_200] || {};
-    const strictRecords = journals[ALIGNMENT_1_5_20_200] || [];
-    const mediumRecords = journals[ALIGNMENT_5_20_200] || [];
-    const strictBacktest = strictStrategy.backtest || {};
+    const shortStrategy = strategy.strategies?.[ALIGNMENT_1_5_20_60_200] || {};
+    const mediumStrategy = strategy.strategies?.[ALIGNMENT_5_20_60_200] || {};
+    const longStrategy = strategy.strategies?.[ALIGNMENT_20_60_200] || {};
+    const shortRecords = journals[ALIGNMENT_1_5_20_60_200] || [];
+    const mediumRecords = journals[ALIGNMENT_5_20_60_200] || [];
+    const longRecords = journals[ALIGNMENT_20_60_200] || [];
+    const shortBacktest = shortStrategy.backtest || {};
     const mediumBacktest = mediumStrategy.backtest || {};
-    const strictLabel = strictStrategy.label || '1 > 5 > 20 > 200';
-    const mediumLabel = mediumStrategy.label || '5 > 20 > 200';
+    const longBacktest = longStrategy.backtest || {};
+    const shortLabel = shortStrategy.label || '1 > 5 > 20 > 60 > 200';
+    const mediumLabel = mediumStrategy.label || '5 > 20 > 60 > 200';
+    const longLabel = longStrategy.label || '20 > 60 > 200';
     const breakout = backtest.volatility_breakout || {};
     const costModel = strategy.cost_model || {};
     const accountLabel = costModel.account_label || '추천계좌';
@@ -406,8 +418,9 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     horizons.className = 'journal-horizon-strip';
     horizons.append(
       createHorizonItem('초단기', '변동성 돌파', rolling.volatility_breakout_return_pct, 'ultra'),
-      createHorizonItem('단기', strictLabel, strictBacktest.return_pct, 'short'),
-      createHorizonItem('중기', mediumLabel, mediumBacktest.return_pct, 'medium')
+      createHorizonItem('단기', shortLabel, shortBacktest.return_pct, 'short'),
+      createHorizonItem('중기', mediumLabel, mediumBacktest.return_pct, 'medium'),
+      createHorizonItem('장기', longLabel, longBacktest.return_pct, 'long')
     );
 
     const grid = document.createElement('div');
@@ -429,15 +442,15 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       createJournalCard({
         tone: 'short',
         horizon: '단기',
-        title: `정배열 ${strictLabel}`,
+        title: `정배열 ${shortLabel}`,
         rule: '정배열 전환 확인 → 다음 거래일 1d VWAP 체결',
         metrics: [
-          {label: '누적 수익률', value: fmtPct(strictBacktest.return_pct), color: statColor(strictBacktest.return_pct)},
-          {label: '완료 거래', value: `${strictBacktest.trades ?? 0}건`},
-          {label: '승률', value: fmtWinRate(strictBacktest.win_rate_pct)},
+          {label: '누적 수익률', value: fmtPct(shortBacktest.return_pct), color: statColor(shortBacktest.return_pct)},
+          {label: '완료 거래', value: `${shortBacktest.trades ?? 0}건`},
+          {label: '승률', value: fmtWinRate(shortBacktest.win_rate_pct)},
         ],
-        records: strictRecords,
-        note: `${strictLabel} · ${costNote} · *보유 중은 최신 1d VWAP 평가`,
+        records: shortRecords,
+        note: `${shortLabel} · ${costNote} · *보유 중은 최신 1d VWAP 평가`,
       }),
       createJournalCard({
         tone: 'medium',
@@ -451,6 +464,19 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
         ],
         records: mediumRecords,
         note: `${mediumLabel} · ${costNote} · *보유 중은 최신 1d VWAP 평가`,
+      }),
+      createJournalCard({
+        tone: 'long',
+        horizon: '장기',
+        title: `정배열 ${longLabel}`,
+        rule: '정배열 전환 확인 → 다음 거래일 1d VWAP 체결',
+        metrics: [
+          {label: '누적 수익률', value: fmtPct(longBacktest.return_pct), color: statColor(longBacktest.return_pct)},
+          {label: '완료 거래', value: `${longBacktest.trades ?? 0}건`},
+          {label: '승률', value: fmtWinRate(longBacktest.win_rate_pct)},
+        ],
+        records: longRecords,
+        note: `${longLabel} · ${costNote} · *보유 중은 최신 1d VWAP 평가`,
       })
     );
 

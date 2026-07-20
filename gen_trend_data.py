@@ -147,8 +147,8 @@ PENSION_ETF_TICKERS: frozenset[str] = frozenset({
     "390390.KS", "446770.KS", "474800.KS", "497780.KS", "0036Z0.KS",
     "415920.KS",
 })
-WINDOWS: list[int] = [5, 20, 200]  # 1d는 명시적 proxy, 나머지는 상세 차트용 롤링 VWAP 기간
-VOLUME_PROFILE_WINDOWS: list[int] = [1, 5, 20, 200]  # 하단 Volume Profile 기간
+WINDOWS: list[int] = [5, 20, 60, 200]  # 1d는 명시적 proxy, 나머지는 상세 차트용 롤링 VWAP 기간
+VOLUME_PROFILE_WINDOWS: list[int] = [1, 5, 20, 60, 200]  # 하단 Volume Profile 기간
 LOOKBACK_TRADING_DAYS: int = 200
 HISTORY_TRADING_DAYS: int = LOOKBACK_TRADING_DAYS + max(WINDOWS)
 MIN_STRATEGY_TRADING_DAYS: int = 25  # 신규 종목도 표에 유지하되, 200d 미산출 시 신호는 WAIT
@@ -265,17 +265,25 @@ def date_key(value: Any) -> str:
 STRATEGY_FEE_ONE_WAY = 0.0003
 DOMESTIC_STOCK_TRANSACTION_TAX_SELL = 0.002
 VOLATILITY_BREAKOUT_K = 0.5
-ALIGNMENT_1_5_20_200 = "alignment_1_5_20_200"
-ALIGNMENT_5_20_200 = "alignment_5_20_200"
-DEFAULT_ALIGNMENT_STRATEGY = ALIGNMENT_1_5_20_200
-ALIGNMENT_STRATEGIES: dict[str, dict[str, str]] = {
-    ALIGNMENT_1_5_20_200: {
-        "label": "1 > 5 > 20 > 200",
-        "rule": "VWAP1 > VWAP5 > VWAP20 > VWAP200",
+ALIGNMENT_1_5_20_60_200 = "alignment_1_5_20_60_200"
+ALIGNMENT_5_20_60_200 = "alignment_5_20_60_200"
+ALIGNMENT_20_60_200 = "alignment_20_60_200"
+DEFAULT_ALIGNMENT_STRATEGY = ALIGNMENT_1_5_20_60_200
+ALIGNMENT_STRATEGIES: dict[str, dict[str, Any]] = {
+    ALIGNMENT_1_5_20_60_200: {
+        "label": "1 > 5 > 20 > 60 > 200",
+        "rule": "VWAP1 > VWAP5 > VWAP20 > VWAP60 > VWAP200",
+        "windows": (1, 5, 20, 60, 200),
     },
-    ALIGNMENT_5_20_200: {
-        "label": "5 > 20 > 200",
-        "rule": "VWAP5 > VWAP20 > VWAP200",
+    ALIGNMENT_5_20_60_200: {
+        "label": "5 > 20 > 60 > 200",
+        "rule": "VWAP5 > VWAP20 > VWAP60 > VWAP200",
+        "windows": (5, 20, 60, 200),
+    },
+    ALIGNMENT_20_60_200: {
+        "label": "20 > 60 > 200",
+        "rule": "VWAP20 > VWAP60 > VWAP200",
+        "windows": (20, 60, 200),
     },
 }
 STRATEGY_RULES: dict[str, Any] = {
@@ -332,7 +340,7 @@ def prepare_strategy_frame(
     - VWAP200은 미래 참조 없이 계산하기 위해 이전 199거래일을 지표 warm-up으로만 사용한다.
     - 최근 200일 시작 전 포지션은 이월하지 않는다.
     - 1일 VWAP proxy = (High + Low + Close) / 3.
-    - 정배열은 1d > 5d > 20d > 200d 순서다.
+    - 정배열은 단기/중기/장기별 정의에 60d를 포함한다.
     """
     source_days = max(1, int(output_days)) + max(WINDOWS) - 1
     source = df.tail(source_days).copy()
@@ -342,42 +350,22 @@ def prepare_strategy_frame(
     return source.tail(output_days).copy()
 
 
-def full_alignment_signal(vwap1: Any, vwap5: Any, vwap20: Any, vwap200: Any) -> str:
-    """확정된 1d/5d/20d/200d 배열을 BUY/SELL/WAIT로 변환."""
-    values = [vwap1, vwap5, vwap20, vwap200]
+def strict_alignment_signal(*values: Any) -> str:
+    """주어진 VWAP 값의 엄격한 내림차순 배열을 BUY/SELL/WAIT로 변환."""
     if any(is_missing(value) for value in values):
         return "WAIT"
-    v1, v5, v20, v200 = (float(value) for value in values)
-    if v1 > v5 > v20 > v200:
-        return "BUY"
-    return "SELL"
-
-
-def medium_alignment_signal(vwap5: Any, vwap20: Any, vwap200: Any) -> str:
-    """확정된 5d/20d/200d 배열을 BUY/SELL/WAIT로 변환."""
-    values = [vwap5, vwap20, vwap200]
-    if any(is_missing(value) for value in values):
-        return "WAIT"
-    v5, v20, v200 = (float(value) for value in values)
-    return "BUY" if v5 > v20 > v200 else "SELL"
+    numeric = [float(value) for value in values]
+    return "BUY" if all(left > right for left, right in zip(numeric, numeric[1:])) else "SELL"
 
 
 def alignment_signal(row: pd.Series, strategy_key: str) -> str:
     """전략 키에 해당하는 확정 정배열 신호를 반환한다."""
-    if strategy_key == ALIGNMENT_1_5_20_200:
-        return full_alignment_signal(
-            row.get("vwap_1d"),
-            row.get("vwap_5d"),
-            row.get("vwap_20d"),
-            row.get("vwap_200d"),
-        )
-    if strategy_key == ALIGNMENT_5_20_200:
-        return medium_alignment_signal(
-            row.get("vwap_5d"),
-            row.get("vwap_20d"),
-            row.get("vwap_200d"),
-        )
-    raise ValueError(f"unknown alignment strategy: {strategy_key}")
+    definition = ALIGNMENT_STRATEGIES.get(strategy_key)
+    if definition is None:
+        raise ValueError(f"unknown alignment strategy: {strategy_key}")
+    return strict_alignment_signal(*(
+        row.get(f"vwap_{window}d") for window in definition["windows"]
+    ))
 
 
 def alignment_state(
@@ -408,6 +396,7 @@ def make_signal_record(
         "vwap1": safe_round(confirmed.get("vwap_1d"), 8),
         "vwap5": safe_round(confirmed.get("vwap_5d"), 8),
         "vwap20": safe_round(confirmed.get("vwap_20d"), 8),
+        "vwap60": safe_round(confirmed.get("vwap_60d"), 8),
         "vwap200": safe_round(confirmed.get("vwap_200d"), 8),
     }
 
@@ -690,6 +679,7 @@ def build_latest_strategy_snapshot(
         "vwap1": safe_round(latest["vwap_1d"]),
         "vwap5": safe_round(latest["vwap_5d"]),
         "vwap20": safe_round(latest["vwap_20d"]),
+        "vwap60": safe_round(latest["vwap_60d"]),
         "vwap200": safe_round(latest["vwap_200d"]),
         "signal": current_signal,
         "alignment": alignment,
@@ -728,7 +718,7 @@ def build_backtest_summary(
     simulations: dict[str, dict[str, Any]],
     volatility_breakout: dict[str, Any],
 ) -> dict[str, Any]:
-    """두 정배열·변동성 돌파·단순보유의 최근 구간 결과를 요약한다."""
+    """세 정배열·변동성 돌파·단순보유의 최근 구간 결과를 요약한다."""
     alignment_summaries = {
         key: build_alignment_summary(work, simulation)
         for key, simulation in simulations.items()
@@ -762,14 +752,16 @@ def build_backtest_summary(
             "window_days": len(work),
             "buy_hold_return_pct": buy_hold_return,
             "volatility_breakout_return_pct": volatility_breakout_return,
-            "alignment_1_5_20_200_return_pct": alignment_summaries[ALIGNMENT_1_5_20_200]["return_pct"],
-            "alignment_5_20_200_return_pct": alignment_summaries[ALIGNMENT_5_20_200]["return_pct"],
+            **{
+                f"{strategy_key}_return_pct": alignment_summaries[strategy_key]["return_pct"]
+                for strategy_key in ALIGNMENT_STRATEGIES
+            },
         },
     }
 
 
 def build_strategy_signal(df: pd.DataFrame, ticker: str | None = None) -> dict[str, Any]:
-    """최근 200거래일 기준 두 정배열 전략을 독립적으로 요약한다.
+    """최근 200거래일 기준 세 정배열 전략을 독립적으로 요약한다.
 
     신호: 당일 종가 확정 후 판단. 백테스트 체결: 신호 다음 거래일 1일 VWAP proxy, 편도 수수료 0.03%.
     """
@@ -822,20 +814,26 @@ def build_strategy_signal(df: pd.DataFrame, ticker: str | None = None) -> dict[s
 
     return {
         "available": True,
-        "strategy": "VWAP dual alignment",
+        "strategy": "VWAP triple alignment with 60d",
         "rules": dict(STRATEGY_RULES),
         "cost_model": cost_model,
         "strategies": strategies,
         "backtest": backtest,
         "backtest_journals": {
             "volatility_breakout": volatility_breakout["journal"],
-            ALIGNMENT_1_5_20_200: build_alignment_journal(
-                work, simulations[ALIGNMENT_1_5_20_200]
-            ),
-            ALIGNMENT_5_20_200: build_alignment_journal(
-                work, simulations[ALIGNMENT_5_20_200]
-            ),
+            **{
+                strategy_key: build_alignment_journal(work, simulations[strategy_key])
+                for strategy_key in ALIGNMENT_STRATEGIES
+            },
         },
+    }
+
+
+def empty_backtest_journals() -> dict[str, list[dict[str, Any]]]:
+    """정상/부족 이력 경로가 공유하는 빈 일지 스키마."""
+    return {
+        "volatility_breakout": [],
+        **{strategy_key: [] for strategy_key in ALIGNMENT_STRATEGIES},
     }
 
 
@@ -989,7 +987,7 @@ def build_detail_data(
     strategy_signal: dict[str, Any] | None = None,
     backtest_journals: dict[str, list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
-    """상세 데이터 생성: 최근 200거래일, VWAP line/Volume Profile은 1/5/20/200d만 표시."""
+    """상세 데이터 생성: 최근 200거래일, VWAP line/Volume Profile은 1/5/20/60/200d 표시."""
     if strategy_signal is None:
         strategy_payload = build_strategy_signal(df, ticker=ticker)
         if backtest_journals is None:
@@ -1030,11 +1028,7 @@ def build_detail_data(
         "ohlcv": ohlcv,
         "volume_profile": volume_profile,
         "strategy_signal": strategy_signal if strategy_signal is not None else build_strategy_signal(df, ticker=ticker),
-        "backtest_journals": backtest_journals or {
-            "volatility_breakout": [],
-            ALIGNMENT_1_5_20_200: [],
-            ALIGNMENT_5_20_200: [],
-        },
+        "backtest_journals": backtest_journals or empty_backtest_journals(),
         "lookback_trading_days": LOOKBACK_TRADING_DAYS,
         "latest_price": round(float(df["close"].iloc[-1]), 2),
     }
@@ -1069,11 +1063,7 @@ def build_asset_outputs(name: str, ticker: str, df: pd.DataFrame) -> tuple[dict[
     vwap_structure, _ = build_vwap_structure(df)
     records = build_recent_records(df)
     strategy_payload = build_strategy_signal(df, ticker=ticker)
-    backtest_journals = strategy_payload.get("backtest_journals", {
-        "volatility_breakout": [],
-        ALIGNMENT_1_5_20_200: [],
-        ALIGNMENT_5_20_200: [],
-    })
+    backtest_journals = strategy_payload.get("backtest_journals", empty_backtest_journals())
     strategy_signal = {
         key: value for key, value in strategy_payload.items()
         if key != "backtest_journals"

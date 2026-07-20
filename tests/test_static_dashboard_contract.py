@@ -19,29 +19,37 @@ def test_table_columns_and_default_sort_match_current_dashboard_contract():
         "종목",
         "신호 1",
         "신호 2",
+        "신호 3",
         "변돌 수익률",
-        "1&gt;5&gt;20&gt;200 수익률",
-        "5&gt;20&gt;200 수익률",
+        "1&gt;5&gt;20&gt;60&gt;200 수익률",
+        "5&gt;20&gt;60&gt;200 수익률",
+        "20&gt;60&gt;200 수익률",
         "200일 수익률",
     ]
-    assert "const DEFAULT_SORT = { key: 'alignment_1_5_20_200_return_pct', dir: 'desc' }" in app
+    assert "const DEFAULT_SORT = { key: 'alignment_1_5_20_60_200_return_pct', dir: 'desc' }" in app
     assert "key: 'volatility_breakout_return_pct', label: '변돌 수익률'" in app
     assert "key: 'signal_1', label: '신호 1'" in app
     assert "key: 'signal_2', label: '신호 2'" in app
-    assert "strategies?.[ALIGNMENT_1_5_20_200]?.latest?.signal" in app
-    assert "strategies?.[ALIGNMENT_5_20_200]?.latest?.signal" in app
-    assert "key: 'alignment_1_5_20_200_return_pct', label: '1>5>20>200 수익률'" in app
-    assert "key: 'alignment_5_20_200_return_pct', label: '5>20>200 수익률'" in app
+    assert "key: 'signal_3', label: '신호 3'" in app
+    assert "strategies?.[ALIGNMENT_1_5_20_60_200]?.latest?.signal" in app
+    assert "strategies?.[ALIGNMENT_5_20_60_200]?.latest?.signal" in app
+    assert "strategies?.[ALIGNMENT_20_60_200]?.latest?.signal" in app
+    assert "key: 'alignment_1_5_20_60_200_return_pct', label: '1>5>20>60>200 수익률'" in app
+    assert "key: 'alignment_5_20_60_200_return_pct', label: '5>20>60>200 수익률'" in app
+    assert "key: 'alignment_20_60_200_return_pct', label: '20>60>200 수익률'" in app
     assert "rolling200.volatility_breakout_return_pct" in app
-    assert "신호 1은 1d &gt; 5d &gt; 20d &gt; 200d" in html
-    assert "신호 2는 5d &gt; 20d &gt; 200d" in html
+    assert "신호 1은 1d &gt; 5d &gt; 20d &gt; 60d &gt; 200d" in html
+    assert "신호 2는 5d &gt; 20d &gt; 60d &gt; 200d" in html
+    assert "신호 3은 20d &gt; 60d &gt; 200d" in html
     assert "다음 거래일 1d VWAP" in html
     combined = html + app + generator
     for token in ["5/20 괴리율", "5/200 괴리율", "MDD", "mdd", "drawdown"]:
         assert token not in combined
+    for legacy_key in ["alignment_1_5_20_200", "alignment_5_20_200"]:
+        assert legacy_key not in combined
 
 
-def test_detail_has_three_clear_strategy_backtest_journals():
+def test_detail_has_four_clear_strategy_backtest_journals():
     app = read("app.js")
     css = read("style.css")
 
@@ -53,6 +61,7 @@ def test_detail_has_three_clear_strategy_backtest_journals():
         "초단기",
         "단기",
         "중기",
+        "장기",
         "진입일",
         "진입가",
         "청산일",
@@ -61,12 +70,15 @@ def test_detail_has_three_clear_strategy_backtest_journals():
     ]:
         assert token in app
 
-    assert app.count("\n      createJournalCard({") == 3
+    assert app.count("\n      createJournalCard({") == 4
     assert "createHorizonItem('초단기', '변동성 돌파'" in app
-    assert "createHorizonItem('단기', strictLabel" in app
+    assert "createHorizonItem('단기', shortLabel" in app
     assert "createHorizonItem('중기', mediumLabel" in app
-    assert "journals[ALIGNMENT_1_5_20_200]" in app
-    assert "journals[ALIGNMENT_5_20_200]" in app
+    assert "createHorizonItem('장기', longLabel" in app
+    assert "journals[ALIGNMENT_1_5_20_60_200]" in app
+    assert "journals[ALIGNMENT_5_20_60_200]" in app
+    assert "journals[ALIGNMENT_20_60_200]" in app
+    assert ".journal-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))" in css
 
     for selector in [
         ".alignment-tabs",
@@ -77,6 +89,7 @@ def test_detail_has_three_clear_strategy_backtest_journals():
         ".journal-card-ultra",
         ".journal-card-short",
         ".journal-card-medium",
+        ".journal-card-long",
         ".journal-summary",
         ".journal-table-wrap",
         ".journal-table",
@@ -126,14 +139,14 @@ def test_signal_cell_uses_buy_sell_colors_without_name_indicator():
     assert ".signal-cell.sell" in css
 
 
-def test_detail_panels_vp_tabs_and_price_datasets_use_only_1_5_20_200_with_trade_markers():
+def test_detail_panels_vp_tabs_and_price_datasets_use_1_5_20_60_200_with_trade_markers():
     app = read("app.js")
 
     assert "VWAP Lines · 3/5/10/20/40/60/100/200" not in app
     assert "VWAP Lines · 1/5/20/40/60/100/200" not in app
     assert "VWAP Lines · 2/5/20/40/60/100/200" not in app
     assert "Volume Profile" in app
-    assert "const VP_PERIODS = ['1d', '5d', '20d', '200d']" in app
+    assert "const VP_PERIODS = ['1d', '5d', '20d', '60d', '200d']" in app
     assert "let currentVpPeriod = '1d';" in app
     assert "currentVpPeriod = '1d';" in app
     assert "const PRICE_DATASET_ORDER = ['BUY', 'SELL', ...PRICE_LINE_DEFS.map(def => def.label)];" in app
@@ -142,13 +155,14 @@ def test_detail_panels_vp_tabs_and_price_datasets_use_only_1_5_20_200_with_trade
     assert "{ label: '1d', window: 1, color: '#eab308', dash: [], width: 1.15 }" in app
     assert "{ label: '5d', window: 5, color: '#dc2626', dash: [], width: 1.15 }" in app
     assert "{ label: '20d', window: 20, color: '#16a34a', dash: [], width: 1.15 }" in app
+    assert "{ label: '60d', window: 60, color: '#2563eb', dash: [], width: 1.15 }" in app
     assert "{ label: '200d', window: 200, color: '#000000', dash: [], width: 1.15" in app
     assert "dash: [5, 3]" not in app
     assert "{ label: '3d'" not in app
     assert "{ label: '10d'" not in app
     assert "{ label: '2d'" not in app
     assert "{ label: '40d'" not in app
-    assert "{ label: '60d'" not in app
+
     assert "{ label: '100d'" not in app
     assert "pointStyle: 'line'" in app
     assert "lineDash: dataset.borderDash || []" in app
@@ -168,7 +182,7 @@ def test_detail_panels_vp_tabs_and_price_datasets_use_only_1_5_20_200_with_trade
     assert "journals[currentAlignmentStrategy]" not in app
 
     line_labels = re.findall(r"\{ label: '([^']+)'", app)
-    assert line_labels == ["1d", "5d", "20d", "200d", "BUY", "SELL"]
+    assert line_labels == ["1d", "5d", "20d", "60d", "200d", "BUY", "SELL"]
 
 
 def test_cache_bust_version_is_consistent_everywhere():
