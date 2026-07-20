@@ -7,7 +7,7 @@ header p{font-size:0.74rem;color:#64748b;margin-top:4px}
 /* 모니터 섹션 */
 .momentum-monitor-sub{font-size:0.73rem;color:#64748b;line-height:1.45;margin:-4px 0 10px}
 .momentum-table-wrap{overflow:auto;-webkit-overflow-scrolling:touch;max-height:560px;border:1px solid #e2e8f0;border-radius:12px;background:#ffffff}
-.momentum-table{width:100%;border-collapse:separate;border-spacing:0;font-size:0.8rem;min-width:580px;table-layout:fixed}
+.momentum-table{width:100%;border-collapse:separate;border-spacing:0;font-size:0.8rem;min-width:940px;table-layout:fixed}
 .momentum-table th{position:sticky;top:0;z-index:3;padding:9px 8px;text-align:center;font-size:0.65rem;font-weight:800;color:#475569;letter-spacing:.02em;line-height:1.15;white-space:nowrap;background:#eff6ff;border-bottom:1px solid #cbd5e1;vertical-align:middle;user-select:none}
 .momentum-table th[data-sort]{cursor:pointer;position:sticky}
 .momentum-table th[data-sort]::after{content:'↕';display:inline-block;margin-left:4px;font-size:.58rem;color:#94a3b8;vertical-align:1px}
@@ -18,8 +18,8 @@ header p{font-size:0.74rem;color:#64748b;margin-top:4px}
 .momentum-table th:last-child{border-radius:0 8px 8px 0}
 .momentum-table td{padding:8px 8px;text-align:right;color:#334155;border-top:1px solid #e2e8f0;vertical-align:middle;font-variant-numeric:tabular-nums;font-feature-settings:"tnum";background:#ffffff;white-space:nowrap}
 .momentum-table th:nth-child(1),.momentum-table td:nth-child(1){width:220px}
-.momentum-table th:nth-child(2),.momentum-table td:nth-child(2){width:90px;text-align:center}
-.momentum-table th:nth-child(n+3),.momentum-table td:nth-child(n+3){width:135px}
+.momentum-table th:nth-child(2),.momentum-table td:nth-child(2){width:150px;text-align:center}
+.momentum-table th:nth-child(n+3),.momentum-table td:nth-child(n+3){width:150px}
 .momentum-table td:not(:first-child){font-family:'SF Mono','Consolas','Menlo',monospace;font-size:0.78rem}
 .momentum-table td:first-child{text-align:left;font-weight:800;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .signal-cell{letter-spacing:.04em}
@@ -45,6 +45,12 @@ header p{font-size:0.74rem;color:#64748b;margin-top:4px}
 .chart-wrap{position:relative;height:440px}
 .section-box{background:rgba(255,255,255,.94);border:1px solid #dbe6f3;border-radius:14px;padding:16px 20px;margin:16px 28px 0;box-shadow:0 10px 26px rgba(15,23,42,.06)}
 .panel-title{font-size:0.7rem;font-weight:800;color:#64748b;letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px}
+
+.alignment-tabs{display:inline-flex;gap:3px;margin-bottom:10px;padding:3px;border:1px solid #dbe6f3;border-radius:8px;background:#f8fafc}
+.alignment-tab{background:transparent;border:0;border-radius:5px;padding:5px 12px;cursor:pointer;font-size:.7rem;font-weight:800;color:#64748b;transition:all .18s;font-family:inherit}
+.alignment-tab:hover{background:#eff6ff;color:#1e293b}
+.alignment-tab.active{background:#2563eb;color:#fff}
+.alignment-tab:focus-visible{outline:2px solid #60a5fa;outline-offset:2px}
 
 .vp-tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
 .vp-tab{background:#f8fafc;border:1px solid #dbe6f3;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:0.68rem;font-weight:600;color:#475569;transition:all .2s;font-family:inherit}

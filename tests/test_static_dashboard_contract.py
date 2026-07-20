@@ -17,15 +17,19 @@ def test_table_columns_and_default_sort_match_current_dashboard_contract():
 
     assert headers == [
         "종목",
-        "신호",
+        "1&gt;5&gt;20&gt;200 신호",
         "변돌 수익률",
-        "정배열 수익률",
+        "1&gt;5&gt;20&gt;200 수익률",
+        "5&gt;20&gt;200 수익률",
         "200일 수익률",
     ]
-    assert "const DEFAULT_SORT = { key: 'strategy_return_pct', dir: 'desc' }" in app
+    assert "const DEFAULT_SORT = { key: 'alignment_1_5_20_200_return_pct', dir: 'desc' }" in app
     assert "key: 'volatility_breakout_return_pct', label: '변돌 수익률'" in app
+    assert "key: 'alignment_1_5_20_200_return_pct', label: '1>5>20>200 수익률'" in app
+    assert "key: 'alignment_5_20_200_return_pct', label: '5>20>200 수익률'" in app
     assert "rolling200.volatility_breakout_return_pct" in app
     assert "1d &gt; 5d &gt; 20d &gt; 200d" in html
+    assert "5d &gt; 20d &gt; 200d" in html
     assert "다음 거래일 1d VWAP" in html
     combined = html + app + generator
     for token in ["5/20 괴리율", "5/200 괴리율", "MDD", "mdd", "drawdown"]:
@@ -52,6 +56,8 @@ def test_detail_has_two_clear_strategy_backtest_journals():
         assert token in app
 
     for selector in [
+        ".alignment-tabs",
+        ".alignment-tab",
         ".backtest-journal-section",
         ".journal-grid",
         ".journal-card",
@@ -139,6 +145,11 @@ def test_detail_panels_vp_tabs_and_price_datasets_use_only_1_5_20_200_with_trade
     assert "label: 'Close'" not in app
     assert "data: closes" not in app
     assert "signalMap" in app
+    assert "const ALIGNMENT_OPTIONS" in app
+    assert "button.className = 'alignment-tab'" in app
+    assert "currentAlignmentStrategy = strategyKey" in app
+    assert "strategy_signal?.strategies?.[currentAlignmentStrategy]?.signals" in app
+    assert "journals[currentAlignmentStrategy]" in app
 
     line_labels = re.findall(r"\{ label: '([^']+)'", app)
     assert line_labels == ["1d", "5d", "20d", "200d", "BUY", "SELL"]

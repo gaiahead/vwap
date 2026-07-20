@@ -265,9 +265,20 @@ def date_key(value: Any) -> str:
 STRATEGY_FEE_ONE_WAY = 0.0003
 DOMESTIC_STOCK_TRANSACTION_TAX_SELL = 0.002
 VOLATILITY_BREAKOUT_K = 0.5
+ALIGNMENT_1_5_20_200 = "alignment_1_5_20_200"
+ALIGNMENT_5_20_200 = "alignment_5_20_200"
+DEFAULT_ALIGNMENT_STRATEGY = ALIGNMENT_1_5_20_200
+ALIGNMENT_STRATEGIES: dict[str, dict[str, str]] = {
+    ALIGNMENT_1_5_20_200: {
+        "label": "1 > 5 > 20 > 200",
+        "rule": "VWAP1 > VWAP5 > VWAP20 > VWAP200",
+    },
+    ALIGNMENT_5_20_200: {
+        "label": "5 > 20 > 200",
+        "rule": "VWAP5 > VWAP20 > VWAP200",
+    },
+}
 STRATEGY_RULES: dict[str, Any] = {
-    "buy": "VWAP1 > VWAP5 > VWAP20 > VWAP200 alignment starts",
-    "sell": "full alignment breaks",
     "execution": "next_day_vwap_1d_proxy",
     "valuation": "vwap_1d_proxy",
     "buy_hold_return": "last_vwap_1d_proxy / first_vwap_1d_proxy - 1",
@@ -342,14 +353,39 @@ def full_alignment_signal(vwap1: Any, vwap5: Any, vwap20: Any, vwap200: Any) -> 
     return "SELL"
 
 
-def alignment_state(row: pd.Series) -> bool | None:
-    """한 행의 정배열 상태를 `True`/`False`/미산출 `None`으로 반환."""
-    signal = full_alignment_signal(
-        row.get("vwap_1d"),
-        row.get("vwap_5d"),
-        row.get("vwap_20d"),
-        row.get("vwap_200d"),
-    )
+def medium_alignment_signal(vwap5: Any, vwap20: Any, vwap200: Any) -> str:
+    """확정된 5d/20d/200d 배열을 BUY/SELL/WAIT로 변환."""
+    values = [vwap5, vwap20, vwap200]
+    if any(is_missing(value) for value in values):
+        return "WAIT"
+    v5, v20, v200 = (float(value) for value in values)
+    return "BUY" if v5 > v20 > v200 else "SELL"
+
+
+def alignment_signal(row: pd.Series, strategy_key: str) -> str:
+    """전략 키에 해당하는 확정 정배열 신호를 반환한다."""
+    if strategy_key == ALIGNMENT_1_5_20_200:
+        return full_alignment_signal(
+            row.get("vwap_1d"),
+            row.get("vwap_5d"),
+            row.get("vwap_20d"),
+            row.get("vwap_200d"),
+        )
+    if strategy_key == ALIGNMENT_5_20_200:
+        return medium_alignment_signal(
+            row.get("vwap_5d"),
+            row.get("vwap_20d"),
+            row.get("vwap_200d"),
+        )
+    raise ValueError(f"unknown alignment strategy: {strategy_key}")
+
+
+def alignment_state(
+    row: pd.Series,
+    strategy_key: str = DEFAULT_ALIGNMENT_STRATEGY,
+) -> bool | None:
+    """한 행의 선택 전략 상태를 `True`/`False`/미산출 `None`으로 반환."""
+    signal = alignment_signal(row, strategy_key)
     if signal == "WAIT":
         return None
     return signal == "BUY"
@@ -376,14 +412,15 @@ def make_signal_record(
     }
 
 
-def build_full_alignment_events(
+def build_alignment_events(
     work: pd.DataFrame,
     previous_state: bool | None = None,
+    strategy_key: str = DEFAULT_ALIGNMENT_STRATEGY,
 ) -> list[dict[str, Any]]:
-    """최근 구간 안에서 발생한 정배열 시작/해제 전환만 추출한다."""
+    """선택 전략의 최근 구간 정배열 시작/해제 전환만 추출한다."""
     events: list[dict[str, Any]] = []
     for i, (dt, row) in enumerate(work.iterrows()):
-        current_state = alignment_state(row)
+        current_state = alignment_state(row, strategy_key)
         if previous_state is not None and current_state is not None and current_state != previous_state:
             execution_date = date_key(work.index[i + 1]) if i + 1 < len(work) else None
             execution_price = float(work.iloc[i + 1]["vwap_1d"]) if i + 1 < len(work) else None
@@ -395,12 +432,13 @@ def build_full_alignment_events(
     return events
 
 
-def simulate_full_alignment_strategy(
+def simulate_alignment_strategy(
     work: pd.DataFrame,
     previous_state: bool | None = None,
     transaction_tax_sell: float = 0.0,
+    strategy_key: str = DEFAULT_ALIGNMENT_STRATEGY,
 ) -> dict[str, Any]:
-    """1d > 5d > 20d > 200d 정배열 전략을 최근 구간에서 시뮬레이션한다.
+    """선택한 정배열 전략을 최근 구간에서 시뮬레이션한다.
 
     전환 신호를 확정한 다음 거래일의 1일 VWAP proxy 가격으로 체결한다.
     최근 구간 시작 전 포지션은 이월하지 않는다.
@@ -415,7 +453,11 @@ def simulate_full_alignment_strategy(
     last_signal_date: str | None = None
     trades: list[dict[str, Any]] = []
     wins = 0
-    signals = build_full_alignment_events(work, previous_state=previous_state)
+    signals = build_alignment_events(
+        work,
+        previous_state=previous_state,
+        strategy_key=strategy_key,
+    )
     executions = {event["execution_date"]: event for event in signals if event.get("execution_date")}
     equity_curve: list[float] = []
     position_days = 0
@@ -560,7 +602,7 @@ def simulate_volatility_breakout_strategy(
     }
 
 
-def build_full_alignment_journal(
+def build_alignment_journal(
     work: pd.DataFrame,
     simulation: dict[str, Any],
 ) -> list[dict[str, Any]]:
@@ -617,18 +659,15 @@ def calc_trade_holding_stats(trades: list[dict[str, Any]], work: pd.DataFrame) -
 def build_latest_strategy_snapshot(
     work: pd.DataFrame,
     simulation: dict[str, Any],
+    strategy_key: str,
 ) -> dict[str, Any]:
     """최신 거래일의 정배열 상태와 현재 포지션을 직렬화한다."""
     latest = work.iloc[-1]
-    current_signal = full_alignment_signal(
-        latest["vwap_1d"],
-        latest["vwap_5d"],
-        latest["vwap_20d"],
-        latest["vwap_200d"],
-    )
+    current_signal = alignment_signal(latest, strategy_key)
+    strategy_label = ALIGNMENT_STRATEGIES[strategy_key]["label"]
     alignment = {
         "WAIT": "N/A",
-        "BUY": "1 > 5 > 20 > 200",
+        "BUY": strategy_label,
         "SELL": "정배열 아님",
     }[current_signal]
     action = {"WAIT": "대기", "BUY": "매수", "SELL": "매도"}[current_signal]
@@ -665,20 +704,39 @@ def build_latest_strategy_snapshot(
     }
 
 
-def build_backtest_summary(
+def build_alignment_summary(
     work: pd.DataFrame,
     simulation: dict[str, Any],
-    volatility_breakout: dict[str, Any],
 ) -> dict[str, Any]:
-    """최근 표시 구간의 전략·단순보유 수익률과 거래 통계를 요약한다."""
+    """한 정배열 전략의 최근 표시 구간 거래 통계를 요약한다."""
     trades = simulation["trades"]
     avg_holding_days, max_holding_days = calc_trade_holding_stats(trades, work)
-    strategy_return = (simulation["final_equity"] - 1) * 100
+    strategy_return = safe_round((simulation["final_equity"] - 1) * 100, 2)
+
+    return {
+        "return_pct": strategy_return,
+        "trades": len(trades),
+        "win_rate_pct": safe_round(simulation["wins"] / len(trades) * 100 if trades else None, 2),
+        "exposure_pct": safe_round(simulation["position_days"] / len(work) * 100 if len(work) else None, 2),
+        "avg_holding_days": safe_round(avg_holding_days, 1),
+        "max_holding_days": max_holding_days,
+    }
+
+
+def build_backtest_summary(
+    work: pd.DataFrame,
+    simulations: dict[str, dict[str, Any]],
+    volatility_breakout: dict[str, Any],
+) -> dict[str, Any]:
+    """두 정배열·변동성 돌파·단순보유의 최근 구간 결과를 요약한다."""
+    alignment_summaries = {
+        key: build_alignment_summary(work, simulation)
+        for key, simulation in simulations.items()
+    }
     buy_hold_return = pct_change(
         float(work["vwap_1d"].iloc[0]),
         float(work["vwap_1d"].iloc[-1]),
     )
-    strategy_return = safe_round(strategy_return, 2)
     buy_hold_return = safe_round(buy_hold_return, 2)
     volatility_breakout_return = safe_round(volatility_breakout["strategy_return_pct"], 2)
 
@@ -686,13 +744,7 @@ def build_backtest_summary(
         "period": f"recent_{LOOKBACK_TRADING_DAYS}_trading_days",
         "start_date": date_key(work.index[0]),
         "end_date": date_key(work.index[-1]),
-        "strategy_return_pct": strategy_return,
         "buy_hold_return_pct": buy_hold_return,
-        "trades": len(trades),
-        "win_rate_pct": safe_round(simulation["wins"] / len(trades) * 100 if trades else None, 2),
-        "exposure_pct": safe_round(simulation["position_days"] / len(work) * 100 if len(work) else None, 2),
-        "avg_holding_days": safe_round(avg_holding_days, 1),
-        "max_holding_days": max_holding_days,
         "volatility_breakout": {
             "k": volatility_breakout["k"],
             "trades": volatility_breakout["trades"],
@@ -708,15 +760,16 @@ def build_backtest_summary(
         },
         "rolling_200d": {
             "window_days": len(work),
-            "strategy_return_pct": strategy_return,
             "buy_hold_return_pct": buy_hold_return,
             "volatility_breakout_return_pct": volatility_breakout_return,
+            "alignment_1_5_20_200_return_pct": alignment_summaries[ALIGNMENT_1_5_20_200]["return_pct"],
+            "alignment_5_20_200_return_pct": alignment_summaries[ALIGNMENT_5_20_200]["return_pct"],
         },
     }
 
 
 def build_strategy_signal(df: pd.DataFrame, ticker: str | None = None) -> dict[str, Any]:
-    """최근 200거래일 기준 1d/5d/20d/200d 정배열 전략 요약.
+    """최근 200거래일 기준 두 정배열 전략을 독립적으로 요약한다.
 
     신호: 당일 종가 확정 후 판단. 백테스트 체결: 신호 다음 거래일 1일 VWAP proxy, 편도 수수료 0.03%.
     """
@@ -730,31 +783,59 @@ def build_strategy_signal(df: pd.DataFrame, ticker: str | None = None) -> dict[s
 
     context = prepare_strategy_frame(df, LOOKBACK_TRADING_DAYS + 1)
     work = context.tail(LOOKBACK_TRADING_DAYS).copy()
-    previous_state = alignment_state(context.iloc[-len(work) - 1]) if len(context) > len(work) else None
     transaction_tax_sell = cost_model["transaction_tax_sell_pct"] / 100
-    simulation = simulate_full_alignment_strategy(
-        work,
-        previous_state=previous_state,
-        transaction_tax_sell=transaction_tax_sell,
-    )
+    previous_row = context.iloc[-len(work) - 1] if len(context) > len(work) else None
+    simulations: dict[str, dict[str, Any]] = {}
+    for strategy_key in ALIGNMENT_STRATEGIES:
+        previous_state = (
+            alignment_state(previous_row, strategy_key)
+            if previous_row is not None
+            else None
+        )
+        simulations[strategy_key] = simulate_alignment_strategy(
+            work,
+            previous_state=previous_state,
+            transaction_tax_sell=transaction_tax_sell,
+            strategy_key=strategy_key,
+        )
     volatility_breakout = simulate_volatility_breakout_strategy(
         context,
         visible_days=len(work),
         transaction_tax_sell=transaction_tax_sell,
     )
 
+    backtest = build_backtest_summary(work, simulations, volatility_breakout)
+    strategies = {
+        strategy_key: {
+            "label": definition["label"],
+            "rule": definition["rule"],
+            "latest": build_latest_strategy_snapshot(
+                work,
+                simulations[strategy_key],
+                strategy_key,
+            ),
+            "backtest": build_alignment_summary(work, simulations[strategy_key]),
+            "signals": simulations[strategy_key]["signals"],
+        }
+        for strategy_key, definition in ALIGNMENT_STRATEGIES.items()
+    }
+
     return {
         "available": True,
-        "strategy": "VWAP 1/5/20/200 full alignment",
+        "strategy": "VWAP dual alignment",
         "rules": dict(STRATEGY_RULES),
         "cost_model": cost_model,
-        "latest": build_latest_strategy_snapshot(work, simulation),
-        "backtest": build_backtest_summary(work, simulation, volatility_breakout),
+        "strategies": strategies,
+        "backtest": backtest,
         "backtest_journals": {
             "volatility_breakout": volatility_breakout["journal"],
-            "full_alignment": build_full_alignment_journal(work, simulation),
+            ALIGNMENT_1_5_20_200: build_alignment_journal(
+                work, simulations[ALIGNMENT_1_5_20_200]
+            ),
+            ALIGNMENT_5_20_200: build_alignment_journal(
+                work, simulations[ALIGNMENT_5_20_200]
+            ),
         },
-        "signals": simulation["signals"],
     }
 
 
@@ -951,7 +1032,8 @@ def build_detail_data(
         "strategy_signal": strategy_signal if strategy_signal is not None else build_strategy_signal(df, ticker=ticker),
         "backtest_journals": backtest_journals or {
             "volatility_breakout": [],
-            "full_alignment": [],
+            ALIGNMENT_1_5_20_200: [],
+            ALIGNMENT_5_20_200: [],
         },
         "lookback_trading_days": LOOKBACK_TRADING_DAYS,
         "latest_price": round(float(df["close"].iloc[-1]), 2),
@@ -989,7 +1071,8 @@ def build_asset_outputs(name: str, ticker: str, df: pd.DataFrame) -> tuple[dict[
     strategy_payload = build_strategy_signal(df, ticker=ticker)
     backtest_journals = strategy_payload.get("backtest_journals", {
         "volatility_breakout": [],
-        "full_alignment": [],
+        ALIGNMENT_1_5_20_200: [],
+        ALIGNMENT_5_20_200: [],
     })
     strategy_signal = {
         key: value for key, value in strategy_payload.items()

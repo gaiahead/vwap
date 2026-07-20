@@ -50,18 +50,26 @@ def test_strategy_available_for_newer_assets_inside_recent_200_day_scope():
     signal = gen.build_strategy_signal(df)
 
     assert signal["available"] is True
-    assert signal["latest"]["vwap5"] is not None
-    assert signal["latest"]["vwap20"] is not None
-    assert signal["latest"]["vwap200"] is None
-    assert signal["latest"]["signal"] == "WAIT"
-    assert signal["latest"]["alignment"] == "N/A"
+    assert set(signal["strategies"]) == {
+        gen.ALIGNMENT_1_5_20_200,
+        gen.ALIGNMENT_5_20_200,
+    }
+    for strategy in signal["strategies"].values():
+        latest = strategy["latest"]
+        assert latest["vwap5"] is not None
+        assert latest["vwap20"] is not None
+        assert latest["vwap200"] is None
+        assert latest["signal"] == "WAIT"
+        assert latest["alignment"] == "N/A"
     rolling_200d = signal["backtest"]["rolling_200d"]
     assert rolling_200d["window_days"] == len(df)
-    assert rolling_200d["strategy_return_pct"] is not None
+    assert rolling_200d["alignment_1_5_20_200_return_pct"] is not None
+    assert rolling_200d["alignment_5_20_200_return_pct"] is not None
     assert rolling_200d["buy_hold_return_pct"] is not None
     assert set(rolling_200d) == {
         "window_days",
-        "strategy_return_pct",
+        "alignment_1_5_20_200_return_pct",
+        "alignment_5_20_200_return_pct",
         "buy_hold_return_pct",
         "volatility_breakout_return_pct",
     }
@@ -155,7 +163,7 @@ def test_volatility_breakout_charges_stock_transaction_tax_even_on_a_loss():
     assert math.isclose(result["final_equity"], expected_equity)
 
 
-def test_full_alignment_charges_stock_transaction_tax_only_when_closed():
+def test_each_alignment_charges_stock_transaction_tax_only_when_closed():
     idx = pd.bdate_range(start="2026-01-05", periods=5)
     work = pd.DataFrame(
         {
@@ -167,11 +175,6 @@ def test_full_alignment_charges_stock_transaction_tax_only_when_closed():
         index=idx,
     )
 
-    taxable = gen.simulate_full_alignment_strategy(
-        work,
-        transaction_tax_sell=gen.DOMESTIC_STOCK_TRANSACTION_TAX_SELL,
-    )
-    fee_only = gen.simulate_full_alignment_strategy(work)
     expected_equity = (
         (100.0 / 142.0)
         * (1 - gen.STRATEGY_FEE_ONE_WAY)
@@ -182,19 +185,31 @@ def test_full_alignment_charges_stock_transaction_tax_only_when_closed():
         )
     )
 
-    assert taxable["in_position"] is False
-    assert len(taxable["trades"]) == 1
-    assert math.isclose(taxable["final_equity"], expected_equity)
-    assert taxable["final_equity"] < fee_only["final_equity"]
+    for strategy_key in gen.ALIGNMENT_STRATEGIES:
+        taxable = gen.simulate_alignment_strategy(
+            work,
+            transaction_tax_sell=gen.DOMESTIC_STOCK_TRANSACTION_TAX_SELL,
+            strategy_key=strategy_key,
+        )
+        fee_only = gen.simulate_alignment_strategy(work, strategy_key=strategy_key)
 
-    open_work = work.iloc[:3]
-    taxable_open = gen.simulate_full_alignment_strategy(
-        open_work,
-        transaction_tax_sell=gen.DOMESTIC_STOCK_TRANSACTION_TAX_SELL,
-    )
-    fee_only_open = gen.simulate_full_alignment_strategy(open_work)
-    assert taxable_open["in_position"] is True
-    assert math.isclose(taxable_open["final_equity"], fee_only_open["final_equity"])
+        assert taxable["in_position"] is False
+        assert len(taxable["trades"]) == 1
+        assert math.isclose(taxable["final_equity"], expected_equity)
+        assert taxable["final_equity"] < fee_only["final_equity"]
+
+        open_work = work.iloc[:3]
+        taxable_open = gen.simulate_alignment_strategy(
+            open_work,
+            transaction_tax_sell=gen.DOMESTIC_STOCK_TRANSACTION_TAX_SELL,
+            strategy_key=strategy_key,
+        )
+        fee_only_open = gen.simulate_alignment_strategy(
+            open_work,
+            strategy_key=strategy_key,
+        )
+        assert taxable_open["in_position"] is True
+        assert math.isclose(taxable_open["final_equity"], fee_only_open["final_equity"])
 
 
 def test_build_strategy_signal_applies_ticker_cost_model_to_both_strategies():
@@ -209,10 +224,14 @@ def test_build_strategy_signal_applies_ticker_cost_model_to_both_strategies():
         stock["backtest"]["rolling_200d"]["volatility_breakout_return_pct"]
         <= etf["backtest"]["rolling_200d"]["volatility_breakout_return_pct"]
     )
-    assert (
-        stock["backtest"]["rolling_200d"]["strategy_return_pct"]
-        <= etf["backtest"]["rolling_200d"]["strategy_return_pct"]
-    )
+    for field in [
+        "alignment_1_5_20_200_return_pct",
+        "alignment_5_20_200_return_pct",
+    ]:
+        assert (
+            stock["backtest"]["rolling_200d"][field]
+            <= etf["backtest"]["rolling_200d"][field]
+        )
 
 
 def test_win_rates_use_unrounded_trade_returns():
@@ -229,7 +248,7 @@ def test_win_rates_use_unrounded_trade_returns():
         },
         index=idx,
     )
-    alignment = gen.simulate_full_alignment_strategy(work)
+    alignment = gen.simulate_alignment_strategy(work)
     assert alignment["trades"][0]["return_pct"] == 0.0
 
     breakout_context = pd.DataFrame(
@@ -244,8 +263,15 @@ def test_win_rates_use_unrounded_trade_returns():
     breakout = gen.simulate_volatility_breakout_strategy(breakout_context, visible_days=2)
     assert breakout["journal"][0]["return_pct"] == 0.0
 
-    summary = gen.build_backtest_summary(work, alignment, breakout)
-    assert summary["win_rate_pct"] == 100.0
+    summary = gen.build_backtest_summary(
+        work,
+        {
+            gen.ALIGNMENT_1_5_20_200: alignment,
+            gen.ALIGNMENT_5_20_200: alignment,
+        },
+        breakout,
+    )
+    assert gen.build_alignment_summary(work, alignment)["win_rate_pct"] == 100.0
     assert summary["volatility_breakout"]["win_rate_pct"] == 100.0
 
 
@@ -278,6 +304,51 @@ def test_full_alignment_signal_requires_1_above_5_above_20_above_200():
     assert gen.full_alignment_signal(None, 130, 120, 100) == "WAIT"
 
 
+def test_five_twenty_two_hundred_can_be_buy_while_full_alignment_is_sell():
+    row = pd.Series({
+        "vwap_1d": 110.0,
+        "vwap_5d": 130.0,
+        "vwap_20d": 120.0,
+        "vwap_200d": 100.0,
+    })
+
+    assert gen.alignment_signal(row, gen.ALIGNMENT_1_5_20_200) == "SELL"
+    assert gen.alignment_signal(row, gen.ALIGNMENT_5_20_200) == "BUY"
+
+
+def test_two_alignment_strategies_have_independent_events_and_returns():
+    idx = pd.bdate_range(start="2026-06-01", periods=6)
+    work = pd.DataFrame(
+        {
+            "vwap_1d": [40.0, 70.0, 70.0, 70.0, 40.0, 90.0],
+            "vwap_5d": [50.0, 100.0, 100.0, 100.0, 50.0, 50.0],
+            "vwap_20d": [80.0] * 6,
+            "vwap_200d": [60.0] * 6,
+        },
+        index=idx,
+    )
+
+    full = gen.simulate_alignment_strategy(
+        work,
+        previous_state=False,
+        strategy_key=gen.ALIGNMENT_1_5_20_200,
+    )
+    medium = gen.simulate_alignment_strategy(
+        work,
+        previous_state=False,
+        strategy_key=gen.ALIGNMENT_5_20_200,
+    )
+
+    assert full["signals"] == []
+    assert full["final_equity"] == 1.0
+    assert [signal["type"] for signal in medium["signals"]] == ["BUY", "SELL"]
+    assert medium["signals"][0]["execution_date"] == gen.date_key(idx[2])
+    assert medium["signals"][0]["price"] == 70.0
+    assert medium["signals"][1]["execution_date"] == gen.date_key(idx[5])
+    assert medium["signals"][1]["price"] == 90.0
+    assert medium["final_equity"] > full["final_equity"]
+
+
 def test_alignment_strategy_marks_transitions_and_executes_next_day_vwap():
     idx = pd.bdate_range(start="2026-01-05", periods=8)
     states = [False, False, True, True, False, False, True, True]
@@ -291,7 +362,7 @@ def test_alignment_strategy_marks_transitions_and_executes_next_day_vwap():
         })
     work = pd.DataFrame(rows, index=idx)
 
-    simulation = gen.simulate_full_alignment_strategy(work)
+    simulation = gen.simulate_alignment_strategy(work)
     signals = simulation["signals"]
 
     assert [signal["type"] for signal in signals] == ["BUY", "SELL", "BUY"]
@@ -310,7 +381,7 @@ def test_alignment_strategy_marks_transitions_and_executes_next_day_vwap():
             assert not (confirmed["vwap_1d"] > confirmed["vwap_5d"] > confirmed["vwap_20d"] > confirmed["vwap_200d"])
         assert signal["price"] == round(float(execution["vwap_1d"]), 4)
 
-    journal = gen.build_full_alignment_journal(work, simulation)
+    journal = gen.build_alignment_journal(work, simulation)
     assert [row["status"] for row in journal] == ["CLOSED", "OPEN"]
     assert journal[0]["entry_date"] == dates[3]
     assert journal[0]["exit_date"] == dates[5]
@@ -333,7 +404,7 @@ def test_last_day_transition_is_marked_even_without_a_next_day_execution():
         index=idx,
     )
 
-    simulation = gen.simulate_full_alignment_strategy(work)
+    simulation = gen.simulate_alignment_strategy(work)
 
     assert simulation["signals"] == [{
         "date": "2026-01-07",
@@ -362,7 +433,7 @@ def test_alignment_strategy_does_not_carry_a_pre_window_position():
         index=idx,
     )
 
-    simulation = gen.simulate_full_alignment_strategy(work)
+    simulation = gen.simulate_alignment_strategy(work)
 
     assert simulation["signals"] == []
     assert simulation["in_position"] is False
@@ -389,10 +460,12 @@ def test_build_strategy_keeps_first_day_transition_and_all_200_visible_events(mo
     result = gen.build_strategy_signal(make_ohlcv(range(100, 125)))
 
     assert result["backtest"]["start_date"] == gen.date_key(idx[1])
-    assert len(result["signals"]) == gen.LOOKBACK_TRADING_DAYS
-    assert result["signals"][0]["date"] == gen.date_key(idx[1])
-    assert result["signals"][0]["execution_date"] == gen.date_key(idx[2])
-    assert result["signals"][0]["type"] == "BUY"
+    for strategy_key in gen.ALIGNMENT_STRATEGIES:
+        signals = result["strategies"][strategy_key]["signals"]
+        assert len(signals) == gen.LOOKBACK_TRADING_DAYS
+        assert signals[0]["date"] == gen.date_key(idx[1])
+        assert signals[0]["execution_date"] == gen.date_key(idx[2])
+        assert signals[0]["type"] == "BUY"
 
 
 def test_trade_return_and_win_rate_include_both_one_way_fees(monkeypatch):
@@ -407,19 +480,20 @@ def test_trade_return_and_win_rate_include_both_one_way_fees(monkeypatch):
         index=idx,
     )
 
-    simulation = gen.simulate_full_alignment_strategy(work)
+    simulation = gen.simulate_alignment_strategy(work)
     assert simulation["trades"][0]["return_pct"] < 0
     assert simulation["final_equity"] < 1
 
     monkeypatch.setattr(gen, "prepare_strategy_frame", lambda _df, output_days=200: work.copy())
     result = gen.build_strategy_signal(make_ohlcv(range(100, 125)))
-    assert result["backtest"]["trades"] == 1
-    assert result["backtest"]["win_rate_pct"] == 0.0
+    strict = result["strategies"][gen.ALIGNMENT_1_5_20_200]["backtest"]
+    assert strict["trades"] == 1
+    assert strict["win_rate_pct"] == 0.0
 
 
-def test_build_strategy_simulates_visible_window_once(monkeypatch):
+def test_build_strategy_simulates_visible_window_once_per_alignment(monkeypatch):
     df = make_ohlcv(range(100, 520))
-    original = gen.simulate_full_alignment_strategy
+    original = gen.simulate_alignment_strategy
     calls = 0
 
     def counted_simulation(*args, **kwargs):
@@ -427,12 +501,12 @@ def test_build_strategy_simulates_visible_window_once(monkeypatch):
         calls += 1
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(gen, "simulate_full_alignment_strategy", counted_simulation)
+    monkeypatch.setattr(gen, "simulate_alignment_strategy", counted_simulation)
 
     result = gen.build_strategy_signal(df)
 
     assert result["available"] is True
-    assert calls == 1
+    assert calls == len(gen.ALIGNMENT_STRATEGIES) == 2
 
 
 def test_build_asset_outputs_keeps_trend_and_detail_strategy_contract_in_sync():
@@ -444,7 +518,11 @@ def test_build_asset_outputs_keeps_trend_and_detail_strategy_contract_in_sync():
     assert "group" not in trend
     assert trend["strategy_signal"] == detail["strategy_signal"]
     assert "backtest_journals" not in trend
-    assert set(detail["backtest_journals"]) == {"volatility_breakout", "full_alignment"}
+    assert set(detail["backtest_journals"]) == {
+        "volatility_breakout",
+        gen.ALIGNMENT_1_5_20_200,
+        gen.ALIGNMENT_5_20_200,
+    }
     assert detail["backtest_journals"]["volatility_breakout"]
     assert all(row["status"] == "CLOSED" for row in detail["backtest_journals"]["volatility_breakout"])
     assert "mdd" not in json.dumps(trend["strategy_signal"], ensure_ascii=False).lower()
@@ -462,6 +540,20 @@ def test_build_asset_outputs_keeps_trend_and_detail_strategy_contract_in_sync():
         assert f"vwap_{removed_window}d" not in detail["ohlcv"][-1]
 
 
+def test_insufficient_history_uses_dual_alignment_journal_schema():
+    df = make_ohlcv(range(100, 120))
+
+    trend, detail = gen.build_asset_outputs("짧은 이력", "SHORT", df)
+
+    assert trend["strategy_signal"]["available"] is False
+    assert set(detail["backtest_journals"]) == {
+        "volatility_breakout",
+        gen.ALIGNMENT_1_5_20_200,
+        gen.ALIGNMENT_5_20_200,
+    }
+    assert all(records == [] for records in detail["backtest_journals"].values())
+
+
 def test_zero_volume_windows_emit_none_and_json_remains_strict():
     df = make_ohlcv(range(100, 320))
     df["volume"] = 0
@@ -472,12 +564,13 @@ def test_zero_volume_windows_emit_none_and_json_remains_strict():
     assert work["vwap_200d"].iloc[-1] is None
 
     trend, detail = gen.build_asset_outputs("무거래 테스트", "ZERO", df)
-    latest = trend["strategy_signal"]["latest"]
-    assert latest["vwap5"] is None
-    assert latest["vwap20"] is None
-    assert latest["vwap200"] is None
-    assert latest["signal"] == "WAIT"
-    assert latest["alignment"] == "N/A"
+    for strategy in trend["strategy_signal"]["strategies"].values():
+        latest = strategy["latest"]
+        assert latest["vwap5"] is None
+        assert latest["vwap20"] is None
+        assert latest["vwap200"] is None
+        assert latest["signal"] == "WAIT"
+        assert latest["alignment"] == "N/A"
     assert trend["strategy_signal"] == detail["strategy_signal"]
 
     json.dumps(trend, allow_nan=False)

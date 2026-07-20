@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260720-1600';
+const DATA_VERSION = 'dual-align-20260720';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -7,7 +7,14 @@ const COLOR = {
   muted: '#64748b',
   blue: '#2563eb'
 };
-const DEFAULT_SORT = { key: 'strategy_return_pct', dir: 'desc' };
+const ALIGNMENT_1_5_20_200 = 'alignment_1_5_20_200';
+const ALIGNMENT_5_20_200 = 'alignment_5_20_200';
+const ALIGNMENT_OPTIONS = [
+  { key: ALIGNMENT_1_5_20_200, label: '1>5>20>200' },
+  { key: ALIGNMENT_5_20_200, label: '5>20>200' }
+];
+const DEFAULT_ALIGNMENT_STRATEGY = ALIGNMENT_1_5_20_200;
+const DEFAULT_SORT = { key: 'alignment_1_5_20_200_return_pct', dir: 'desc' };
 const VP_PERIODS = ['1d', '5d', '20d', '200d'];
 const PRICE_LINE_DEFS = [
   { label: '1d', window: 1, color: '#eab308', dash: [], width: 1.15 },
@@ -19,9 +26,10 @@ const PRICE_DATASET_ORDER = ['BUY', 'SELL', ...PRICE_LINE_DEFS.map(def => def.la
 
 const MOMENTUM_COLUMNS = [
   { key: 'name', label: '종목', type: 'text', get: row => row.name },
-  { key: 'signal', label: '신호', type: 'text', get: row => row.strategy.latest?.signal },
+  { key: 'signal', label: '1>5>20>200 신호', type: 'text', get: row => row.strategy.strategies?.[ALIGNMENT_1_5_20_200]?.latest?.signal },
   { key: 'volatility_breakout_return_pct', label: '변돌 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.volatility_breakout_return_pct },
-  { key: 'strategy_return_pct', label: '정배열 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.strategy_return_pct },
+  { key: 'alignment_1_5_20_200_return_pct', label: '1>5>20>200 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.alignment_1_5_20_200_return_pct },
+  { key: 'alignment_5_20_200_return_pct', label: '5>20>200 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.alignment_5_20_200_return_pct },
   { key: 'buy_hold_return_pct', label: '200일 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.buy_hold_return_pct }
 ];
 const SORT_FIELDS = Object.fromEntries(MOMENTUM_COLUMNS.map(column => [column.key, column.get]));
@@ -30,6 +38,7 @@ const NUMERIC_SORT_FIELDS = new Set(MOMENTUM_COLUMNS.filter(column => column.typ
 let priceChart = null;
 let vpChart = null;
 let currentVpPeriod = '1d';
+let currentAlignmentStrategy = DEFAULT_ALIGNMENT_STRATEGY;
 let currentDetailName = null;
 const detailCache = {};
 
@@ -80,7 +89,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
   }
 
   function compareRows(a, b) {
-    const getter = SORT_FIELDS[sortState.key] || SORT_FIELDS.strategy_return_pct;
+    const getter = SORT_FIELDS[sortState.key] || SORT_FIELDS.alignment_1_5_20_200_return_pct;
     const av = getter(a);
     const bv = getter(b);
     const dir = sortState.dir === 'asc' ? 1 : -1;
@@ -133,7 +142,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
 
     rows.forEach(({name, strategy}) => {
       const ticker = data[name]?.ticker;
-      const latest = strategy?.latest || {};
+      const latest = strategy?.strategies?.[ALIGNMENT_1_5_20_200]?.latest || {};
       const rolling200 = strategy?.backtest?.rolling_200d || {};
       const tr = document.createElement('tr');
       tr.className = 'momentum-row' + (name === currentDetailName ? ' detail-active' : '');
@@ -141,7 +150,8 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
         createCell(name),
         createSignalCell(latest.signal),
         createCell(fmtPct(rolling200.volatility_breakout_return_pct), { color: statColor(rolling200.volatility_breakout_return_pct), weight: '800' }),
-        createCell(fmtPct(rolling200.strategy_return_pct), { color: statColor(rolling200.strategy_return_pct), weight: '800' }),
+        createCell(fmtPct(rolling200.alignment_1_5_20_200_return_pct), { color: statColor(rolling200.alignment_1_5_20_200_return_pct), weight: '800' }),
+        createCell(fmtPct(rolling200.alignment_5_20_200_return_pct), { color: statColor(rolling200.alignment_5_20_200_return_pct), weight: '800' }),
         createCell(fmtPct(rolling200.buy_hold_return_pct), { color: statColor(rolling200.buy_hold_return_pct), weight: '800' })
       );
       tr.addEventListener('click', () => {
@@ -180,6 +190,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     if (detailCache[ticker]) {
       if (!document.getElementById('chart-price') || !document.getElementById('chart-vp')) {
         renderDetailPanels();
+        initAlignmentTabs();
         initVpTabs();
       }
       renderDetail(detailCache[ticker], ticker, name);
@@ -195,6 +206,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       const json = await resp.json();
       detailCache[ticker] = json;
       renderDetailPanels();
+      initAlignmentTabs();
       initVpTabs();
       renderDetail(json, ticker, name);
     } catch {
@@ -354,7 +366,13 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     const rolling = backtest.rolling_200d || {};
     const journals = detailData.backtest_journals || {};
     const breakoutRecords = journals.volatility_breakout || [];
-    const alignmentRecords = journals.full_alignment || [];
+    const selectedStrategy = strategy.strategies?.[currentAlignmentStrategy]
+      || strategy.strategies?.[DEFAULT_ALIGNMENT_STRATEGY]
+      || {};
+    const alignmentRecords = journals[currentAlignmentStrategy] || [];
+    const alignmentBacktest = selectedStrategy.backtest || {};
+    const alignmentLabel = selectedStrategy.label || '1 > 5 > 20 > 200';
+    const alignmentReturn = alignmentBacktest.return_pct;
     const breakout = backtest.volatility_breakout || {};
     const costModel = strategy.cost_model || {};
     const accountLabel = costModel.account_label || '추천계좌';
@@ -384,7 +402,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     horizons.className = 'journal-horizon-strip';
     horizons.append(
       createHorizonItem('단기', '변동성 돌파', rolling.volatility_breakout_return_pct, 'short'),
-      createHorizonItem('중기', '정배열', rolling.strategy_return_pct, 'medium'),
+      createHorizonItem('중기', alignmentLabel, alignmentReturn, 'medium'),
       createHorizonItem('장기', '200일 보유', rolling.buy_hold_return_pct, 'long')
     );
 
@@ -407,15 +425,15 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       createJournalCard({
         tone: 'medium',
         horizon: '중기',
-        title: '정배열',
+        title: `정배열 ${alignmentLabel}`,
         rule: '정배열 전환 확인 → 다음 거래일 1d VWAP 체결',
         metrics: [
-          {label: '누적 수익률', value: fmtPct(rolling.strategy_return_pct), color: statColor(rolling.strategy_return_pct)},
-          {label: '완료 거래', value: `${backtest.trades ?? 0}건`},
-          {label: '승률', value: fmtWinRate(backtest.win_rate_pct)},
+          {label: '누적 수익률', value: fmtPct(alignmentReturn), color: statColor(alignmentReturn)},
+          {label: '완료 거래', value: `${alignmentBacktest.trades ?? 0}건`},
+          {label: '승률', value: fmtWinRate(alignmentBacktest.win_rate_pct)},
         ],
         records: alignmentRecords,
-        note: `1d > 5d > 20d > 200d · ${costNote} · *보유 중은 최신 1d VWAP 평가`,
+        note: `${alignmentLabel} · ${costNote} · *보유 중은 최신 1d VWAP 평가`,
       })
     );
 
@@ -424,6 +442,22 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
 
   function renderDetailPanels() {
     const pricePanel = createChartPanel('', 'chart-price');
+    const alignmentTabs = document.createElement('div');
+    alignmentTabs.className = 'alignment-tabs';
+    alignmentTabs.id = 'alignment-tabs';
+    alignmentTabs.setAttribute('role', 'tablist');
+    alignmentTabs.setAttribute('aria-label', '차트 정배열 전략 선택');
+    ALIGNMENT_OPTIONS.forEach(option => {
+      const button = document.createElement('button');
+      const active = option.key === currentAlignmentStrategy;
+      button.className = 'alignment-tab' + (active ? ' active' : '');
+      button.dataset.strategy = option.key;
+      button.textContent = option.label;
+      button.setAttribute('role', 'tab');
+      button.setAttribute('aria-selected', String(active));
+      alignmentTabs.appendChild(button);
+    });
+    pricePanel.insertBefore(alignmentTabs, pricePanel.querySelector('.chart-wrap'));
     const vpPanel = createChartPanel('Volume Profile', 'chart-vp');
     vpPanel.classList.add('volume-profile-panel');
     const journalSection = document.createElement('section');
@@ -442,6 +476,26 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     });
     vpPanel.insertBefore(tabs, vpPanel.querySelector('.chart-wrap'));
     view.detailContent.replaceChildren(pricePanel, vpPanel, journalSection);
+  }
+
+  function initAlignmentTabs() {
+    const tabs = document.getElementById('alignment-tabs');
+    if (!tabs) return;
+    tabs.addEventListener('click', event => {
+      if (!event.target.matches('.alignment-tab')) return;
+      const strategyKey = event.target.dataset.strategy;
+      if (!ALIGNMENT_OPTIONS.some(option => option.key === strategyKey)) return;
+      currentAlignmentStrategy = strategyKey;
+      document.querySelectorAll('.alignment-tab').forEach(button => {
+        const active = button.dataset.strategy === currentAlignmentStrategy;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-selected', String(active));
+      });
+      const ticker = data[currentDetailName]?.ticker;
+      if (!ticker || !detailCache[ticker]) return;
+      renderPriceChart(detailCache[ticker]);
+      renderBacktestJournals(detailCache[ticker]);
+    });
   }
 
   function initVpTabs() {
@@ -469,7 +523,8 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
   function renderPriceChart(detailData) {
     const ohlcv = detailData.ohlcv;
     const labels = ohlcv.map(d => d.date);
-    const signalMap = new Map((detailData.strategy_signal?.signals || []).map(signal => [signal.date, signal]));
+    const selectedSignals = detailData.strategy_signal?.strategies?.[currentAlignmentStrategy]?.signals || [];
+    const signalMap = new Map(selectedSignals.map(signal => [signal.date, signal]));
     const markerData = type => labels.map((date, i) => {
       const signal = signalMap.get(date);
       if (signal?.type !== type) return null;
