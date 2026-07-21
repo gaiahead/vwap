@@ -85,7 +85,7 @@ def test_strategy_available_for_newer_assets_inside_recent_200_day_scope():
         "entry": "today_open + previous_range * k",
         "exit": "next_day_open",
         "fee_one_way_pct": 0.03,
-        "final_day_entry": "skipped_without_next_open",
+        "final_day_entry": "tracked_as_open_without_next_open",
     }
 
 
@@ -129,6 +129,16 @@ def test_volatility_breakout_k_half_compounds_completed_next_open_trades():
             "exit_price": 130.0,
             "return_pct": round(((130.0 / 127.0) * fee_multiplier**2 - 1) * 100, 2),
             "status": "CLOSED",
+        },
+        {
+            "entry_date": "2026-01-09",
+            "entry_price": 131.0,
+            "exit_date": None,
+            "exit_price": None,
+            "valuation_date": "2026-01-09",
+            "valuation_price": 190.0,
+            "return_pct": round(((190.0 / 131.0) * fee_multiplier - 1) * 100, 2),
+            "status": "OPEN",
         },
     ]
     assert expected_first_trade_return > 0
@@ -307,7 +317,7 @@ def test_strategy_signal_reuses_each_alignment_summary(monkeypatch):
     )
 
 
-def test_volatility_breakout_skips_final_day_without_next_open():
+def test_volatility_breakout_tracks_final_day_trigger_as_open_without_counting_return():
     idx = pd.bdate_range(start="2026-02-02", periods=3)
     context = pd.DataFrame(
         {
@@ -321,8 +331,20 @@ def test_volatility_breakout_skips_final_day_without_next_open():
 
     result = gen.simulate_volatility_breakout_strategy(context, visible_days=2)
 
+    expected_open_return = (
+        190.0 / 104.0 * (1 - gen.STRATEGY_FEE_ONE_WAY) - 1
+    ) * 100
     assert result["trades"] == 0
-    assert result["journal"] == []
+    assert result["journal"] == [{
+        "entry_date": "2026-02-04",
+        "entry_price": 104.0,
+        "exit_date": None,
+        "exit_price": None,
+        "valuation_date": "2026-02-04",
+        "valuation_price": 190.0,
+        "return_pct": round(expected_open_return, 2),
+        "status": "OPEN",
+    }]
     assert result["final_equity"] == 1.0
     assert result["strategy_return_pct"] == 0.0
 
@@ -649,8 +671,14 @@ def test_build_asset_outputs_keeps_trend_and_detail_strategy_contract_in_sync():
         gen.ALIGNMENT_5_20_60_200,
         gen.ALIGNMENT_20_60_200,
     }
-    assert detail["backtest_journals"]["volatility_breakout"]
-    assert all(row["status"] == "CLOSED" for row in detail["backtest_journals"]["volatility_breakout"])
+    breakout_journal = detail["backtest_journals"]["volatility_breakout"]
+    assert breakout_journal
+    assert all(row["status"] == "CLOSED" for row in breakout_journal[:-1])
+    assert breakout_journal[-1]["status"] == "OPEN"
+    assert (
+        trend["strategy_signal"]["backtest"]["volatility_breakout"]["trades"]
+        == len(breakout_journal) - 1
+    )
     assert "mdd" not in json.dumps(trend["strategy_signal"], ensure_ascii=False).lower()
     assert trend["lookback_trading_days"] == detail["lookback_trading_days"] == gen.LOOKBACK_TRADING_DAYS
     assert trend["latest_price"] == detail["latest_price"] == round(float(df["close"].iloc[-1]), 2)

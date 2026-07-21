@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260721-0701';
+const DATA_VERSION = 'breakout-open-20260721';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -463,7 +463,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
           {label: '승률', value: fmtWinRate(breakout.win_rate_pct)},
         ],
         records: breakoutRecords,
-        note: `k ${breakout.k ?? 0.5} · ${costNote} · 마지막 날 신규 진입 제외`,
+        note: `k ${breakout.k ?? 0.5} · ${costNote} · 최근 거래일 돌파는 보유 중 표시, 완료 수익률 제외`,
       }),
       ...alignmentContexts.map(context => createAlignmentJournalCard(context, costNote))
     );

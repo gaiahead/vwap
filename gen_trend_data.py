@@ -545,9 +545,10 @@ def simulate_volatility_breakout_strategy(
     """전일 변동폭 기반 돌파 매수 후 다음 거래일 시가에 청산한다.
 
     돌파가는 `당일 시가 + (전일 고가 - 전일 저가) * k`다. 최근 표시
-    구간의 첫날은 직전 한 행을 돌파가 계산에만 사용하고, 마지막 날은 다음
-    거래일 시가가 없으므로 신규 진입하지 않는다. 매 거래마다 전액을
-    재투자하고 매수·매도 양쪽에 동일한 편도 수수료를 적용한다.
+    구간의 첫날은 직전 한 행을 돌파가 계산에만 사용한다. 마지막 날 돌파는
+    다음 거래일 시가가 아직 없으므로 OPEN 일지로 남기되 완료 거래 수와
+    누적 수익률에는 포함하지 않는다. 매 거래마다 전액을 재투자하고
+    매수·매도 양쪽에 동일한 편도 수수료를 적용한다.
     """
     cash = 1.0
     trades = 0
@@ -600,6 +601,46 @@ def simulate_volatility_breakout_strategy(
             "return_pct": safe_round(trade_return, 2),
             "status": "CLOSED",
         })
+
+    last_index = len(context) - 1
+    if last_index >= max(1, first_visible_index):
+        previous = context.iloc[last_index - 1]
+        today = context.iloc[last_index]
+        valuation_price = today.get("vwap_1d")
+        if is_missing(valuation_price):
+            valuation_price = today.get("close")
+        values = [
+            previous.get("high"),
+            previous.get("low"),
+            today.get("open"),
+            today.get("high"),
+            valuation_price,
+        ]
+        if not any(is_missing(value) for value in values):
+            previous_range = float(previous["high"]) - float(previous["low"])
+            target_price = float(today["open"]) + previous_range * float(k)
+            if (
+                previous_range > 0
+                and target_price > 0
+                and float(valuation_price) > 0
+                and float(today["high"]) >= target_price
+            ):
+                open_return = (
+                    float(valuation_price)
+                    / target_price
+                    * (1 - STRATEGY_FEE_ONE_WAY)
+                    - 1
+                ) * 100
+                journal.append({
+                    "entry_date": date_key(context.index[last_index]),
+                    "entry_price": safe_round(target_price),
+                    "exit_date": None,
+                    "exit_price": None,
+                    "valuation_date": date_key(context.index[last_index]),
+                    "valuation_price": safe_round(valuation_price),
+                    "return_pct": safe_round(open_return, 2),
+                    "status": "OPEN",
+                })
 
     return {
         "k": float(k),
@@ -780,7 +821,7 @@ def build_backtest_summary(
             "entry": "today_open + previous_range * k",
             "exit": "next_day_open",
             "fee_one_way_pct": STRATEGY_RULES["fee_one_way_pct"],
-            "final_day_entry": "skipped_without_next_open",
+            "final_day_entry": "tracked_as_open_without_next_open",
         },
         "rolling_200d": {
             "window_days": len(work),
