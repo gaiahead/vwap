@@ -48,6 +48,18 @@ def test_requested_tiger_korea_ai_power_equipment_top3_plus_is_registered():
     assert ("TIGER 코리아AI전력기기TOP3플러스", "0117V0.KS") in gen.ASSETS
 
 
+def test_requested_korean_humanoid_robot_assets_are_registered():
+    requested_assets = {
+        ("ACE K휴머노이드로봇산업TOP2+", "0177X0.KS"),
+        ("레인보우로보틱스", "277810.KQ"),
+        ("로보티즈", "108490.KQ"),
+        ("에스피지", "058610.KQ"),
+    }
+
+    assert requested_assets <= set(gen.ASSETS)
+    assert {"277810.KQ", "108490.KQ", "058610.KQ"} <= gen.DOMESTIC_STOCK_TICKERS
+
+
 def test_requested_world_healthcare_biotech_financial_etfs_are_registered():
     requested_assets = {
         ("TIGER 토탈월드스탁액티브", "0060H0.KS"),

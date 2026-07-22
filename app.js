@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260722-1600';
+const DATA_VERSION = 'robot-assets-20260722-2258';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
