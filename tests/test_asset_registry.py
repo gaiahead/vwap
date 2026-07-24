@@ -62,6 +62,22 @@ def test_requested_korean_humanoid_robot_assets_are_registered():
     assert {"277810.KQ", "108490.KQ", "058610.KQ", "454910.KS"} <= gen.DOMESTIC_STOCK_TICKERS
 
 
+def test_requested_solar_assets_use_correct_tickers_and_cost_models():
+    requested_assets = {
+        ("HD현대에너지솔루션", "322000.KS"),
+        ("PLUS 태양광&ESS", "457990.KS"),
+        ("대명에너지", "389260.KQ"),
+        ("신성이엔지", "011930.KS"),
+        ("SDN", "099220.KQ"),
+    }
+    domestic_stocks = {"322000.KS", "389260.KQ", "011930.KS", "099220.KQ"}
+
+    assert requested_assets <= set(gen.ASSETS)
+    assert ("PLUS 태양광&ESS", "389260.KS") not in gen.ASSETS
+    assert domestic_stocks <= gen.DOMESTIC_STOCK_TICKERS
+    assert gen.build_strategy_cost_model("457990.KS")["product_class"] == "DOMESTIC_EQUITY_ETF"
+
+
 def test_requested_world_healthcare_biotech_financial_etfs_are_registered():
     requested_assets = {
         ("TIGER 토탈월드스탁액티브", "0060H0.KS"),
