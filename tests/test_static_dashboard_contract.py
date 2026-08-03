@@ -21,9 +21,9 @@ def test_table_columns_and_default_sort_match_current_dashboard_contract():
         "신호 1",
         "신호 2",
         "신호 3",
-        "1&gt;5&gt;20&gt;60&gt;200 수익률",
-        "5&gt;20&gt;60&gt;200 수익률",
-        "20&gt;60&gt;200 수익률",
+        "1&gt;5&gt;20&gt;60&gt;120 수익률",
+        "5&gt;20&gt;60&gt;120 수익률",
+        "20&gt;60&gt;120 수익률",
         "200일 수익률",
     ]
     assert sort_keys == [
@@ -31,12 +31,12 @@ def test_table_columns_and_default_sort_match_current_dashboard_contract():
         "signal_1",
         "signal_2",
         "signal_3",
-        "alignment_1_5_20_60_200_return_pct",
-        "alignment_5_20_60_200_return_pct",
-        "alignment_20_60_200_return_pct",
+        "alignment_1_5_20_60_120_return_pct",
+        "alignment_5_20_60_120_return_pct",
+        "alignment_20_60_120_return_pct",
         "buy_hold_return_pct",
     ]
-    assert "const DEFAULT_SORT = { key: 'alignment_1_5_20_60_200_return_pct', dir: 'desc' }" in app
+    assert "const DEFAULT_SORT = { key: 'alignment_1_5_20_60_120_return_pct', dir: 'desc' }" in app
     assert "const ALIGNMENT_SIGNAL_COLUMNS = ALIGNMENT_OPTIONS.map" in app
     assert "const ALIGNMENT_RETURN_COLUMNS = ALIGNMENT_OPTIONS.map" in app
     assert "strategies?.[option.key]?.latest?.signal" in app
@@ -46,24 +46,30 @@ def test_table_columns_and_default_sort_match_current_dashboard_contract():
     assert "label: `${option.label} 수익률`" in app
     assert "rolling_200d?.[`${option.key}_return_pct`]" in app
     for strategy_constant, label, horizon, tone in [
-        ("ALIGNMENT_1_5_20_60_200", "1>5>20>60>200", "단기", "short"),
-        ("ALIGNMENT_5_20_60_200", "5>20>60>200", "중기", "medium"),
-        ("ALIGNMENT_20_60_200", "20>60>200", "장기", "long"),
+        ("ALIGNMENT_1_5_20_60_120", "1>5>20>60>120", "단기", "short"),
+        ("ALIGNMENT_5_20_60_120", "5>20>60>120", "중기", "medium"),
+        ("ALIGNMENT_20_60_120", "20>60>120", "장기", "long"),
     ]:
         assert re.search(
             rf"\{{ key: {strategy_constant}, label: '{label}'.+horizon: '{horizon}', tone: '{tone}' \}}",
             app,
         )
 
-    assert "신호 1은 1d &gt; 5d &gt; 20d &gt; 60d &gt; 200d" in html
-    assert "신호 2는 5d &gt; 20d &gt; 60d &gt; 200d" in html
-    assert "신호 3은 20d &gt; 60d &gt; 200d" in html
+    assert "신호 1은 1d &gt; 5d &gt; 20d &gt; 60d &gt; 120d" in html
+    assert "신호 2는 5d &gt; 20d &gt; 60d &gt; 120d" in html
+    assert "신호 3은 20d &gt; 60d &gt; 120d" in html
     assert "평가 첫날 정배열이면 초기 신호" in html
     assert "다음 거래일 1d VWAP" in html
     combined = html + app + generator
     for token in ["5/20 괴리율", "5/200 괴리율", "MDD", "mdd", "drawdown"]:
         assert token not in combined
-    for legacy_key in ["alignment_1_5_20_200", "alignment_5_20_200"]:
+    for legacy_key in [
+        "alignment_1_5_20_200",
+        "alignment_5_20_200",
+        "alignment_1_5_20_60_200",
+        "alignment_5_20_60_200",
+        "alignment_20_60_200",
+    ]:
         assert legacy_key not in combined
 
 
@@ -166,14 +172,14 @@ def test_signal_cell_uses_buy_sell_colors_without_name_indicator():
     assert ".signal-cell.sell" in css
 
 
-def test_detail_panels_vp_tabs_and_price_datasets_use_1_5_20_60_200_with_trade_markers():
+def test_detail_panels_vp_tabs_and_price_datasets_use_1_5_20_60_120_with_trade_markers():
     app = read("app.js")
 
     assert "VWAP Lines · 3/5/10/20/40/60/100/200" not in app
     assert "VWAP Lines · 1/5/20/40/60/100/200" not in app
     assert "VWAP Lines · 2/5/20/40/60/100/200" not in app
     assert "Volume Profile" in app
-    assert "const VP_PERIODS = ['1d', '5d', '20d', '60d', '200d']" in app
+    assert "const VP_PERIODS = ['1d', '5d', '20d', '60d', '120d']" in app
     assert "let currentVpPeriod = '1d';" in app
     assert "currentVpPeriod = '1d';" in app
     assert "const PRICE_DATASET_ORDER = ['BUY', 'SELL', ...PRICE_LINE_DEFS.map(def => def.label)];" in app
@@ -183,7 +189,8 @@ def test_detail_panels_vp_tabs_and_price_datasets_use_1_5_20_60_200_with_trade_m
     assert "{ label: '5d', window: 5, color: '#dc2626', dash: [], width: 1.15 }" in app
     assert "{ label: '20d', window: 20, color: '#16a34a', dash: [], width: 1.15 }" in app
     assert "{ label: '60d', window: 60, color: '#2563eb', dash: [], width: 1.15 }" in app
-    assert "{ label: '200d', window: 200, color: '#000000', dash: [], width: 1.15" in app
+    assert "{ label: '120d', window: 120, color: '#000000', dash: [], width: 1.15" in app
+    assert "{ label: '200d', window: 200" not in app
     assert "dash: [5, 3]" not in app
     assert "{ label: '3d'" not in app
     assert "{ label: '10d'" not in app
@@ -209,7 +216,7 @@ def test_detail_panels_vp_tabs_and_price_datasets_use_1_5_20_60_200_with_trade_m
     assert "journals[currentAlignmentStrategy]" not in app
 
     line_labels = re.findall(r"\{ label: '([^']+)'", app)
-    assert line_labels == ["1d", "5d", "20d", "60d", "200d", "BUY", "SELL"]
+    assert line_labels == ["1d", "5d", "20d", "60d", "120d", "BUY", "SELL"]
 
 
 def test_cache_bust_version_is_consistent_everywhere():

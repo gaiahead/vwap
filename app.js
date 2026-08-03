@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260803-no-breakout';
+const DATA_VERSION = 'data-20260803-vwap120';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -7,24 +7,24 @@ const COLOR = {
   muted: '#64748b',
   blue: '#2563eb'
 };
-const ALIGNMENT_1_5_20_60_200 = 'alignment_1_5_20_60_200';
-const ALIGNMENT_5_20_60_200 = 'alignment_5_20_60_200';
-const ALIGNMENT_20_60_200 = 'alignment_20_60_200';
+const ALIGNMENT_1_5_20_60_120 = 'alignment_1_5_20_60_120';
+const ALIGNMENT_5_20_60_120 = 'alignment_5_20_60_120';
+const ALIGNMENT_20_60_120 = 'alignment_20_60_120';
 const ALIGNMENT_OPTIONS = [
-  { key: ALIGNMENT_1_5_20_60_200, label: '1>5>20>60>200', fallbackLabel: '1 > 5 > 20 > 60 > 200', horizon: '단기', tone: 'short' },
-  { key: ALIGNMENT_5_20_60_200, label: '5>20>60>200', fallbackLabel: '5 > 20 > 60 > 200', horizon: '중기', tone: 'medium' },
-  { key: ALIGNMENT_20_60_200, label: '20>60>200', fallbackLabel: '20 > 60 > 200', horizon: '장기', tone: 'long' }
+  { key: ALIGNMENT_1_5_20_60_120, label: '1>5>20>60>120', fallbackLabel: '1 > 5 > 20 > 60 > 120', horizon: '단기', tone: 'short' },
+  { key: ALIGNMENT_5_20_60_120, label: '5>20>60>120', fallbackLabel: '5 > 20 > 60 > 120', horizon: '중기', tone: 'medium' },
+  { key: ALIGNMENT_20_60_120, label: '20>60>120', fallbackLabel: '20 > 60 > 120', horizon: '장기', tone: 'long' }
 ];
-const DEFAULT_ALIGNMENT_STRATEGY = ALIGNMENT_1_5_20_60_200;
+const DEFAULT_ALIGNMENT_STRATEGY = ALIGNMENT_1_5_20_60_120;
 const ALIGNMENT_ENTRY_RULE = '첫 평가 정배열은 초기 진입 · 이후 전환 확인 → 다음 거래일 1d VWAP 체결';
-const DEFAULT_SORT = { key: 'alignment_1_5_20_60_200_return_pct', dir: 'desc' };
-const VP_PERIODS = ['1d', '5d', '20d', '60d', '200d'];
+const DEFAULT_SORT = { key: 'alignment_1_5_20_60_120_return_pct', dir: 'desc' };
+const VP_PERIODS = ['1d', '5d', '20d', '60d', '120d'];
 const PRICE_LINE_DEFS = [
   { label: '1d', window: 1, color: '#eab308', dash: [], width: 1.15 },
   { label: '5d', window: 5, color: '#dc2626', dash: [], width: 1.15 },
   { label: '20d', window: 20, color: '#16a34a', dash: [], width: 1.15 },
   { label: '60d', window: 60, color: '#2563eb', dash: [], width: 1.15 },
-  { label: '200d', window: 200, color: '#000000', dash: [], width: 1.15 }
+  { label: '120d', window: 120, color: '#000000', dash: [], width: 1.15 }
 ];
 const PRICE_DATASET_ORDER = ['BUY', 'SELL', ...PRICE_LINE_DEFS.map(def => def.label)];
 
@@ -103,7 +103,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
   }
 
   function compareRows(a, b) {
-    const getter = SORT_FIELDS[sortState.key] || SORT_FIELDS.alignment_1_5_20_60_200_return_pct;
+    const getter = SORT_FIELDS[sortState.key] || SORT_FIELDS.alignment_1_5_20_60_120_return_pct;
     const av = getter(a);
     const bv = getter(b);
     const dir = sortState.dir === 'asc' ? 1 : -1;
@@ -156,9 +156,9 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
 
     rows.forEach(({name, strategy}) => {
       const ticker = data[name]?.ticker;
-      const latestShort = strategy?.strategies?.[ALIGNMENT_1_5_20_60_200]?.latest || {};
-      const latestMedium = strategy?.strategies?.[ALIGNMENT_5_20_60_200]?.latest || {};
-      const latestLong = strategy?.strategies?.[ALIGNMENT_20_60_200]?.latest || {};
+      const latestShort = strategy?.strategies?.[ALIGNMENT_1_5_20_60_120]?.latest || {};
+      const latestMedium = strategy?.strategies?.[ALIGNMENT_5_20_60_120]?.latest || {};
+      const latestLong = strategy?.strategies?.[ALIGNMENT_20_60_120]?.latest || {};
       const rolling200 = strategy?.backtest?.rolling_200d || {};
       const tr = document.createElement('tr');
       tr.className = 'momentum-row' + (name === currentDetailName ? ' detail-active' : '');
@@ -167,9 +167,9 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
         createSignalCell(latestShort.signal),
         createSignalCell(latestMedium.signal),
         createSignalCell(latestLong.signal),
-        createCell(fmtPct(rolling200.alignment_1_5_20_60_200_return_pct), { color: statColor(rolling200.alignment_1_5_20_60_200_return_pct), weight: '800' }),
-        createCell(fmtPct(rolling200.alignment_5_20_60_200_return_pct), { color: statColor(rolling200.alignment_5_20_60_200_return_pct), weight: '800' }),
-        createCell(fmtPct(rolling200.alignment_20_60_200_return_pct), { color: statColor(rolling200.alignment_20_60_200_return_pct), weight: '800' }),
+        createCell(fmtPct(rolling200.alignment_1_5_20_60_120_return_pct), { color: statColor(rolling200.alignment_1_5_20_60_120_return_pct), weight: '800' }),
+        createCell(fmtPct(rolling200.alignment_5_20_60_120_return_pct), { color: statColor(rolling200.alignment_5_20_60_120_return_pct), weight: '800' }),
+        createCell(fmtPct(rolling200.alignment_20_60_120_return_pct), { color: statColor(rolling200.alignment_20_60_120_return_pct), weight: '800' }),
         createCell(fmtPct(rolling200.buy_hold_return_pct), { color: statColor(rolling200.buy_hold_return_pct), weight: '800' })
       );
       tr.addEventListener('click', () => {

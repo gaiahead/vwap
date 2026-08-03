@@ -37,12 +37,12 @@ def test_prepare_strategy_frame_uses_indicator_warmup_but_returns_recent_200_day
     first = work.iloc[0]
     assert first["vwap_1d"] == (first["high"] + first["low"] + first["close"]) / 3
     assert "vwap_2d" not in work
-    assert not work[["vwap_5d", "vwap_20d", "vwap_60d", "vwap_200d"]].isna().any().any()
+    assert not work[["vwap_5d", "vwap_20d", "vwap_60d", "vwap_120d"]].isna().any().any()
     source = df.tail(gen.HISTORY_TRADING_DAYS).copy()
     source_proxy = (source["high"] + source["low"] + source["close"]) / 3
-    expected_vwap200 = source_proxy.rolling(200).mean()
-    assert math.isclose(work["vwap_200d"].iloc[0], expected_vwap200.loc[work.index[0]])
-    assert math.isclose(work["vwap_200d"].iloc[-1], source_proxy.iloc[-200:].mean())
+    expected_vwap120 = source_proxy.rolling(120).mean()
+    assert math.isclose(work["vwap_120d"].iloc[0], expected_vwap120.loc[work.index[0]])
+    assert math.isclose(work["vwap_120d"].iloc[-1], source_proxy.iloc[-120:].mean())
     assert not work["vwap_1d"].isna().any()
 
 
@@ -53,29 +53,29 @@ def test_strategy_available_for_newer_assets_inside_recent_200_day_scope():
 
     assert signal["available"] is True
     assert set(signal["strategies"]) == {
-        gen.ALIGNMENT_1_5_20_60_200,
-        gen.ALIGNMENT_5_20_60_200,
-        gen.ALIGNMENT_20_60_200,
+        gen.ALIGNMENT_1_5_20_60_120,
+        gen.ALIGNMENT_5_20_60_120,
+        gen.ALIGNMENT_20_60_120,
     }
     for strategy in signal["strategies"].values():
         latest = strategy["latest"]
         assert latest["vwap5"] is not None
         assert latest["vwap20"] is not None
         assert latest["vwap60"] is not None
-        assert latest["vwap200"] is None
+        assert latest["vwap120"] is None
         assert latest["signal"] == "WAIT"
         assert latest["alignment"] == "N/A"
     rolling_200d = signal["backtest"]["rolling_200d"]
     assert rolling_200d["window_days"] == len(df)
-    assert rolling_200d["alignment_1_5_20_60_200_return_pct"] is not None
-    assert rolling_200d["alignment_5_20_60_200_return_pct"] is not None
-    assert rolling_200d["alignment_20_60_200_return_pct"] is not None
+    assert rolling_200d["alignment_1_5_20_60_120_return_pct"] is not None
+    assert rolling_200d["alignment_5_20_60_120_return_pct"] is not None
+    assert rolling_200d["alignment_20_60_120_return_pct"] is not None
     assert rolling_200d["buy_hold_return_pct"] is not None
     assert set(rolling_200d) == {
         "window_days",
-        "alignment_1_5_20_60_200_return_pct",
-        "alignment_5_20_60_200_return_pct",
-        "alignment_20_60_200_return_pct",
+        "alignment_1_5_20_60_120_return_pct",
+        "alignment_5_20_60_120_return_pct",
+        "alignment_20_60_120_return_pct",
         "buy_hold_return_pct",
     }
 
@@ -88,7 +88,7 @@ def test_each_alignment_charges_stock_transaction_tax_only_when_closed():
             "vwap_5d": [120.0, 130.0, 130.0, 120.0, 120.0],
             "vwap_20d": [90.0, 120.0, 120.0, 90.0, 90.0],
             "vwap_60d": [100.0] * 5,
-            "vwap_200d": [80.0] * 5,
+            "vwap_120d": [80.0] * 5,
         },
         index=idx,
     )
@@ -139,9 +139,9 @@ def test_build_strategy_signal_applies_ticker_cost_model_to_all_alignments():
     assert stock["cost_model"]["transaction_tax_sell_pct"] == 0.2
     assert etf["cost_model"]["transaction_tax_sell_pct"] == 0.0
     for field in [
-        "alignment_1_5_20_60_200_return_pct",
-        "alignment_5_20_60_200_return_pct",
-        "alignment_20_60_200_return_pct",
+        "alignment_1_5_20_60_120_return_pct",
+        "alignment_5_20_60_120_return_pct",
+        "alignment_20_60_120_return_pct",
     ]:
         assert (
             stock["backtest"]["rolling_200d"][field]
@@ -160,7 +160,7 @@ def test_win_rates_use_unrounded_trade_returns():
             "vwap_5d": [110.0, 90.0, 90.0, 110.0, 110.0],
             "vwap_20d": [80.0] * 5,
             "vwap_60d": [75.0] * 5,
-            "vwap_200d": [70.0] * 5,
+            "vwap_120d": [70.0] * 5,
         },
         index=idx,
     )
@@ -170,18 +170,18 @@ def test_win_rates_use_unrounded_trade_returns():
     summary = gen.build_backtest_summary(
         work,
         {
-            gen.ALIGNMENT_1_5_20_60_200: alignment,
-            gen.ALIGNMENT_5_20_60_200: alignment,
-            gen.ALIGNMENT_20_60_200: alignment,
+            gen.ALIGNMENT_1_5_20_60_120: alignment,
+            gen.ALIGNMENT_5_20_60_120: alignment,
+            gen.ALIGNMENT_20_60_120: alignment,
         },
     )
     assert gen.build_alignment_summary(work, alignment)["win_rate_pct"] == 100.0
     assert set(summary["rolling_200d"]) == {
         "window_days",
         "buy_hold_return_pct",
-        "alignment_1_5_20_60_200_return_pct",
-        "alignment_5_20_60_200_return_pct",
-        "alignment_20_60_200_return_pct",
+        "alignment_1_5_20_60_120_return_pct",
+        "alignment_5_20_60_120_return_pct",
+        "alignment_20_60_120_return_pct",
     }
 
 
@@ -223,21 +223,21 @@ def test_three_alignment_rules_can_have_different_current_states():
         "vwap_5d": 130.0,
         "vwap_20d": 120.0,
         "vwap_60d": 110.0,
-        "vwap_200d": 100.0,
+        "vwap_120d": 100.0,
     })
     long_only = pd.Series({
         "vwap_1d": 90.0,
         "vwap_5d": 100.0,
         "vwap_20d": 120.0,
         "vwap_60d": 110.0,
-        "vwap_200d": 100.0,
+        "vwap_120d": 100.0,
     })
 
-    assert gen.alignment_signal(medium_only, gen.ALIGNMENT_1_5_20_60_200) == "SELL"
-    assert gen.alignment_signal(medium_only, gen.ALIGNMENT_5_20_60_200) == "BUY"
-    assert gen.alignment_signal(medium_only, gen.ALIGNMENT_20_60_200) == "BUY"
-    assert gen.alignment_signal(long_only, gen.ALIGNMENT_5_20_60_200) == "SELL"
-    assert gen.alignment_signal(long_only, gen.ALIGNMENT_20_60_200) == "BUY"
+    assert gen.alignment_signal(medium_only, gen.ALIGNMENT_1_5_20_60_120) == "SELL"
+    assert gen.alignment_signal(medium_only, gen.ALIGNMENT_5_20_60_120) == "BUY"
+    assert gen.alignment_signal(medium_only, gen.ALIGNMENT_20_60_120) == "BUY"
+    assert gen.alignment_signal(long_only, gen.ALIGNMENT_5_20_60_120) == "SELL"
+    assert gen.alignment_signal(long_only, gen.ALIGNMENT_20_60_120) == "BUY"
 
 
 def test_three_alignment_strategies_have_independent_events_and_returns():
@@ -248,7 +248,7 @@ def test_three_alignment_strategies_have_independent_events_and_returns():
             "vwap_5d": [40.0, 50.0, 100.0, 100.0, 100.0, 50.0, 40.0, 40.0],
             "vwap_20d": [50.0, 80.0, 80.0, 80.0, 80.0, 80.0, 50.0, 50.0],
             "vwap_60d": [70.0] * 8,
-            "vwap_200d": [60.0] * 8,
+            "vwap_120d": [60.0] * 8,
         },
         index=idx,
     )
@@ -261,9 +261,9 @@ def test_three_alignment_strategies_have_independent_events_and_returns():
         for strategy_key in gen.ALIGNMENT_STRATEGIES
     }
 
-    short = simulations[gen.ALIGNMENT_1_5_20_60_200]
-    medium = simulations[gen.ALIGNMENT_5_20_60_200]
-    long = simulations[gen.ALIGNMENT_20_60_200]
+    short = simulations[gen.ALIGNMENT_1_5_20_60_120]
+    medium = simulations[gen.ALIGNMENT_5_20_60_120]
+    long = simulations[gen.ALIGNMENT_20_60_120]
     assert [signal["type"] for signal in short["signals"]] == ["BUY", "SELL"]
     assert [signal["type"] for signal in medium["signals"]] == ["BUY", "SELL"]
     assert [signal["type"] for signal in long["signals"]] == ["BUY", "SELL"]
@@ -283,7 +283,7 @@ def test_alignment_strategy_marks_transitions_and_executes_next_day_vwap():
             "vwap_5d": 130.0 if aligned else 120.0,
             "vwap_20d": 120.0 if aligned else 125.0,
             "vwap_60d": 110.0,
-            "vwap_200d": 100.0,
+            "vwap_120d": 100.0,
         })
     work = pd.DataFrame(rows, index=idx)
 
@@ -302,9 +302,9 @@ def test_alignment_strategy_marks_transitions_and_executes_next_day_vwap():
         execution = by_date[signal["execution_date"]]
         assert signal["marker_price"] == confirmed["vwap_5d"]
         if signal["type"] == "BUY":
-            assert confirmed["vwap_1d"] > confirmed["vwap_5d"] > confirmed["vwap_20d"] > confirmed["vwap_60d"] > confirmed["vwap_200d"]
+            assert confirmed["vwap_1d"] > confirmed["vwap_5d"] > confirmed["vwap_20d"] > confirmed["vwap_60d"] > confirmed["vwap_120d"]
         else:
-            assert not (confirmed["vwap_1d"] > confirmed["vwap_5d"] > confirmed["vwap_20d"] > confirmed["vwap_60d"] > confirmed["vwap_200d"])
+            assert not (confirmed["vwap_1d"] > confirmed["vwap_5d"] > confirmed["vwap_20d"] > confirmed["vwap_60d"] > confirmed["vwap_120d"])
         assert signal["price"] == round(float(execution["vwap_1d"]), 4)
 
     journal = gen.build_alignment_journal(work, simulation)
@@ -326,7 +326,7 @@ def test_last_day_transition_is_marked_even_without_a_next_day_execution():
             "vwap_5d": [120.0, 120.0, 130.0],
             "vwap_20d": [125.0, 125.0, 120.0],
             "vwap_60d": [110.0, 110.0, 110.0],
-            "vwap_200d": [100.0, 100.0, 100.0],
+            "vwap_120d": [100.0, 100.0, 100.0],
         },
         index=idx,
     )
@@ -344,7 +344,7 @@ def test_last_day_transition_is_marked_even_without_a_next_day_execution():
         "vwap5": 130.0,
         "vwap20": 120.0,
         "vwap60": 110.0,
-        "vwap200": 100.0,
+        "vwap120": 100.0,
     }]
     assert simulation["in_position"] is False
     assert simulation["final_equity"] == 1.0
@@ -358,7 +358,7 @@ def test_alignment_strategies_enter_next_day_when_first_visible_state_is_aligned
             "vwap_5d": [130.0] * 4,
             "vwap_20d": [120.0] * 4,
             "vwap_60d": [110.0] * 4,
-            "vwap_200d": [100.0] * 4,
+            "vwap_120d": [100.0] * 4,
         },
         index=idx,
     )
@@ -402,7 +402,7 @@ def test_first_evaluable_aligned_state_after_wait_is_an_initial_entry():
             "vwap_5d": [130.0] * 4,
             "vwap_20d": [120.0] * 4,
             "vwap_60d": [110.0] * 4,
-            "vwap_200d": [None, None, 100.0, 100.0],
+            "vwap_120d": [None, None, 100.0, 100.0],
         },
         index=idx,
     )
@@ -429,7 +429,7 @@ def test_last_day_first_evaluable_alignment_is_marked_but_not_executed():
             "vwap_5d": [130.0] * 3,
             "vwap_20d": [120.0] * 3,
             "vwap_60d": [110.0] * 3,
-            "vwap_200d": [None, None, 100.0],
+            "vwap_120d": [None, None, 100.0],
         },
         index=idx,
     )
@@ -453,7 +453,7 @@ def test_build_strategy_keeps_first_day_transition_and_all_200_visible_events(mo
             "vwap_5d": 130.0 if aligned else 120.0,
             "vwap_20d": 120.0 if aligned else 90.0,
             "vwap_60d": 110.0,
-            "vwap_200d": 100.0,
+            "vwap_120d": 100.0,
         })
     context = pd.DataFrame(rows, index=idx)
 
@@ -481,7 +481,7 @@ def test_trade_return_and_win_rate_include_both_one_way_fees(monkeypatch):
             "vwap_5d": [110.0, 90.0, 90.0, 110.0, 110.0],
             "vwap_20d": [80.0] * 5,
             "vwap_60d": [75.0] * 5,
-            "vwap_200d": [70.0] * 5,
+            "vwap_120d": [70.0] * 5,
         },
         index=idx,
     )
@@ -492,7 +492,7 @@ def test_trade_return_and_win_rate_include_both_one_way_fees(monkeypatch):
 
     monkeypatch.setattr(gen, "prepare_strategy_frame", lambda _df, output_days=200: work.copy())
     result = gen.build_strategy_signal(make_ohlcv(range(100, 125)))
-    strict = result["strategies"][gen.ALIGNMENT_1_5_20_60_200]["backtest"]
+    strict = result["strategies"][gen.ALIGNMENT_1_5_20_60_120]["backtest"]
     assert strict["trades"] == 1
     assert strict["win_rate_pct"] == 0.0
 
@@ -525,22 +525,22 @@ def test_build_asset_outputs_keeps_trend_and_detail_strategy_contract_in_sync():
     assert trend["strategy_signal"] == detail["strategy_signal"]
     assert "backtest_journals" not in trend
     assert set(detail["backtest_journals"]) == {
-        gen.ALIGNMENT_1_5_20_60_200,
-        gen.ALIGNMENT_5_20_60_200,
-        gen.ALIGNMENT_20_60_200,
+        gen.ALIGNMENT_1_5_20_60_120,
+        gen.ALIGNMENT_5_20_60_120,
+        gen.ALIGNMENT_20_60_120,
     }
     assert "mdd" not in json.dumps(trend["strategy_signal"], ensure_ascii=False).lower()
     assert trend["lookback_trading_days"] == detail["lookback_trading_days"] == gen.LOOKBACK_TRADING_DAYS
     assert trend["latest_price"] == detail["latest_price"] == round(float(df["close"].iloc[-1]), 2)
-    assert gen.WINDOWS == [5, 20, 60, 200]
-    assert gen.VOLUME_PROFILE_WINDOWS == [1, 5, 20, 60, 200]
+    assert gen.WINDOWS == [5, 20, 60, 120]
+    assert gen.VOLUME_PROFILE_WINDOWS == [1, 5, 20, 60, 120]
     assert len(detail["ohlcv"]) == gen.LOOKBACK_TRADING_DAYS
-    assert detail["ohlcv"][0]["vwap_200d"] is not None
-    assert set(detail["volume_profile"]) == {"1d", "5d", "20d", "60d", "200d"}
+    assert detail["ohlcv"][0]["vwap_120d"] is not None
+    assert set(detail["volume_profile"]) == {"1d", "5d", "20d", "60d", "120d"}
     for window in gen.WINDOWS:
         assert f"vwap_{window}d" in detail["ohlcv"][-1]
     assert "vwap_1d" in detail["ohlcv"][-1]
-    for removed_window in [2, 3, 10, 40, 100]:
+    for removed_window in [2, 3, 10, 40, 100, 200]:
         assert f"vwap_{removed_window}d" not in detail["ohlcv"][-1]
 
 
@@ -551,9 +551,9 @@ def test_insufficient_history_uses_three_strategy_journal_schema():
 
     assert trend["strategy_signal"]["available"] is False
     assert set(detail["backtest_journals"]) == {
-        gen.ALIGNMENT_1_5_20_60_200,
-        gen.ALIGNMENT_5_20_60_200,
-        gen.ALIGNMENT_20_60_200,
+        gen.ALIGNMENT_1_5_20_60_120,
+        gen.ALIGNMENT_5_20_60_120,
+        gen.ALIGNMENT_20_60_120,
     }
     assert all(records == [] for records in detail["backtest_journals"].values())
 
@@ -573,9 +573,9 @@ def test_volatility_breakout_code_and_schema_are_removed():
     assert set(signal["backtest"]["rolling_200d"]) == {
         "window_days",
         "buy_hold_return_pct",
-        "alignment_1_5_20_60_200_return_pct",
-        "alignment_5_20_60_200_return_pct",
-        "alignment_20_60_200_return_pct",
+        "alignment_1_5_20_60_120_return_pct",
+        "alignment_5_20_60_120_return_pct",
+        "alignment_20_60_120_return_pct",
     }
 
 
@@ -587,7 +587,7 @@ def test_zero_volume_windows_emit_none_and_json_remains_strict():
     assert work["vwap_5d"].iloc[-1] is None
     assert work["vwap_20d"].iloc[-1] is None
     assert work["vwap_60d"].iloc[-1] is None
-    assert work["vwap_200d"].iloc[-1] is None
+    assert work["vwap_120d"].iloc[-1] is None
 
     trend, detail = gen.build_asset_outputs("무거래 테스트", "ZERO", df)
     for strategy in trend["strategy_signal"]["strategies"].values():
@@ -595,7 +595,7 @@ def test_zero_volume_windows_emit_none_and_json_remains_strict():
         assert latest["vwap5"] is None
         assert latest["vwap20"] is None
         assert latest["vwap60"] is None
-        assert latest["vwap200"] is None
+        assert latest["vwap120"] is None
         assert latest["signal"] == "WAIT"
         assert latest["alignment"] == "N/A"
     assert trend["strategy_signal"] == detail["strategy_signal"]

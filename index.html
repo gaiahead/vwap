@@ -6,7 +6,7 @@
   <title>VWAP 추세 모니터</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
-  <link rel="stylesheet" href="style.css?v=data-20260803-no-breakout"/>
+  <link rel="stylesheet" href="style.css?v=data-20260803-vwap120"/>
 </head>
 <body>
 
@@ -17,7 +17,7 @@
 
 <div class="section-box momentum-monitor" id="momentum-section" style="display:none">
   <div class="panel-title">📐 VWAP 정배열 MONITOR</div>
-  <div class="momentum-monitor-sub">신호 1은 1d &gt; 5d &gt; 20d &gt; 60d &gt; 200d, 신호 2는 5d &gt; 20d &gt; 60d &gt; 200d, 신호 3은 20d &gt; 60d &gt; 200d입니다. 평가 첫날 정배열이면 초기 신호로 간주하며, 모든 신호는 다음 거래일 1d VWAP으로 매매합니다.</div>
+  <div class="momentum-monitor-sub">신호 1은 1d &gt; 5d &gt; 20d &gt; 60d &gt; 120d, 신호 2는 5d &gt; 20d &gt; 60d &gt; 120d, 신호 3은 20d &gt; 60d &gt; 120d입니다. 평가 첫날 정배열이면 초기 신호로 간주하며, 모든 신호는 다음 거래일 1d VWAP으로 매매합니다.</div>
   <div class="momentum-table-wrap"><table class="momentum-table">
     <thead>
       <tr>
@@ -25,9 +25,9 @@
         <th data-sort="signal_1">신호 1</th>
         <th data-sort="signal_2">신호 2</th>
         <th data-sort="signal_3">신호 3</th>
-        <th data-sort="alignment_1_5_20_60_200_return_pct">1&gt;5&gt;20&gt;60&gt;200 수익률</th>
-        <th data-sort="alignment_5_20_60_200_return_pct">5&gt;20&gt;60&gt;200 수익률</th>
-        <th data-sort="alignment_20_60_200_return_pct">20&gt;60&gt;200 수익률</th>
+        <th data-sort="alignment_1_5_20_60_120_return_pct">1&gt;5&gt;20&gt;60&gt;120 수익률</th>
+        <th data-sort="alignment_5_20_60_120_return_pct">5&gt;20&gt;60&gt;120 수익률</th>
+        <th data-sort="alignment_20_60_120_return_pct">20&gt;60&gt;120 수익률</th>
         <th data-sort="buy_hold_return_pct">200일 수익률</th>
       </tr>
     </thead>
@@ -46,6 +46,6 @@
   <div id="detail-content"></div>
 </div>
 
-<script src="app.js?v=data-20260803-no-breakout"></script>
+<script src="app.js?v=data-20260803-vwap120"></script>
 </body>
 </html>

@@ -157,12 +157,12 @@ PENSION_ETF_TICKERS: frozenset[str] = frozenset({
     "390390.KS", "446770.KS", "474800.KS", "497780.KS", "0036Z0.KS",
     "415920.KS",
 })
-WINDOWS: list[int] = [5, 20, 60, 200]  # 1d는 명시적 proxy, 나머지는 상세 차트용 롤링 VWAP 기간
-VOLUME_PROFILE_WINDOWS: list[int] = [1, 5, 20, 60, 200]  # 하단 Volume Profile 기간
+WINDOWS: list[int] = [5, 20, 60, 120]  # 1d는 명시적 proxy, 나머지는 상세 차트용 롤링 VWAP 기간
+VOLUME_PROFILE_WINDOWS: list[int] = [1, 5, 20, 60, 120]  # 하단 Volume Profile 기간
 LOOKBACK_TRADING_DAYS: int = 200
 HISTORY_TRADING_DAYS: int = LOOKBACK_TRADING_DAYS + max(WINDOWS)
-MIN_STRATEGY_TRADING_DAYS: int = 25  # 신규 종목도 표에 유지하되, 200d 미산출 시 신호는 WAIT
-DOWNLOAD_CALENDAR_DAYS: int = 650  # 최근 200일 + VWAP200 지표 warm-up 확보
+MIN_STRATEGY_TRADING_DAYS: int = 25  # 신규 종목도 표에 유지하되, 120d 미산출 시 신호는 WAIT
+DOWNLOAD_CALENDAR_DAYS: int = 650  # 최근 200일 + VWAP120 지표 warm-up 확보
 N_BUCKETS: int = 20
 KST: timezone = timezone(timedelta(hours=9))
 KRX_TODAY_PATCH_AFTER = time(15, 30)  # 장중 Naver 일봉은 미확정값이므로 15:30 이후만 반영
@@ -274,25 +274,25 @@ def date_key(value: Any) -> str:
 
 STRATEGY_FEE_ONE_WAY = 0.0003
 DOMESTIC_STOCK_TRANSACTION_TAX_SELL = 0.002
-ALIGNMENT_1_5_20_60_200 = "alignment_1_5_20_60_200"
-ALIGNMENT_5_20_60_200 = "alignment_5_20_60_200"
-ALIGNMENT_20_60_200 = "alignment_20_60_200"
-DEFAULT_ALIGNMENT_STRATEGY = ALIGNMENT_1_5_20_60_200
+ALIGNMENT_1_5_20_60_120 = "alignment_1_5_20_60_120"
+ALIGNMENT_5_20_60_120 = "alignment_5_20_60_120"
+ALIGNMENT_20_60_120 = "alignment_20_60_120"
+DEFAULT_ALIGNMENT_STRATEGY = ALIGNMENT_1_5_20_60_120
 ALIGNMENT_STRATEGIES: dict[str, dict[str, Any]] = {
-    ALIGNMENT_1_5_20_60_200: {
-        "label": "1 > 5 > 20 > 60 > 200",
-        "rule": "VWAP1 > VWAP5 > VWAP20 > VWAP60 > VWAP200",
-        "windows": (1, 5, 20, 60, 200),
+    ALIGNMENT_1_5_20_60_120: {
+        "label": "1 > 5 > 20 > 60 > 120",
+        "rule": "VWAP1 > VWAP5 > VWAP20 > VWAP60 > VWAP120",
+        "windows": (1, 5, 20, 60, 120),
     },
-    ALIGNMENT_5_20_60_200: {
-        "label": "5 > 20 > 60 > 200",
-        "rule": "VWAP5 > VWAP20 > VWAP60 > VWAP200",
-        "windows": (5, 20, 60, 200),
+    ALIGNMENT_5_20_60_120: {
+        "label": "5 > 20 > 60 > 120",
+        "rule": "VWAP5 > VWAP20 > VWAP60 > VWAP120",
+        "windows": (5, 20, 60, 120),
     },
-    ALIGNMENT_20_60_200: {
-        "label": "20 > 60 > 200",
-        "rule": "VWAP20 > VWAP60 > VWAP200",
-        "windows": (20, 60, 200),
+    ALIGNMENT_20_60_120: {
+        "label": "20 > 60 > 120",
+        "rule": "VWAP20 > VWAP60 > VWAP120",
+        "windows": (20, 60, 120),
     },
 }
 STRATEGY_RULES: dict[str, Any] = {
@@ -347,7 +347,7 @@ def prepare_strategy_frame(
 
     비즈니스 기준:
     - 수익률·신호 이벤트 범위는 최근 200거래일만 사용한다.
-    - VWAP200은 미래 참조 없이 계산하기 위해 이전 199거래일을 지표 warm-up으로만 사용한다.
+    - VWAP120은 미래 참조 없이 계산하기 위해 이전 119거래일을 지표 warm-up으로만 사용한다.
     - 최근 200일 시작 전 포지션은 이월하지 않는다.
     - 평가 구간의 첫 산출 가능 상태가 정배열이면 초기 BUY로 보고 다음 거래일에 진입한다.
     - 1일 VWAP proxy = (High + Low + Close) / 3.
@@ -410,7 +410,7 @@ def make_signal_record(
         "vwap5": safe_round(confirmed.get("vwap_5d"), 8),
         "vwap20": safe_round(confirmed.get("vwap_20d"), 8),
         "vwap60": safe_round(confirmed.get("vwap_60d"), 8),
-        "vwap200": safe_round(confirmed.get("vwap_200d"), 8),
+        "vwap120": safe_round(confirmed.get("vwap_120d"), 8),
     }
 
 
@@ -636,7 +636,7 @@ def build_latest_strategy_snapshot(
         "vwap5": safe_round(latest["vwap_5d"]),
         "vwap20": safe_round(latest["vwap_20d"]),
         "vwap60": safe_round(latest["vwap_60d"]),
-        "vwap200": safe_round(latest["vwap_200d"]),
+        "vwap120": safe_round(latest["vwap_120d"]),
         "signal": current_signal,
         "alignment": alignment,
         "in_position": simulation["in_position"],
@@ -880,7 +880,7 @@ def maybe_patch_krx_today(
 
 
 def download_ohlcv(ticker: str, end_date: str) -> pd.DataFrame:
-    """최근 200일 백테스트와 VWAP200 warm-up에 필요한 OHLCV를 다운로드한다."""
+    """최근 200일 백테스트와 VWAP120 warm-up에 필요한 OHLCV를 다운로드한다."""
     end_dt = datetime.strptime(end_date, "%Y-%m-%d")
     start_date = (end_dt - timedelta(days=DOWNLOAD_CALENDAR_DAYS)).strftime("%Y-%m-%d")
     # yfinance의 end는 배타적이라 다음 날짜를 넘겨준다. 그래도 KRX 당일이 없으면 Naver로 보강한다.
@@ -906,7 +906,7 @@ def build_vwap_structure(df: pd.DataFrame) -> tuple[list[dict[str, Any]], float 
     for w in WINDOWS:
         if len(df) >= w:
             v = compute_vwap(df.iloc[-w:])
-            if w == 200:
+            if w == 120:
                 base_vwap = v
             structure.append({"window": w, "vwap": round(v, 4)})
         else:
@@ -937,7 +937,7 @@ def build_detail_data(
     strategy_signal: dict[str, Any] | None = None,
     backtest_journals: dict[str, list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
-    """상세 데이터 생성: 최근 200거래일, VWAP line/Volume Profile은 1/5/20/60/200d 표시."""
+    """상세 데이터 생성: 최근 200거래일, VWAP line/Volume Profile은 1/5/20/60/120d 표시."""
     if strategy_signal is None:
         strategy_payload = build_strategy_signal(df, ticker=ticker)
         if backtest_journals is None:
@@ -1055,7 +1055,7 @@ def process_asset(
 
     asset_result, detail_result = build_asset_outputs(name, ticker, df)
     s = {item["window"]: item for item in asset_result["vwap_structure"]}
-    print(f"    5/200={s.get(5, {}).get('norm')} / 20/200={s.get(20, {}).get('norm')}")
+    print(f"    5/120={s.get(5, {}).get('norm')} / 20/120={s.get(20, {}).get('norm')}")
     return asset_result, detail_result
 
 
