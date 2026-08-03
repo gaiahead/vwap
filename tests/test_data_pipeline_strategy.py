@@ -27,11 +27,13 @@ def make_ohlcv(prices: Iterable[float], start: str = "2025-01-01") -> pd.DataFra
     )
 
 
-def test_prepare_strategy_frame_uses_indicator_warmup_but_returns_recent_200_days():
+def test_prepare_strategy_frame_uses_indicator_warmup_but_returns_recent_240_days():
     df = make_ohlcv(range(1, 421))
 
     work = gen.prepare_strategy_frame(df)
 
+    assert gen.LOOKBACK_TRADING_DAYS == 240
+    assert gen.HISTORY_TRADING_DAYS == 360
     assert len(work) == gen.LOOKBACK_TRADING_DAYS
     assert work.index[0] == df.index[-gen.LOOKBACK_TRADING_DAYS]
     first = work.iloc[0]
@@ -46,7 +48,7 @@ def test_prepare_strategy_frame_uses_indicator_warmup_but_returns_recent_200_day
     assert not work["vwap_1d"].isna().any()
 
 
-def test_strategy_available_for_newer_assets_inside_recent_200_day_scope():
+def test_strategy_available_for_newer_assets_inside_recent_240_day_scope():
     df = make_ohlcv(range(100, 160))
 
     signal = gen.build_strategy_signal(df)
@@ -65,13 +67,13 @@ def test_strategy_available_for_newer_assets_inside_recent_200_day_scope():
         assert latest["vwap120"] is None
         assert latest["signal"] == "WAIT"
         assert latest["alignment"] == "N/A"
-    rolling_200d = signal["backtest"]["rolling_200d"]
-    assert rolling_200d["window_days"] == len(df)
-    assert rolling_200d["alignment_1_5_20_60_120_return_pct"] is not None
-    assert rolling_200d["alignment_5_20_60_120_return_pct"] is not None
-    assert rolling_200d["alignment_20_60_120_return_pct"] is not None
-    assert rolling_200d["buy_hold_return_pct"] is not None
-    assert set(rolling_200d) == {
+    rolling_240d = signal["backtest"]["rolling_240d"]
+    assert rolling_240d["window_days"] == len(df)
+    assert rolling_240d["alignment_1_5_20_60_120_return_pct"] is not None
+    assert rolling_240d["alignment_5_20_60_120_return_pct"] is not None
+    assert rolling_240d["alignment_20_60_120_return_pct"] is not None
+    assert rolling_240d["buy_hold_return_pct"] is not None
+    assert set(rolling_240d) == {
         "window_days",
         "alignment_1_5_20_60_120_return_pct",
         "alignment_5_20_60_120_return_pct",
@@ -144,8 +146,8 @@ def test_build_strategy_signal_applies_ticker_cost_model_to_all_alignments():
         "alignment_20_60_120_return_pct",
     ]:
         assert (
-            stock["backtest"]["rolling_200d"][field]
-            <= etf["backtest"]["rolling_200d"][field]
+            stock["backtest"]["rolling_240d"][field]
+            <= etf["backtest"]["rolling_240d"][field]
         )
 
 
@@ -176,7 +178,7 @@ def test_win_rates_use_unrounded_trade_returns():
         },
     )
     assert gen.build_alignment_summary(work, alignment)["win_rate_pct"] == 100.0
-    assert set(summary["rolling_200d"]) == {
+    assert set(summary["rolling_240d"]) == {
         "window_days",
         "buy_hold_return_pct",
         "alignment_1_5_20_60_120_return_pct",
@@ -203,7 +205,7 @@ def test_strategy_signal_reuses_each_alignment_summary(monkeypatch):
     assert len(set(calls)) == len(gen.ALIGNMENT_STRATEGIES)
     assert all(
         result["strategies"][key]["backtest"]["return_pct"]
-        == result["backtest"]["rolling_200d"][f"{key}_return_pct"]
+        == result["backtest"]["rolling_240d"][f"{key}_return_pct"]
         for key in gen.ALIGNMENT_STRATEGIES
     )
 
@@ -443,7 +445,7 @@ def test_last_day_first_evaluable_alignment_is_marked_but_not_executed():
     assert simulation["final_equity"] == 1.0
 
 
-def test_build_strategy_keeps_first_day_transition_and_all_200_visible_events(monkeypatch):
+def test_build_strategy_keeps_first_day_transition_and_all_240_visible_events(monkeypatch):
     idx = pd.bdate_range(start="2025-01-01", periods=gen.LOOKBACK_TRADING_DAYS + 1)
     states = [False] + [i % 2 == 0 for i in range(gen.LOOKBACK_TRADING_DAYS)]
     rows = []
@@ -490,7 +492,7 @@ def test_trade_return_and_win_rate_include_both_one_way_fees(monkeypatch):
     assert simulation["trades"][0]["return_pct"] < 0
     assert simulation["final_equity"] < 1
 
-    monkeypatch.setattr(gen, "prepare_strategy_frame", lambda _df, output_days=200: work.copy())
+    monkeypatch.setattr(gen, "prepare_strategy_frame", lambda _df, output_days=240: work.copy())
     result = gen.build_strategy_signal(make_ohlcv(range(100, 125)))
     strict = result["strategies"][gen.ALIGNMENT_1_5_20_60_120]["backtest"]
     assert strict["trades"] == 1
@@ -570,7 +572,7 @@ def test_volatility_breakout_code_and_schema_are_removed():
     signal = gen.build_strategy_signal(make_ohlcv(range(1, 421)))
     serialized = json.dumps(signal, ensure_ascii=False)
     assert "volatility_breakout" not in serialized
-    assert set(signal["backtest"]["rolling_200d"]) == {
+    assert set(signal["backtest"]["rolling_240d"]) == {
         "window_days",
         "buy_hold_return_pct",
         "alignment_1_5_20_60_120_return_pct",
