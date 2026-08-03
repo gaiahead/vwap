@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import math
 from datetime import date, datetime
+from pathlib import Path
 from typing import Iterable
 
 import pandas as pd
@@ -76,106 +77,7 @@ def test_strategy_available_for_newer_assets_inside_recent_200_day_scope():
         "alignment_5_20_60_200_return_pct",
         "alignment_20_60_200_return_pct",
         "buy_hold_return_pct",
-        "volatility_breakout_return_pct",
     }
-    assert signal["backtest"]["volatility_breakout"] == {
-        "k": 0.5,
-        "trades": len(df) - 2,
-        "win_rate_pct": 0.0,
-        "entry": "today_open + previous_range * k",
-        "exit": "next_day_open",
-        "fee_one_way_pct": 0.03,
-        "final_day_entry": "tracked_as_open_without_next_open",
-    }
-
-
-def test_volatility_breakout_k_half_compounds_completed_next_open_trades():
-    idx = pd.bdate_range(start="2026-01-05", periods=5)
-    context = pd.DataFrame(
-        {
-            "open": [100.0, 100.0, 121.0, 130.0, 130.0],
-            "high": [110.0, 111.0, 128.0, 131.0, 200.0],
-            "low": [90.0, 99.0, 120.0, 129.0, 120.0],
-            "close": [100.0, 105.0, 127.0, 130.0, 190.0],
-        },
-        index=idx,
-    )
-
-    result = gen.simulate_volatility_breakout_strategy(context, visible_days=4)
-
-    fee_multiplier = 1 - gen.STRATEGY_FEE_ONE_WAY
-    expected_equity = (
-        (121.0 / 110.0)
-        * (130.0 / 127.0)
-        * fee_multiplier**4
-    )
-    expected_first_trade_return = round(((121.0 / 110.0) * fee_multiplier**2 - 1) * 100, 2)
-    assert gen.VOLATILITY_BREAKOUT_K == 0.5
-    assert result["k"] == 0.5
-    assert result["trades"] == 2
-    assert result["journal"] == [
-        {
-            "entry_date": "2026-01-06",
-            "entry_price": 110.0,
-            "exit_date": "2026-01-07",
-            "exit_price": 121.0,
-            "return_pct": expected_first_trade_return,
-            "status": "CLOSED",
-        },
-        {
-            "entry_date": "2026-01-07",
-            "entry_price": 127.0,
-            "exit_date": "2026-01-08",
-            "exit_price": 130.0,
-            "return_pct": round(((130.0 / 127.0) * fee_multiplier**2 - 1) * 100, 2),
-            "status": "CLOSED",
-        },
-        {
-            "entry_date": "2026-01-09",
-            "entry_price": 131.0,
-            "exit_date": None,
-            "exit_price": None,
-            "valuation_date": "2026-01-09",
-            "valuation_price": 190.0,
-            "return_pct": round(((190.0 / 131.0) * fee_multiplier - 1) * 100, 2),
-            "status": "OPEN",
-        },
-    ]
-    assert expected_first_trade_return > 0
-    assert math.isclose(result["final_equity"], expected_equity)
-    assert math.isclose(result["strategy_return_pct"], (expected_equity - 1) * 100)
-
-
-def test_volatility_breakout_charges_stock_transaction_tax_even_on_a_loss():
-    idx = pd.bdate_range(start="2026-01-05", periods=3)
-    context = pd.DataFrame(
-        {
-            "open": [100.0, 100.0, 100.0],
-            "high": [110.0, 111.0, 101.0],
-            "low": [90.0, 99.0, 99.0],
-            "close": [100.0, 105.0, 100.0],
-        },
-        index=idx,
-    )
-
-    result = gen.simulate_volatility_breakout_strategy(
-        context,
-        visible_days=2,
-        transaction_tax_sell=gen.DOMESTIC_STOCK_TRANSACTION_TAX_SELL,
-    )
-
-    expected_equity = (
-        (100.0 / 110.0)
-        * (1 - gen.STRATEGY_FEE_ONE_WAY)
-        * (
-            1
-            - gen.STRATEGY_FEE_ONE_WAY
-            - gen.DOMESTIC_STOCK_TRANSACTION_TAX_SELL
-        )
-    )
-    assert result["trades"] == 1
-    assert result["journal"][0]["return_pct"] < 0
-    assert math.isclose(result["final_equity"], expected_equity)
 
 
 def test_each_alignment_charges_stock_transaction_tax_only_when_closed():
@@ -228,7 +130,7 @@ def test_each_alignment_charges_stock_transaction_tax_only_when_closed():
         assert math.isclose(taxable_open["final_equity"], fee_only_open["final_equity"])
 
 
-def test_build_strategy_signal_applies_ticker_cost_model_to_both_strategies():
+def test_build_strategy_signal_applies_ticker_cost_model_to_all_alignments():
     df = make_ohlcv([100] * 220 + [130] * 80 + [82] * 60 + [150] * 60)
 
     stock = gen.build_strategy_signal(df, ticker="005930.KS")
@@ -236,10 +138,6 @@ def test_build_strategy_signal_applies_ticker_cost_model_to_both_strategies():
 
     assert stock["cost_model"]["transaction_tax_sell_pct"] == 0.2
     assert etf["cost_model"]["transaction_tax_sell_pct"] == 0.0
-    assert (
-        stock["backtest"]["rolling_200d"]["volatility_breakout_return_pct"]
-        <= etf["backtest"]["rolling_200d"]["volatility_breakout_return_pct"]
-    )
     for field in [
         "alignment_1_5_20_60_200_return_pct",
         "alignment_5_20_60_200_return_pct",
@@ -269,18 +167,6 @@ def test_win_rates_use_unrounded_trade_returns():
     alignment = gen.simulate_alignment_strategy(work)
     assert alignment["trades"][0]["return_pct"] == 0.0
 
-    breakout_context = pd.DataFrame(
-        {
-            "open": [100.0, 100.0, tiny_winner_exit * 1.1],
-            "high": [110.0, 111.0, tiny_winner_exit * 1.11],
-            "low": [90.0, 99.0, tiny_winner_exit],
-            "close": [100.0, 105.0, tiny_winner_exit * 1.1],
-        },
-        index=pd.bdate_range(start="2026-05-04", periods=3),
-    )
-    breakout = gen.simulate_volatility_breakout_strategy(breakout_context, visible_days=2)
-    assert breakout["journal"][0]["return_pct"] == 0.0
-
     summary = gen.build_backtest_summary(
         work,
         {
@@ -288,10 +174,15 @@ def test_win_rates_use_unrounded_trade_returns():
             gen.ALIGNMENT_5_20_60_200: alignment,
             gen.ALIGNMENT_20_60_200: alignment,
         },
-        breakout,
     )
     assert gen.build_alignment_summary(work, alignment)["win_rate_pct"] == 100.0
-    assert summary["volatility_breakout"]["win_rate_pct"] == 100.0
+    assert set(summary["rolling_200d"]) == {
+        "window_days",
+        "buy_hold_return_pct",
+        "alignment_1_5_20_60_200_return_pct",
+        "alignment_5_20_60_200_return_pct",
+        "alignment_20_60_200_return_pct",
+    }
 
 
 def test_strategy_signal_reuses_each_alignment_summary(monkeypatch):
@@ -315,38 +206,6 @@ def test_strategy_signal_reuses_each_alignment_summary(monkeypatch):
         == result["backtest"]["rolling_200d"][f"{key}_return_pct"]
         for key in gen.ALIGNMENT_STRATEGIES
     )
-
-
-def test_volatility_breakout_tracks_final_day_trigger_as_open_without_counting_return():
-    idx = pd.bdate_range(start="2026-02-02", periods=3)
-    context = pd.DataFrame(
-        {
-            "open": [100.0, 100.0, 100.0],
-            "high": [110.0, 104.0, 200.0],
-            "low": [90.0, 96.0, 90.0],
-            "close": [100.0, 100.0, 190.0],
-        },
-        index=idx,
-    )
-
-    result = gen.simulate_volatility_breakout_strategy(context, visible_days=2)
-
-    expected_open_return = (
-        190.0 / 104.0 * (1 - gen.STRATEGY_FEE_ONE_WAY) - 1
-    ) * 100
-    assert result["trades"] == 0
-    assert result["journal"] == [{
-        "entry_date": "2026-02-04",
-        "entry_price": 104.0,
-        "exit_date": None,
-        "exit_price": None,
-        "valuation_date": "2026-02-04",
-        "valuation_price": 190.0,
-        "return_pct": round(expected_open_return, 2),
-        "status": "OPEN",
-    }]
-    assert result["final_equity"] == 1.0
-    assert result["strategy_return_pct"] == 0.0
 
 
 def test_strict_alignment_signal_requires_all_values_in_descending_order():
@@ -666,19 +525,10 @@ def test_build_asset_outputs_keeps_trend_and_detail_strategy_contract_in_sync():
     assert trend["strategy_signal"] == detail["strategy_signal"]
     assert "backtest_journals" not in trend
     assert set(detail["backtest_journals"]) == {
-        "volatility_breakout",
         gen.ALIGNMENT_1_5_20_60_200,
         gen.ALIGNMENT_5_20_60_200,
         gen.ALIGNMENT_20_60_200,
     }
-    breakout_journal = detail["backtest_journals"]["volatility_breakout"]
-    assert breakout_journal
-    assert all(row["status"] == "CLOSED" for row in breakout_journal[:-1])
-    assert breakout_journal[-1]["status"] == "OPEN"
-    assert (
-        trend["strategy_signal"]["backtest"]["volatility_breakout"]["trades"]
-        == len(breakout_journal) - 1
-    )
     assert "mdd" not in json.dumps(trend["strategy_signal"], ensure_ascii=False).lower()
     assert trend["lookback_trading_days"] == detail["lookback_trading_days"] == gen.LOOKBACK_TRADING_DAYS
     assert trend["latest_price"] == detail["latest_price"] == round(float(df["close"].iloc[-1]), 2)
@@ -694,19 +544,39 @@ def test_build_asset_outputs_keeps_trend_and_detail_strategy_contract_in_sync():
         assert f"vwap_{removed_window}d" not in detail["ohlcv"][-1]
 
 
-def test_insufficient_history_uses_four_strategy_journal_schema():
+def test_insufficient_history_uses_three_strategy_journal_schema():
     df = make_ohlcv(range(100, 120))
 
     trend, detail = gen.build_asset_outputs("짧은 이력", "SHORT", df)
 
     assert trend["strategy_signal"]["available"] is False
     assert set(detail["backtest_journals"]) == {
-        "volatility_breakout",
         gen.ALIGNMENT_1_5_20_60_200,
         gen.ALIGNMENT_5_20_60_200,
         gen.ALIGNMENT_20_60_200,
     }
     assert all(records == [] for records in detail["backtest_journals"].values())
+
+
+def test_volatility_breakout_code_and_schema_are_removed():
+    source = Path(gen.__file__).read_text(encoding="utf-8")
+    for token in [
+        "VOLATILITY_BREAKOUT_K",
+        "simulate_volatility_breakout_strategy",
+        "volatility_breakout",
+    ]:
+        assert token not in source
+
+    signal = gen.build_strategy_signal(make_ohlcv(range(1, 421)))
+    serialized = json.dumps(signal, ensure_ascii=False)
+    assert "volatility_breakout" not in serialized
+    assert set(signal["backtest"]["rolling_200d"]) == {
+        "window_days",
+        "buy_hold_return_pct",
+        "alignment_1_5_20_60_200_return_pct",
+        "alignment_5_20_60_200_return_pct",
+        "alignment_20_60_200_return_pct",
+    }
 
 
 def test_zero_volume_windows_emit_none_and_json_remains_strict():

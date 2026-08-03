@@ -21,7 +21,6 @@ def test_table_columns_and_default_sort_match_current_dashboard_contract():
         "신호 1",
         "신호 2",
         "신호 3",
-        "변돌 수익률",
         "1&gt;5&gt;20&gt;60&gt;200 수익률",
         "5&gt;20&gt;60&gt;200 수익률",
         "20&gt;60&gt;200 수익률",
@@ -32,14 +31,12 @@ def test_table_columns_and_default_sort_match_current_dashboard_contract():
         "signal_1",
         "signal_2",
         "signal_3",
-        "volatility_breakout_return_pct",
         "alignment_1_5_20_60_200_return_pct",
         "alignment_5_20_60_200_return_pct",
         "alignment_20_60_200_return_pct",
         "buy_hold_return_pct",
     ]
     assert "const DEFAULT_SORT = { key: 'alignment_1_5_20_60_200_return_pct', dir: 'desc' }" in app
-    assert "key: 'volatility_breakout_return_pct', label: '변돌 수익률'" in app
     assert "const ALIGNMENT_SIGNAL_COLUMNS = ALIGNMENT_OPTIONS.map" in app
     assert "const ALIGNMENT_RETURN_COLUMNS = ALIGNMENT_OPTIONS.map" in app
     assert "strategies?.[option.key]?.latest?.signal" in app
@@ -57,7 +54,7 @@ def test_table_columns_and_default_sort_match_current_dashboard_contract():
             rf"\{{ key: {strategy_constant}, label: '{label}'.+horizon: '{horizon}', tone: '{tone}' \}}",
             app,
         )
-    assert "rolling200.volatility_breakout_return_pct" in app
+
     assert "신호 1은 1d &gt; 5d &gt; 20d &gt; 60d &gt; 200d" in html
     assert "신호 2는 5d &gt; 20d &gt; 60d &gt; 200d" in html
     assert "신호 3은 20d &gt; 60d &gt; 200d" in html
@@ -70,16 +67,14 @@ def test_table_columns_and_default_sort_match_current_dashboard_contract():
         assert legacy_key not in combined
 
 
-def test_detail_has_four_clear_strategy_backtest_journals():
+def test_detail_has_three_clear_strategy_backtest_journals():
     app = read("app.js")
     css = read("style.css")
 
     for token in [
         "renderBacktestJournals",
         "backtest_journals",
-        "변동성 돌파",
         "정배열",
-        "초단기",
         "단기",
         "중기",
         "장기",
@@ -94,7 +89,6 @@ def test_detail_has_four_clear_strategy_backtest_journals():
     assert "function createAlignmentJournalCard" in app
     assert "...alignmentContexts.map(context => createAlignmentJournalCard(context, costNote))" in app
     assert "const alignmentContexts = ALIGNMENT_OPTIONS.map" in app
-    assert "createHorizonItem('초단기', '변동성 돌파'" in app
     assert "createHorizonItem(option.horizon, label, backtest.return_pct, option.tone)" in app
     assert "records: journals[option.key] || []" in app
     for horizon, tone in [("단기", "short"), ("중기", "medium"), ("장기", "long")]:
@@ -108,7 +102,6 @@ def test_detail_has_four_clear_strategy_backtest_journals():
         ".backtest-journal-section",
         ".journal-grid",
         ".journal-card",
-        ".journal-card-ultra",
         ".journal-card-short",
         ".journal-card-medium",
         ".journal-card-long",
@@ -117,6 +110,16 @@ def test_detail_has_four_clear_strategy_backtest_journals():
         ".journal-table",
     ]:
         assert selector in css
+
+    for removed in [
+        "volatility_breakout",
+        "변돌",
+        "변동성 돌파",
+        "초단기",
+        "journal-card-ultra",
+        "journal-horizon-ultra",
+    ]:
+        assert removed not in app + css + read("index.html") + read("gen_trend_data.py")
 
 
 def test_journal_entry_and_exit_prices_render_as_rounded_integers():

@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260803-1600';
+const DATA_VERSION = 'data-20260803-no-breakout';
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -43,7 +43,6 @@ const ALIGNMENT_RETURN_COLUMNS = ALIGNMENT_OPTIONS.map(option => ({
 const MOMENTUM_COLUMNS = [
   { key: 'name', label: '종목', type: 'text', get: row => row.name },
   ...ALIGNMENT_SIGNAL_COLUMNS,
-  { key: 'volatility_breakout_return_pct', label: '변돌 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.volatility_breakout_return_pct },
   ...ALIGNMENT_RETURN_COLUMNS,
   { key: 'buy_hold_return_pct', label: '200일 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_200d?.buy_hold_return_pct }
 ];
@@ -168,7 +167,6 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
         createSignalCell(latestShort.signal),
         createSignalCell(latestMedium.signal),
         createSignalCell(latestLong.signal),
-        createCell(fmtPct(rolling200.volatility_breakout_return_pct), { color: statColor(rolling200.volatility_breakout_return_pct), weight: '800' }),
         createCell(fmtPct(rolling200.alignment_1_5_20_60_200_return_pct), { color: statColor(rolling200.alignment_1_5_20_60_200_return_pct), weight: '800' }),
         createCell(fmtPct(rolling200.alignment_5_20_60_200_return_pct), { color: statColor(rolling200.alignment_5_20_60_200_return_pct), weight: '800' }),
         createCell(fmtPct(rolling200.alignment_20_60_200_return_pct), { color: statColor(rolling200.alignment_20_60_200_return_pct), weight: '800' }),
@@ -402,10 +400,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     section.replaceChildren();
 
     const strategy = detailData.strategy_signal || {};
-    const backtest = strategy.backtest || {};
-    const rolling = backtest.rolling_200d || {};
     const journals = detailData.backtest_journals || {};
-    const breakoutRecords = journals.volatility_breakout || [];
     const alignmentContexts = ALIGNMENT_OPTIONS.map(option => {
       const payload = strategy.strategies?.[option.key] || {};
       return {
@@ -415,7 +410,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
         records: journals[option.key] || [],
       };
     });
-    const breakout = backtest.volatility_breakout || {};
+
     const costModel = strategy.cost_model || {};
     const accountLabel = costModel.account_label || '추천계좌';
     const transactionTax = Number(costModel.transaction_tax_sell_pct || 0);
@@ -443,7 +438,6 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     const horizons = document.createElement('div');
     horizons.className = 'journal-horizon-strip';
     horizons.append(
-      createHorizonItem('초단기', '변동성 돌파', rolling.volatility_breakout_return_pct, 'ultra'),
       ...alignmentContexts.map(({ option, label, backtest }) => (
         createHorizonItem(option.horizon, label, backtest.return_pct, option.tone)
       ))
@@ -452,19 +446,6 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     const grid = document.createElement('div');
     grid.className = 'journal-grid';
     grid.append(
-      createJournalCard({
-        tone: 'ultra',
-        horizon: '초단기',
-        title: '변동성 돌파',
-        rule: '오늘 돌파가 진입 → 다음 거래일 시가 청산',
-        metrics: [
-          {label: '누적 수익률', value: fmtPct(rolling.volatility_breakout_return_pct), color: statColor(rolling.volatility_breakout_return_pct)},
-          {label: '완료 거래', value: `${breakout.trades ?? 0}건`},
-          {label: '승률', value: fmtWinRate(breakout.win_rate_pct)},
-        ],
-        records: breakoutRecords,
-        note: `k ${breakout.k ?? 0.5} · ${costNote} · 최근 거래일 돌파는 보유 중 표시, 완료 수익률 제외`,
-      }),
       ...alignmentContexts.map(context => createAlignmentJournalCard(context, costNote))
     );
 

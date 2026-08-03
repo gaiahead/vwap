@@ -274,7 +274,6 @@ def date_key(value: Any) -> str:
 
 STRATEGY_FEE_ONE_WAY = 0.0003
 DOMESTIC_STOCK_TRANSACTION_TAX_SELL = 0.002
-VOLATILITY_BREAKOUT_K = 0.5
 ALIGNMENT_1_5_20_60_200 = "alignment_1_5_20_60_200"
 ALIGNMENT_5_20_60_200 = "alignment_5_20_60_200"
 ALIGNMENT_20_60_200 = "alignment_20_60_200"
@@ -546,122 +545,6 @@ def simulate_alignment_strategy(
     }
 
 
-def simulate_volatility_breakout_strategy(
-    context: pd.DataFrame,
-    visible_days: int = LOOKBACK_TRADING_DAYS,
-    k: float = VOLATILITY_BREAKOUT_K,
-    transaction_tax_sell: float = 0.0,
-) -> dict[str, Any]:
-    """전일 변동폭 기반 돌파 매수 후 다음 거래일 시가에 청산한다.
-
-    돌파가는 `당일 시가 + (전일 고가 - 전일 저가) * k`다. 최근 표시
-    구간의 첫날은 직전 한 행을 돌파가 계산에만 사용한다. 마지막 날 돌파는
-    다음 거래일 시가가 아직 없으므로 OPEN 일지로 남기되 완료 거래 수와
-    누적 수익률에는 포함하지 않는다. 매 거래마다 전액을 재투자하고
-    매수·매도 양쪽에 동일한 편도 수수료를 적용한다.
-    """
-    cash = 1.0
-    trades = 0
-    wins = 0
-    journal: list[dict[str, Any]] = []
-    visible_days = max(1, int(visible_days))
-    first_visible_index = max(0, len(context) - visible_days)
-
-    for i in range(max(1, first_visible_index), len(context) - 1):
-        previous = context.iloc[i - 1]
-        today = context.iloc[i]
-        next_day = context.iloc[i + 1]
-        values = [
-            previous.get("high"),
-            previous.get("low"),
-            today.get("open"),
-            today.get("high"),
-            next_day.get("open"),
-        ]
-        if any(is_missing(value) for value in values):
-            continue
-
-        previous_range = float(previous["high"]) - float(previous["low"])
-        if previous_range <= 0:
-            continue
-
-        target_price = float(today["open"]) + previous_range * float(k)
-        exit_price = float(next_day["open"])
-        if target_price <= 0 or exit_price <= 0 or float(today["high"]) < target_price:
-            continue
-
-        shares = cash * (1 - STRATEGY_FEE_ONE_WAY) / target_price
-        cash = shares * exit_price * (
-            1 - STRATEGY_FEE_ONE_WAY - transaction_tax_sell
-        )
-        trades += 1
-        trade_return = (
-            (exit_price / target_price)
-            * (1 - STRATEGY_FEE_ONE_WAY)
-            * (1 - STRATEGY_FEE_ONE_WAY - transaction_tax_sell)
-            - 1
-        ) * 100
-        if trade_return > 0:
-            wins += 1
-        journal.append({
-            "entry_date": date_key(context.index[i]),
-            "entry_price": safe_round(target_price),
-            "exit_date": date_key(context.index[i + 1]),
-            "exit_price": safe_round(exit_price),
-            "return_pct": safe_round(trade_return, 2),
-            "status": "CLOSED",
-        })
-
-    last_index = len(context) - 1
-    if last_index >= max(1, first_visible_index):
-        previous = context.iloc[last_index - 1]
-        today = context.iloc[last_index]
-        valuation_price = today.get("vwap_1d")
-        if is_missing(valuation_price):
-            valuation_price = today.get("close")
-        values = [
-            previous.get("high"),
-            previous.get("low"),
-            today.get("open"),
-            today.get("high"),
-            valuation_price,
-        ]
-        if not any(is_missing(value) for value in values):
-            previous_range = float(previous["high"]) - float(previous["low"])
-            target_price = float(today["open"]) + previous_range * float(k)
-            if (
-                previous_range > 0
-                and target_price > 0
-                and float(valuation_price) > 0
-                and float(today["high"]) >= target_price
-            ):
-                open_return = (
-                    float(valuation_price)
-                    / target_price
-                    * (1 - STRATEGY_FEE_ONE_WAY)
-                    - 1
-                ) * 100
-                journal.append({
-                    "entry_date": date_key(context.index[last_index]),
-                    "entry_price": safe_round(target_price),
-                    "exit_date": None,
-                    "exit_price": None,
-                    "valuation_date": date_key(context.index[last_index]),
-                    "valuation_price": safe_round(valuation_price),
-                    "return_pct": safe_round(open_return, 2),
-                    "status": "OPEN",
-                })
-
-    return {
-        "k": float(k),
-        "trades": trades,
-        "wins": wins,
-        "journal": journal,
-        "final_equity": cash,
-        "strategy_return_pct": (cash - 1) * 100,
-    }
-
-
 def build_alignment_journal(
     work: pd.DataFrame,
     simulation: dict[str, Any],
@@ -801,11 +684,10 @@ def build_alignment_summaries(
 def build_backtest_summary(
     work: pd.DataFrame,
     simulations: dict[str, dict[str, Any]],
-    volatility_breakout: dict[str, Any],
     *,
     alignment_summaries: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """세 정배열·변동성 돌파·단순보유의 최근 구간 결과를 요약한다."""
+    """세 정배열과 단순보유의 최근 구간 결과를 요약한다."""
     if alignment_summaries is None:
         alignment_summaries = build_alignment_summaries(work, simulations)
     buy_hold_return = pct_change(
@@ -813,30 +695,15 @@ def build_backtest_summary(
         float(work["vwap_1d"].iloc[-1]),
     )
     buy_hold_return = safe_round(buy_hold_return, 2)
-    volatility_breakout_return = safe_round(volatility_breakout["strategy_return_pct"], 2)
 
     return {
         "period": f"recent_{LOOKBACK_TRADING_DAYS}_trading_days",
         "start_date": date_key(work.index[0]),
         "end_date": date_key(work.index[-1]),
         "buy_hold_return_pct": buy_hold_return,
-        "volatility_breakout": {
-            "k": volatility_breakout["k"],
-            "trades": volatility_breakout["trades"],
-            "win_rate_pct": safe_round(
-                volatility_breakout["wins"] / volatility_breakout["trades"] * 100
-                if volatility_breakout["trades"] else None,
-                2,
-            ),
-            "entry": "today_open + previous_range * k",
-            "exit": "next_day_open",
-            "fee_one_way_pct": STRATEGY_RULES["fee_one_way_pct"],
-            "final_day_entry": "tracked_as_open_without_next_open",
-        },
         "rolling_200d": {
             "window_days": len(work),
             "buy_hold_return_pct": buy_hold_return,
-            "volatility_breakout_return_pct": volatility_breakout_return,
             **{
                 f"{strategy_key}_return_pct": alignment_summaries[strategy_key]["return_pct"]
                 for strategy_key in ALIGNMENT_STRATEGIES
@@ -875,8 +742,7 @@ def build_strategy_signal(df: pd.DataFrame, ticker: str | None = None) -> dict[s
             "cost_model": cost_model,
         }
 
-    context = prepare_strategy_frame(df, LOOKBACK_TRADING_DAYS + 1)
-    work = context.tail(LOOKBACK_TRADING_DAYS).copy()
+    work = prepare_strategy_frame(df, LOOKBACK_TRADING_DAYS)
     transaction_tax_sell = cost_model["transaction_tax_sell_pct"] / 100
     simulations: dict[str, dict[str, Any]] = {}
     for strategy_key in ALIGNMENT_STRATEGIES:
@@ -885,17 +751,10 @@ def build_strategy_signal(df: pd.DataFrame, ticker: str | None = None) -> dict[s
             transaction_tax_sell=transaction_tax_sell,
             strategy_key=strategy_key,
         )
-    volatility_breakout = simulate_volatility_breakout_strategy(
-        context,
-        visible_days=len(work),
-        transaction_tax_sell=transaction_tax_sell,
-    )
-
     alignment_summaries = build_alignment_summaries(work, simulations)
     backtest = build_backtest_summary(
         work,
         simulations,
-        volatility_breakout,
         alignment_summaries=alignment_summaries,
     )
     strategies = {
@@ -917,21 +776,15 @@ def build_strategy_signal(df: pd.DataFrame, ticker: str | None = None) -> dict[s
         "strategies": strategies,
         "backtest": backtest,
         "backtest_journals": {
-            "volatility_breakout": volatility_breakout["journal"],
-            **{
-                strategy_key: build_alignment_journal(work, simulations[strategy_key])
-                for strategy_key in ALIGNMENT_STRATEGIES
-            },
+            strategy_key: build_alignment_journal(work, simulations[strategy_key])
+            for strategy_key in ALIGNMENT_STRATEGIES
         },
     }
 
 
 def empty_backtest_journals() -> dict[str, list[dict[str, Any]]]:
     """정상/부족 이력 경로가 공유하는 빈 일지 스키마."""
-    return {
-        "volatility_breakout": [],
-        **{strategy_key: [] for strategy_key in ALIGNMENT_STRATEGIES},
-    }
+    return {strategy_key: [] for strategy_key in ALIGNMENT_STRATEGIES}
 
 
 # ──────────────────────────────────────────────────────────
