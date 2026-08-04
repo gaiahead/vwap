@@ -159,10 +159,11 @@ PENSION_ETF_TICKERS: frozenset[str] = frozenset({
 })
 WINDOWS: list[int] = [5, 20, 60, 120]  # 1d는 명시적 proxy, 나머지는 상세 차트용 롤링 VWAP 기간
 VOLUME_PROFILE_WINDOWS: list[int] = [1, 5, 20, 60, 120]  # 하단 Volume Profile 기간
-LOOKBACK_TRADING_DAYS: int = 240
-HISTORY_TRADING_DAYS: int = LOOKBACK_TRADING_DAYS + max(WINDOWS)
+LOOKBACK_TRADING_DAYS: int = 120  # 차트·백테스트 표시/평가 구간
+STORAGE_TRADING_DAYS: int = 240  # 종목별 상세 OHLCV 저장 구간
+HISTORY_TRADING_DAYS: int = STORAGE_TRADING_DAYS
 MIN_STRATEGY_TRADING_DAYS: int = 25  # 신규 종목도 표에 유지하되, 120d 미산출 시 신호는 WAIT
-DOWNLOAD_CALENDAR_DAYS: int = 650  # 최근 240일 + VWAP120 지표 warm-up 확보
+DOWNLOAD_CALENDAR_DAYS: int = 650  # 휴장일을 고려해 저장용 240거래일을 안정적으로 확보
 N_BUCKETS: int = 20
 KST: timezone = timezone(timedelta(hours=9))
 KRX_TODAY_PATCH_AFTER = time(15, 30)  # 장중 Naver 일봉은 미확정값이므로 15:30 이후만 반영
@@ -346,9 +347,9 @@ def prepare_strategy_frame(
     """VWAP 지표를 계산한 뒤 요청한 최근 거래일 구간만 반환한다.
 
     비즈니스 기준:
-    - 수익률·신호 이벤트 범위는 최근 240거래일만 사용한다.
+    - 수익률·신호 이벤트 범위는 최근 120거래일만 사용한다.
     - VWAP120은 미래 참조 없이 계산하기 위해 이전 119거래일을 지표 warm-up으로만 사용한다.
-    - 최근 240일 시작 전 포지션은 이월하지 않는다.
+    - 최근 120일 시작 전 포지션은 이월하지 않는다.
     - 평가 구간의 첫 산출 가능 상태가 정배열이면 초기 BUY로 보고 다음 거래일에 진입한다.
     - 1일 VWAP proxy = (High + Low + Close) / 3.
     - 정배열은 단기/중기/장기별 정의에 60d를 포함한다.
@@ -359,6 +360,19 @@ def prepare_strategy_frame(
     for window in WINDOWS:
         source[f"vwap_{window}d"] = compute_proxy_vwap_series(source, window)
     return source.tail(output_days).copy()
+
+
+def prepare_storage_frame(df: pd.DataFrame) -> pd.DataFrame:
+    """저장할 최근 240거래일 자체로 VWAP 지표를 계산한다.
+
+    앞 119개 저장 행의 VWAP120은 준비구간이라 None일 수 있다. 차트와
+    백테스트는 마지막 120개 행만 사용하므로 표시 첫날부터 VWAP120이 유효하다.
+    """
+    source = df.tail(STORAGE_TRADING_DAYS).copy()
+    source["vwap_1d"] = typical_price_series(source).astype(float)
+    for window in WINDOWS:
+        source[f"vwap_{window}d"] = compute_proxy_vwap_series(source, window)
+    return source
 
 
 def strict_alignment_signal(*values: Any) -> str:
@@ -701,7 +715,7 @@ def build_backtest_summary(
         "start_date": date_key(work.index[0]),
         "end_date": date_key(work.index[-1]),
         "buy_hold_return_pct": buy_hold_return,
-        "rolling_240d": {
+        "rolling_120d": {
             "window_days": len(work),
             "buy_hold_return_pct": buy_hold_return,
             **{
@@ -730,7 +744,7 @@ def build_alignment_strategy_payload(
 
 
 def build_strategy_signal(df: pd.DataFrame, ticker: str | None = None) -> dict[str, Any]:
-    """최근 240거래일 기준 세 정배열 전략을 독립적으로 요약한다.
+    """최근 120거래일 기준 세 정배열 전략을 독립적으로 요약한다.
 
     신호: 당일 종가 확정 후 판단. 백테스트 체결: 신호 다음 거래일 1일 VWAP proxy, 편도 수수료 0.03%.
     """
@@ -880,7 +894,7 @@ def maybe_patch_krx_today(
 
 
 def download_ohlcv(ticker: str, end_date: str) -> pd.DataFrame:
-    """최근 240일 백테스트와 VWAP120 warm-up에 필요한 OHLCV를 다운로드한다."""
+    """저장용 최근 240거래일 OHLCV를 다운로드한다."""
     end_dt = datetime.strptime(end_date, "%Y-%m-%d")
     start_date = (end_dt - timedelta(days=DOWNLOAD_CALENDAR_DAYS)).strftime("%Y-%m-%d")
     # yfinance의 end는 배타적이라 다음 날짜를 넘겨준다. 그래도 KRX 당일이 없으면 Naver로 보강한다.
@@ -923,10 +937,10 @@ def build_vwap_structure(df: pd.DataFrame) -> tuple[list[dict[str, Any]], float 
 
 
 def build_recent_records(df: pd.DataFrame) -> list[dict[str, Any]]:
-    """최근 240거래일 close 기반 미니 레코드. 현재 UI에서는 보조/호환 필드다."""
+    """저장용 최근 240거래일 close 기반 미니 레코드."""
     return [
         {"date": date_key(dt), "price": round(float(row["close"]), 2)}
-        for dt, row in df.tail(LOOKBACK_TRADING_DAYS).iterrows()
+        for dt, row in df.tail(STORAGE_TRADING_DAYS).iterrows()
     ]
 
 
@@ -937,7 +951,7 @@ def build_detail_data(
     strategy_signal: dict[str, Any] | None = None,
     backtest_journals: dict[str, list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
-    """상세 데이터 생성: 최근 240거래일, VWAP line/Volume Profile은 1/5/20/60/120d 표시."""
+    """상세 저장 데이터 240일 생성; 차트·백테스트는 최근 120일을 사용한다."""
     if strategy_signal is None:
         strategy_payload = build_strategy_signal(df, ticker=ticker)
         if backtest_journals is None:
@@ -947,7 +961,7 @@ def build_detail_data(
             if key != "backtest_journals"
         }
 
-    work = prepare_strategy_frame(df)
+    work = prepare_storage_frame(df)
     ohlcv = []
     for _i, (dt, row) in enumerate(work.iterrows()):
         rec: dict[str, Any] = {
@@ -980,6 +994,7 @@ def build_detail_data(
         "strategy_signal": strategy_signal if strategy_signal is not None else build_strategy_signal(df, ticker=ticker),
         "backtest_journals": backtest_journals or empty_backtest_journals(),
         "lookback_trading_days": LOOKBACK_TRADING_DAYS,
+        "storage_trading_days": STORAGE_TRADING_DAYS,
         "latest_price": round(float(df["close"].iloc[-1]), 2),
     }
 
@@ -1025,6 +1040,7 @@ def build_asset_outputs(name: str, ticker: str, df: pd.DataFrame) -> tuple[dict[
         "vwap_structure": vwap_structure,
         "strategy_signal": strategy_signal,
         "lookback_trading_days": LOOKBACK_TRADING_DAYS,
+        "storage_trading_days": STORAGE_TRADING_DAYS,
         "latest_price": round(float(df["close"].iloc[-1]), 2),
     }
     attach_krx_data_source(asset_result, df)
@@ -1084,6 +1100,7 @@ def collect_asset_outputs(
         "_meta": {
             "updated_at": run_time,
             "lookback_trading_days": LOOKBACK_TRADING_DAYS,
+            "storage_trading_days": STORAGE_TRADING_DAYS,
         }
     }
     detail_results: dict[str, dict[str, Any]] = {}

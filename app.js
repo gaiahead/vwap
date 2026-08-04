@@ -1,4 +1,5 @@
-const DATA_VERSION = 'data-20260804-lookback240';
+const DATA_VERSION = 'data-20260804-view120-store240';
+const CHART_TRADING_DAYS = 120;
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -38,13 +39,13 @@ const ALIGNMENT_RETURN_COLUMNS = ALIGNMENT_OPTIONS.map(option => ({
   key: `${option.key}_return_pct`,
   label: `${option.label} 수익률`,
   type: 'number',
-  get: row => row.strategy.backtest?.rolling_240d?.[`${option.key}_return_pct`]
+  get: row => row.strategy.backtest?.rolling_120d?.[`${option.key}_return_pct`]
 }));
 const MOMENTUM_COLUMNS = [
   { key: 'name', label: '종목', type: 'text', get: row => row.name },
   ...ALIGNMENT_SIGNAL_COLUMNS,
   ...ALIGNMENT_RETURN_COLUMNS,
-  { key: 'buy_hold_return_pct', label: '240일 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_240d?.buy_hold_return_pct }
+  { key: 'buy_hold_return_pct', label: '120일 수익률', type: 'number', get: row => row.strategy.backtest?.rolling_120d?.buy_hold_return_pct }
 ];
 const SORT_FIELDS = Object.fromEntries(MOMENTUM_COLUMNS.map(column => [column.key, column.get]));
 const NUMERIC_SORT_FIELDS = new Set(MOMENTUM_COLUMNS.filter(column => column.type === 'number').map(column => column.key));
@@ -159,7 +160,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       const latestShort = strategy?.strategies?.[ALIGNMENT_1_5_20_60_120]?.latest || {};
       const latestMedium = strategy?.strategies?.[ALIGNMENT_5_20_60_120]?.latest || {};
       const latestLong = strategy?.strategies?.[ALIGNMENT_20_60_120]?.latest || {};
-      const rolling240 = strategy?.backtest?.rolling_240d || {};
+      const rolling120 = strategy?.backtest?.rolling_120d || {};
       const tr = document.createElement('tr');
       tr.className = 'momentum-row' + (name === currentDetailName ? ' detail-active' : '');
       tr.append(
@@ -167,10 +168,10 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
         createSignalCell(latestShort.signal),
         createSignalCell(latestMedium.signal),
         createSignalCell(latestLong.signal),
-        createCell(fmtPct(rolling240.alignment_1_5_20_60_120_return_pct), { color: statColor(rolling240.alignment_1_5_20_60_120_return_pct), weight: '800' }),
-        createCell(fmtPct(rolling240.alignment_5_20_60_120_return_pct), { color: statColor(rolling240.alignment_5_20_60_120_return_pct), weight: '800' }),
-        createCell(fmtPct(rolling240.alignment_20_60_120_return_pct), { color: statColor(rolling240.alignment_20_60_120_return_pct), weight: '800' }),
-        createCell(fmtPct(rolling240.buy_hold_return_pct), { color: statColor(rolling240.buy_hold_return_pct), weight: '800' })
+        createCell(fmtPct(rolling120.alignment_1_5_20_60_120_return_pct), { color: statColor(rolling120.alignment_1_5_20_60_120_return_pct), weight: '800' }),
+        createCell(fmtPct(rolling120.alignment_5_20_60_120_return_pct), { color: statColor(rolling120.alignment_5_20_60_120_return_pct), weight: '800' }),
+        createCell(fmtPct(rolling120.alignment_20_60_120_return_pct), { color: statColor(rolling120.alignment_20_60_120_return_pct), weight: '800' }),
+        createCell(fmtPct(rolling120.buy_hold_return_pct), { color: statColor(rolling120.buy_hold_return_pct), weight: '800' })
       );
       tr.addEventListener('click', () => {
         if (!ticker) return;
@@ -428,11 +429,11 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     const title = document.createElement('h3');
     title.textContent = '전략 백테스트 일지';
     const description = document.createElement('p');
-    description.textContent = '최근 240거래일의 초기 진입·전환 매매 기록을 최신 거래부터 비교합니다.';
+    description.textContent = '최근 120거래일의 초기 진입·전환 매매 기록을 최신 거래부터 비교합니다.';
     copy.append(eyebrow, title, description);
     const period = document.createElement('span');
     period.className = 'journal-period';
-    period.textContent = '최근 240 거래일';
+    period.textContent = '최근 120 거래일';
     sectionHead.append(copy, period);
 
     const horizons = document.createElement('div');
@@ -532,7 +533,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
 
   // ─── Panel A: Price + VWAP ─────────────────────────────
   function renderPriceChart(detailData) {
-    const ohlcv = detailData.ohlcv;
+    const ohlcv = detailData.ohlcv.slice(-CHART_TRADING_DAYS);
     const labels = ohlcv.map(d => d.date);
     const selectedSignals = detailData.strategy_signal?.strategies?.[currentAlignmentStrategy]?.signals || [];
     const signalMap = new Map(selectedSignals.map(signal => [signal.date, signal]));

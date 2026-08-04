@@ -24,7 +24,7 @@ def test_table_columns_and_default_sort_match_current_dashboard_contract():
         "1&gt;5&gt;20&gt;60&gt;120 수익률",
         "5&gt;20&gt;60&gt;120 수익률",
         "20&gt;60&gt;120 수익률",
-        "240일 수익률",
+        "120일 수익률",
     ]
     assert sort_keys == [
         "name",
@@ -44,7 +44,8 @@ def test_table_columns_and_default_sort_match_current_dashboard_contract():
     assert "label: `신호 ${index + 1}`" in app
     assert "key: `${option.key}_return_pct`" in app
     assert "label: `${option.label} 수익률`" in app
-    assert "rolling_240d?.[`${option.key}_return_pct`]" in app
+    assert "rolling_120d?.[`${option.key}_return_pct`]" in app
+    assert "rolling_240d" not in app
     for strategy_constant, label, horizon, tone in [
         ("ALIGNMENT_1_5_20_60_120", "1>5>20>60>120", "단기", "short"),
         ("ALIGNMENT_5_20_60_120", "5>20>60>120", "중기", "medium"),
@@ -93,8 +94,8 @@ def test_detail_has_three_clear_strategy_backtest_journals():
         assert token in app
 
     assert "function createAlignmentJournalCard" in app
-    assert "최근 240거래일의 초기 진입·전환 매매 기록" in app
-    assert "최근 240 거래일" in app
+    assert "최근 120거래일의 초기 진입·전환 매매 기록" in app
+    assert "최근 120 거래일" in app
     assert "...alignmentContexts.map(context => createAlignmentJournalCard(context, costNote))" in app
     assert "const alignmentContexts = ALIGNMENT_OPTIONS.map" in app
     assert "createHorizonItem(option.horizon, label, backtest.return_pct, option.tone)" in app
@@ -177,6 +178,8 @@ def test_signal_cell_uses_buy_sell_colors_without_name_indicator():
 def test_detail_panels_vp_tabs_and_price_datasets_use_1_5_20_60_120_with_trade_markers():
     app = read("app.js")
 
+    assert "const CHART_TRADING_DAYS = 120;" in app
+    assert "const ohlcv = detailData.ohlcv.slice(-CHART_TRADING_DAYS);" in app
     assert "VWAP Lines · 3/5/10/20/40/60/100/200" not in app
     assert "VWAP Lines · 1/5/20/40/60/100/200" not in app
     assert "VWAP Lines · 2/5/20/40/60/100/200" not in app
