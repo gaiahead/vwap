@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260812-1824';
+const DATA_VERSION = 'data-20260813-0700';
 const CHART_TRADING_DAYS = 120;
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
