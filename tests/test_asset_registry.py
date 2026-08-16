@@ -52,6 +52,25 @@ def test_requested_kodex_us_ai_power_core_infrastructure_etf_is_registered():
     assert gen.build_strategy_cost_model("487230.KS")["product_class"] == "OVERSEAS_OR_OTHER_ETF"
 
 
+def test_requested_overseas_ai_power_infrastructure_etfs_are_registered():
+    assets = {
+        ("SOL 미국AI전력인프라", "486450.KS"),
+        ("TIGER 글로벌AI전력인프라액티브", "491010.KS"),
+    }
+    tickers = {ticker for _, ticker in assets}
+
+    assert assets <= set(gen.ASSETS)
+    assert tickers <= gen.PENSION_ETF_TICKERS
+    assert all(
+        gen.build_strategy_cost_model(ticker)["product_class"] == "OVERSEAS_OR_OTHER_ETF"
+        for ticker in tickers
+    )
+    assert all(
+        gen.build_strategy_cost_model(ticker)["account_basis"] == "PENSION_OR_IRP"
+        for ticker in tickers
+    )
+
+
 def test_requested_tiger_korea_ai_power_equipment_top3_plus_is_registered():
     assert ("TIGER 코리아AI전력기기TOP3플러스", "0117V0.KS") in gen.ASSETS
 
