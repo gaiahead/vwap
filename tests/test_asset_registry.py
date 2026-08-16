@@ -44,6 +44,14 @@ def test_requested_kodex_ai_power_equipment_etf_is_registered():
     assert ("KODEX AI전력핵심설비", "487240.KS") in gen.ASSETS
 
 
+def test_requested_kodex_us_ai_power_core_infrastructure_etf_is_registered():
+    asset = ("KODEX 미국AI전력핵심인프라", "487230.KS")
+
+    assert asset in gen.ASSETS
+    assert "487230.KS" in gen.PENSION_ETF_TICKERS
+    assert gen.build_strategy_cost_model("487230.KS")["product_class"] == "OVERSEAS_OR_OTHER_ETF"
+
+
 def test_requested_tiger_korea_ai_power_equipment_top3_plus_is_registered():
     assert ("TIGER 코리아AI전력기기TOP3플러스", "0117V0.KS") in gen.ASSETS
 

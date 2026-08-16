@@ -39,6 +39,7 @@ ASSETS: list[AssetTuple] = [
     ("TIGER 미국필라델피아반도체나스닥", "381180.KS"),
     ("KODEX 미국반도체",              "390390.KS"),
     ("ACE 글로벌반도체TOP4 Plus",     "446770.KS"),
+    ("KODEX 미국AI전력핵심인프라",      "487230.KS"),
 
     # 한국 대표지수 / 반도체
     ("KODEX 200",                    "069500.KS"),
@@ -155,7 +156,7 @@ PENSION_ETF_TICKERS: frozenset[str] = frozenset({
     "0060H0.KS", "379800.KS", "379810.KS", "458730.KS", "453650.KS",
     "453640.KS", "203780.KS", "481190.KS", "456600.KS", "381180.KS",
     "390390.KS", "446770.KS", "474800.KS", "497780.KS", "0036Z0.KS",
-    "415920.KS",
+    "415920.KS", "487230.KS",
 })
 WINDOWS: list[int] = [5, 20, 60, 120]  # 1d는 명시적 proxy, 나머지는 상세 차트용 롤링 VWAP 기간
 VOLUME_PROFILE_WINDOWS: list[int] = [1, 5, 20, 60, 120]  # 하단 Volume Profile 기간
