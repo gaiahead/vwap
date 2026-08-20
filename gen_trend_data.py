@@ -281,6 +281,7 @@ DOMESTIC_STOCK_TRANSACTION_TAX_SELL = 0.002
 ALIGNMENT_1_5_20_60_120 = "alignment_1_5_20_60_120"
 ALIGNMENT_5_20_60_120 = "alignment_5_20_60_120"
 ALIGNMENT_20_60_120 = "alignment_20_60_120"
+VWAP20_DIRECTION = "vwap20_direction"
 DEFAULT_ALIGNMENT_STRATEGY = ALIGNMENT_1_5_20_60_120
 ALIGNMENT_STRATEGIES: dict[str, dict[str, Any]] = {
     ALIGNMENT_1_5_20_60_120: {
@@ -301,6 +302,8 @@ ALIGNMENT_STRATEGIES: dict[str, dict[str, Any]] = {
 }
 STRATEGY_RULES: dict[str, Any] = {
     "execution": "next_day_vwap_1d_proxy",
+    "vwap20_direction_execution": "next_day_actual_open",
+    "vwap20_direction_signal": "vwap20_today_strictly_greater_than_previous_day",
     "valuation": "vwap_1d_proxy",
     "buy_hold_return": "last_vwap_1d_proxy / first_vwap_1d_proxy - 1",
     "fee_one_way_pct": 0.03,
@@ -414,6 +417,7 @@ def make_signal_record(
     execution_price: float | None,
     confirmed: pd.Series,
     initial_entry: bool = False,
+    marker_field: str = "vwap_5d",
 ) -> dict[str, Any]:
     """차트 마커와 익일 체결 검증에 사용하는 정배열 전환 레코드."""
     return {
@@ -422,7 +426,7 @@ def make_signal_record(
         "type": signal_type,
         "initial_entry": initial_entry,
         "price": safe_round(execution_price, 4),
-        "marker_price": safe_round(confirmed.get("vwap_5d"), 4),
+        "marker_price": safe_round(confirmed.get(marker_field), 4),
         "vwap1": safe_round(confirmed.get("vwap_1d"), 8),
         "vwap5": safe_round(confirmed.get("vwap_5d"), 8),
         "vwap20": safe_round(confirmed.get("vwap_20d"), 8),
@@ -456,6 +460,50 @@ def build_alignment_events(
                 execution_price,
                 row,
                 initial_entry=bool(initial_entry),
+            ))
+        previous_state = current_state
+        has_evaluable_state = True
+
+    return events
+
+
+def vwap20_direction_signal(
+    row: pd.Series,
+    previous_row: pd.Series | None,
+) -> str:
+    """VWAP20의 전일 대비 엄격한 상승 여부를 BUY/SELL/WAIT로 변환한다."""
+    current = row.get("vwap_20d")
+    previous = None if previous_row is None else previous_row.get("vwap_20d")
+    if is_missing(current) or is_missing(previous):
+        return "WAIT"
+    return "BUY" if float(cast(Any, current)) > float(cast(Any, previous)) else "SELL"
+
+
+def build_vwap20_direction_events(work: pd.DataFrame) -> list[dict[str, Any]]:
+    """VWAP20 방향 전환만 추출하고 다음 거래일 실제 시초가를 체결가로 기록한다."""
+    events: list[dict[str, Any]] = []
+    previous_state: bool | None = None
+    has_evaluable_state = False
+
+    for i, (dt, row) in enumerate(work.iterrows()):
+        previous_row = work.iloc[i - 1] if i > 0 else None
+        signal = vwap20_direction_signal(row, previous_row)
+        if signal == "WAIT":
+            continue
+        current_state = signal == "BUY"
+        initial_entry = not has_evaluable_state and current_state
+        transition = has_evaluable_state and current_state != previous_state
+        if initial_entry or transition:
+            execution_date = date_key(work.index[i + 1]) if i + 1 < len(work) else None
+            execution_price = float(work.iloc[i + 1]["open"]) if i + 1 < len(work) else None
+            events.append(make_signal_record(
+                date_key(dt),
+                execution_date,
+                signal,
+                execution_price,
+                row,
+                initial_entry=bool(initial_entry),
+                marker_field="vwap_20d",
             ))
         previous_state = current_state
         has_evaluable_state = True
@@ -562,9 +610,98 @@ def simulate_alignment_strategy(
     }
 
 
+def simulate_vwap20_direction_strategy(
+    work: pd.DataFrame,
+    transaction_tax_sell: float = 0.0,
+) -> dict[str, Any]:
+    """VWAP20 상승 구간만 보유하고 방향 전환 다음 거래일 시초가에 체결한다."""
+    cash = 1.0
+    shares = 0.0
+    in_position = False
+    entry_price: float | None = None
+    entry_date: str | None = None
+    entry_is_initial = False
+    last_signal = "WAIT"
+    last_signal_date: str | None = None
+    trades: list[dict[str, Any]] = []
+    wins = 0
+    signals = build_vwap20_direction_events(work)
+    executions = {event["execution_date"]: event for event in signals if event.get("execution_date")}
+    equity_curve: list[float] = []
+    position_days = 0
+
+    for i in range(len(work)):
+        row = work.iloc[i]
+        execution_dt = date_key(work.index[i])
+        execution_price = float(row["open"])
+        valuation_price = float(row["close"])
+        event = executions.get(execution_dt)
+        if event:
+            signal = event["type"]
+            last_signal = signal
+            last_signal_date = event["date"]
+            if not in_position and signal == "BUY":
+                shares = cash * (1 - STRATEGY_FEE_ONE_WAY) / execution_price
+                cash = 0.0
+                in_position = True
+                entry_price = execution_price
+                entry_date = execution_dt
+                entry_is_initial = bool(event.get("initial_entry"))
+            elif in_position and signal == "SELL":
+                assert entry_price is not None
+                cash = shares * execution_price * (
+                    1 - STRATEGY_FEE_ONE_WAY - transaction_tax_sell
+                )
+                shares = 0.0
+                in_position = False
+                ret = (
+                    (execution_price / entry_price)
+                    * (1 - STRATEGY_FEE_ONE_WAY)
+                    * (1 - STRATEGY_FEE_ONE_WAY - transaction_tax_sell)
+                    - 1
+                ) * 100
+                if ret > 0:
+                    wins += 1
+                trades.append({
+                    "entry_date": entry_date,
+                    "exit_date": execution_dt,
+                    "entry_price": safe_round(entry_price),
+                    "exit_price": safe_round(execution_price),
+                    "return_pct": safe_round(ret, 2),
+                    "initial_entry": entry_is_initial,
+                })
+                entry_price = None
+                entry_date = None
+                entry_is_initial = False
+
+        if in_position:
+            position_days += 1
+        equity_curve.append(shares * valuation_price if in_position else cash)
+
+    final_price = float(work["close"].iloc[-1]) if len(work) else 0.0
+    final_equity = shares * final_price if in_position else cash
+    return {
+        "cash": cash,
+        "shares": shares,
+        "in_position": in_position,
+        "entry_price": entry_price,
+        "entry_date": entry_date,
+        "entry_is_initial": entry_is_initial,
+        "last_signal": last_signal,
+        "last_signal_date": last_signal_date,
+        "trades": trades,
+        "wins": wins,
+        "signals": signals,
+        "equity_curve": equity_curve,
+        "position_days": position_days,
+        "final_equity": final_equity,
+    }
+
+
 def build_alignment_journal(
     work: pd.DataFrame,
     simulation: dict[str, Any],
+    valuation_field: str = "vwap_1d",
 ) -> list[dict[str, Any]]:
     """완료 거래와 현재 보유 포지션을 공통 일지 형식으로 직렬화한다."""
     journal: list[dict[str, Any]] = []
@@ -585,7 +722,7 @@ def build_alignment_journal(
 
     if simulation["in_position"] and simulation["entry_date"] and simulation["entry_price"]:
         valuation_date = date_key(work.index[-1])
-        valuation_price = float(work["vwap_1d"].iloc[-1])
+        valuation_price = float(work[valuation_field].iloc[-1])
         current_return = (
             valuation_price
             / float(simulation["entry_price"])
@@ -668,6 +805,72 @@ def build_latest_strategy_snapshot(
     }
 
 
+def build_latest_vwap20_direction_snapshot(
+    work: pd.DataFrame,
+    simulation: dict[str, Any],
+) -> dict[str, Any]:
+    """최신 VWAP20 기울기, 실제 포지션, 다음 시초가 행동을 직렬화한다."""
+    latest = work.iloc[-1]
+    previous = work.iloc[-2] if len(work) > 1 else None
+    signal = vwap20_direction_signal(latest, previous)
+    direction = {"WAIT": "대기", "BUY": "상승", "SELL": "하락"}[signal]
+    change_pct = None
+    if previous is not None:
+        change_pct = pct_change(previous.get("vwap_20d"), latest.get("vwap_20d"))
+
+    latest_date = date_key(work.index[-1])
+    pending = next((
+        event for event in reversed(simulation["signals"])
+        if event["date"] == latest_date and event.get("execution_date") is None
+    ), None)
+    if pending is not None:
+        next_open_action = "매수" if pending["type"] == "BUY" else "매도"
+        status_text = f"{direction} 전환 · 다음 시초가 {next_open_action}"
+    elif signal == "WAIT":
+        next_open_action = "대기"
+        status_text = "방향 미산출 · 대기"
+    else:
+        next_open_action = "유지"
+        position_text = "보유" if simulation["in_position"] else "현금"
+        status_text = f"{direction} · {position_text}"
+
+    current_trade_return = None
+    if simulation["in_position"] and simulation["entry_price"]:
+        current_trade_return = (
+            float(work["close"].iloc[-1])
+            / float(simulation["entry_price"])
+            * (1 - STRATEGY_FEE_ONE_WAY)
+            - 1
+        ) * 100
+
+    holding_days = None
+    if simulation["in_position"] and simulation["entry_date"]:
+        holding_days = len(work.loc[pd.Timestamp(simulation["entry_date"]):])
+
+    return {
+        "date": latest_date,
+        "vwap1": safe_round(latest.get("vwap_1d")),
+        "vwap5": safe_round(latest.get("vwap_5d")),
+        "vwap20": safe_round(latest.get("vwap_20d")),
+        "vwap60": safe_round(latest.get("vwap_60d")),
+        "vwap120": safe_round(latest.get("vwap_120d")),
+        "signal": signal,
+        "direction": direction,
+        "direction_change_pct": safe_round(change_pct, 4),
+        "in_position": simulation["in_position"],
+        "position": "보유" if simulation["in_position"] else "현금",
+        "next_open_action": next_open_action,
+        "status_text": status_text,
+        "last_signal": simulation["last_signal"],
+        "last_signal_date": simulation["last_signal_date"],
+        "holding_days": holding_days,
+        "entry_date": simulation["entry_date"],
+        "entry_price": safe_round(simulation["entry_price"]),
+        "entry_is_initial": bool(simulation.get("entry_is_initial")),
+        "current_trade_return_pct": safe_round(current_trade_return, 2),
+    }
+
+
 def build_alignment_summary(
     work: pd.DataFrame,
     simulation: dict[str, Any],
@@ -687,6 +890,37 @@ def build_alignment_summary(
     }
 
 
+def calc_mdd_pct(equity_curve: list[float]) -> float | None:
+    """초기자산 1.0을 포함한 자산곡선의 최대낙폭을 음수 백분율로 반환한다."""
+    if not equity_curve:
+        return None
+    peak = 1.0
+    mdd = 0.0
+    for equity in equity_curve:
+        peak = max(peak, float(equity))
+        if peak > 0:
+            mdd = min(mdd, float(equity) / peak - 1)
+    return safe_round(mdd * 100, 2)
+
+
+def build_vwap20_direction_summary(
+    work: pd.DataFrame,
+    simulation: dict[str, Any],
+) -> dict[str, Any]:
+    """VWAP20 방향 전략의 최근 표시 구간 거래·위험 통계를 요약한다."""
+    trades = simulation["trades"]
+    avg_holding_days, max_holding_days = calc_trade_holding_stats(trades, work)
+    return {
+        "return_pct": safe_round((simulation["final_equity"] - 1) * 100, 2),
+        "trades": len(trades),
+        "win_rate_pct": safe_round(simulation["wins"] / len(trades) * 100 if trades else None, 2),
+        "exposure_pct": safe_round(simulation["position_days"] / len(work) * 100 if len(work) else None, 2),
+        "avg_holding_days": safe_round(avg_holding_days, 1),
+        "max_holding_days": max_holding_days,
+        "mdd_pct": calc_mdd_pct(simulation["equity_curve"]),
+    }
+
+
 def build_alignment_summaries(
     work: pd.DataFrame,
     simulations: dict[str, dict[str, Any]],
@@ -703,8 +937,9 @@ def build_backtest_summary(
     simulations: dict[str, dict[str, Any]],
     *,
     alignment_summaries: dict[str, dict[str, Any]] | None = None,
+    direction_summary: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """세 정배열과 단순보유의 최근 구간 결과를 요약한다."""
+    """세 정배열, VWAP20 방향, 단순보유의 최근 구간 결과를 요약한다."""
     if alignment_summaries is None:
         alignment_summaries = build_alignment_summaries(work, simulations)
     buy_hold_return = pct_change(
@@ -712,6 +947,12 @@ def build_backtest_summary(
         float(work["vwap_1d"].iloc[-1]),
     )
     buy_hold_return = safe_round(buy_hold_return, 2)
+    rolling_returns = {
+        f"{strategy_key}_return_pct": alignment_summaries[strategy_key]["return_pct"]
+        for strategy_key in ALIGNMENT_STRATEGIES
+    }
+    if direction_summary is not None:
+        rolling_returns[f"{VWAP20_DIRECTION}_return_pct"] = direction_summary["return_pct"]
 
     return {
         "period": f"recent_{LOOKBACK_TRADING_DAYS}_trading_days",
@@ -721,10 +962,7 @@ def build_backtest_summary(
         "rolling_120d": {
             "window_days": len(work),
             "buy_hold_return_pct": buy_hold_return,
-            **{
-                f"{strategy_key}_return_pct": alignment_summaries[strategy_key]["return_pct"]
-                for strategy_key in ALIGNMENT_STRATEGIES
-            },
+            **rolling_returns,
         },
     }
 
@@ -746,10 +984,27 @@ def build_alignment_strategy_payload(
     }
 
 
-def build_strategy_signal(df: pd.DataFrame, ticker: str | None = None) -> dict[str, Any]:
-    """최근 120거래일 기준 세 정배열 전략을 독립적으로 요약한다.
+def build_vwap20_direction_payload(
+    work: pd.DataFrame,
+    simulation: dict[str, Any],
+    summary: dict[str, Any],
+) -> dict[str, Any]:
+    """VWAP20 방향 전략의 최신 상태·요약·신호를 공통 strategies 스키마에 조립한다."""
+    return {
+        "label": "VWAP20 방향",
+        "rule": "VWAP20 전일 대비 상승 시 보유, 그 외 현금",
+        "execution": "다음 거래일 실제 시초가",
+        "latest": build_latest_vwap20_direction_snapshot(work, simulation),
+        "backtest": summary,
+        "signals": simulation["signals"],
+    }
 
-    신호: 당일 종가 확정 후 판단. 백테스트 체결: 신호 다음 거래일 1일 VWAP proxy, 편도 수수료 0.03%.
+
+def build_strategy_signal(df: pd.DataFrame, ticker: str | None = None) -> dict[str, Any]:
+    """최근 120거래일 기준 세 정배열과 VWAP20 방향 전략을 독립 요약한다.
+
+    정배열은 다음 거래일 1일 VWAP proxy, VWAP20 방향은 다음 거래일 실제 시초가에 체결한다.
+    모든 전략은 편도 수수료 0.03%와 상품별 매도 거래세를 반영한다.
     """
     cost_model = build_strategy_cost_model(ticker)
     if len(df) < MIN_STRATEGY_TRADING_DAYS:
@@ -768,11 +1023,17 @@ def build_strategy_signal(df: pd.DataFrame, ticker: str | None = None) -> dict[s
             transaction_tax_sell=transaction_tax_sell,
             strategy_key=strategy_key,
         )
+    direction_simulation = simulate_vwap20_direction_strategy(
+        work,
+        transaction_tax_sell=transaction_tax_sell,
+    )
     alignment_summaries = build_alignment_summaries(work, simulations)
+    direction_summary = build_vwap20_direction_summary(work, direction_simulation)
     backtest = build_backtest_summary(
         work,
         simulations,
         alignment_summaries=alignment_summaries,
+        direction_summary=direction_summary,
     )
     strategies = {
         strategy_key: build_alignment_strategy_payload(
@@ -784,24 +1045,38 @@ def build_strategy_signal(df: pd.DataFrame, ticker: str | None = None) -> dict[s
         )
         for strategy_key, definition in ALIGNMENT_STRATEGIES.items()
     }
+    strategies[VWAP20_DIRECTION] = build_vwap20_direction_payload(
+        work,
+        direction_simulation,
+        direction_summary,
+    )
+    journals = {
+        strategy_key: build_alignment_journal(work, simulations[strategy_key])
+        for strategy_key in ALIGNMENT_STRATEGIES
+    }
+    journals[VWAP20_DIRECTION] = build_alignment_journal(
+        work,
+        direction_simulation,
+        valuation_field="close",
+    )
 
     return {
         "available": True,
-        "strategy": "VWAP triple alignment with 60d",
+        "strategy": "VWAP alignments and VWAP20 direction",
         "rules": dict(STRATEGY_RULES),
         "cost_model": cost_model,
         "strategies": strategies,
         "backtest": backtest,
-        "backtest_journals": {
-            strategy_key: build_alignment_journal(work, simulations[strategy_key])
-            for strategy_key in ALIGNMENT_STRATEGIES
-        },
+        "backtest_journals": journals,
     }
 
 
 def empty_backtest_journals() -> dict[str, list[dict[str, Any]]]:
     """정상/부족 이력 경로가 공유하는 빈 일지 스키마."""
-    return {strategy_key: [] for strategy_key in ALIGNMENT_STRATEGIES}
+    return {
+        **{strategy_key: [] for strategy_key in ALIGNMENT_STRATEGIES},
+        VWAP20_DIRECTION: [],
+    }
 
 
 # ──────────────────────────────────────────────────────────

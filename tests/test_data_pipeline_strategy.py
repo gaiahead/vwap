@@ -59,8 +59,10 @@ def test_strategy_available_for_newer_assets_inside_recent_120_day_scope():
         gen.ALIGNMENT_1_5_20_60_120,
         gen.ALIGNMENT_5_20_60_120,
         gen.ALIGNMENT_20_60_120,
+        gen.VWAP20_DIRECTION,
     }
-    for strategy in signal["strategies"].values():
+    for strategy_key in gen.ALIGNMENT_STRATEGIES:
+        strategy = signal["strategies"][strategy_key]
         latest = strategy["latest"]
         assert latest["vwap5"] is not None
         assert latest["vwap20"] is not None
@@ -73,12 +75,14 @@ def test_strategy_available_for_newer_assets_inside_recent_120_day_scope():
     assert rolling_120d["alignment_1_5_20_60_120_return_pct"] is not None
     assert rolling_120d["alignment_5_20_60_120_return_pct"] is not None
     assert rolling_120d["alignment_20_60_120_return_pct"] is not None
+    assert rolling_120d["vwap20_direction_return_pct"] is not None
     assert rolling_120d["buy_hold_return_pct"] is not None
     assert set(rolling_120d) == {
         "window_days",
         "alignment_1_5_20_60_120_return_pct",
         "alignment_5_20_60_120_return_pct",
         "alignment_20_60_120_return_pct",
+        "vwap20_direction_return_pct",
         "buy_hold_return_pct",
     }
 
@@ -321,6 +325,57 @@ def test_alignment_strategy_marks_transitions_and_executes_next_day_vwap():
     assert journal[1]["status"] == "OPEN"
 
 
+def test_vwap20_direction_uses_strict_daily_slope_and_next_day_actual_open():
+    idx = pd.bdate_range(start="2026-01-05", periods=6)
+    work = pd.DataFrame(
+        {
+            "open": [40.0, 45.0, 50.0, 55.0, 60.0, 65.0],
+            "high": [42.0, 47.0, 52.0, 57.0, 62.0, 67.0],
+            "low": [38.0, 43.0, 48.0, 53.0, 58.0, 63.0],
+            "close": [41.0, 46.0, 51.0, 56.0, 61.0, 66.0],
+            "vwap_1d": [41.0, 46.0, 51.0, 56.0, 61.0, 66.0],
+            "vwap_5d": [90.0] * 6,
+            "vwap_20d": [100.0, 101.0, 102.0, 101.0, 101.0, 103.0],
+            "vwap_60d": [80.0] * 6,
+            "vwap_120d": [70.0] * 6,
+        },
+        index=idx,
+    )
+
+    assert gen.vwap20_direction_signal(work.iloc[0], None) == "WAIT"
+    assert gen.vwap20_direction_signal(work.iloc[1], work.iloc[0]) == "BUY"
+    assert gen.vwap20_direction_signal(work.iloc[4], work.iloc[3]) == "SELL"
+
+    simulation = gen.simulate_vwap20_direction_strategy(work)
+    signals = simulation["signals"]
+    assert [signal["type"] for signal in signals] == ["BUY", "SELL", "BUY"]
+    assert signals[0]["date"] == gen.date_key(idx[1])
+    assert signals[0]["execution_date"] == gen.date_key(idx[2])
+    assert signals[0]["price"] == 50.0
+    assert signals[0]["marker_price"] == 101.0
+    assert signals[1]["execution_date"] == gen.date_key(idx[4])
+    assert signals[1]["price"] == 60.0
+    assert signals[-1]["execution_date"] is None
+    assert simulation["in_position"] is False
+    assert simulation["trades"][0]["entry_price"] == 50.0
+    assert simulation["trades"][0]["exit_price"] == 60.0
+
+
+def test_strategy_payload_includes_vwap20_direction_summary_and_journal():
+    df = make_ohlcv([100] * 160 + list(range(100, 220)) + list(range(220, 100, -1)))
+
+    result = gen.build_strategy_signal(df, ticker="069500.KS")
+
+    direction = result["strategies"][gen.VWAP20_DIRECTION]
+    assert direction["label"] == "VWAP20 방향"
+    assert direction["latest"]["direction"] in {"상승", "하락"}
+    assert direction["latest"]["direction_change_pct"] is not None
+    assert direction["latest"]["next_open_action"] in {"매수", "매도", "유지"}
+    assert direction["backtest"]["mdd_pct"] is not None
+    assert result["backtest"]["rolling_120d"]["vwap20_direction_return_pct"] == direction["backtest"]["return_pct"]
+    assert gen.VWAP20_DIRECTION in result["backtest_journals"]
+
+
 def test_last_day_transition_is_marked_even_without_a_next_day_execution():
     idx = pd.bdate_range(start="2026-01-05", periods=3)
     work = pd.DataFrame(
@@ -452,6 +507,8 @@ def test_build_strategy_keeps_first_day_transition_and_all_120_visible_events(mo
     rows = []
     for i, aligned in enumerate(states):
         rows.append({
+            "open": float(140 + i) if aligned else float(110 + i),
+            "close": float(140 + i) if aligned else float(110 + i),
             "vwap_1d": float(140 + i) if aligned else float(110 + i),
             "vwap_5d": 130.0 if aligned else 120.0,
             "vwap_20d": 120.0 if aligned else 90.0,
@@ -480,6 +537,8 @@ def test_trade_return_and_win_rate_include_both_one_way_fees(monkeypatch):
     idx = pd.bdate_range(start="2026-03-02", periods=5)
     work = pd.DataFrame(
         {
+            "open": [99.0, 101.0, 100.0, 100.0, 100.03],
+            "close": [99.0, 101.0, 100.0, 100.0, 100.03],
             "vwap_1d": [99.0, 101.0, 100.0, 100.0, 100.03],
             "vwap_5d": [110.0, 90.0, 90.0, 110.0, 110.0],
             "vwap_20d": [80.0] * 5,
@@ -531,8 +590,9 @@ def test_build_asset_outputs_keeps_trend_and_detail_strategy_contract_in_sync():
         gen.ALIGNMENT_1_5_20_60_120,
         gen.ALIGNMENT_5_20_60_120,
         gen.ALIGNMENT_20_60_120,
+        gen.VWAP20_DIRECTION,
     }
-    assert "mdd" not in json.dumps(trend["strategy_signal"], ensure_ascii=False).lower()
+    assert trend["strategy_signal"]["strategies"][gen.VWAP20_DIRECTION]["backtest"]["mdd_pct"] is not None
     assert trend["lookback_trading_days"] == detail["lookback_trading_days"] == gen.LOOKBACK_TRADING_DAYS
     assert trend["storage_trading_days"] == detail["storage_trading_days"] == gen.STORAGE_TRADING_DAYS
     assert trend["latest_price"] == detail["latest_price"] == round(float(df["close"].iloc[-1]), 2)
@@ -550,7 +610,7 @@ def test_build_asset_outputs_keeps_trend_and_detail_strategy_contract_in_sync():
         assert f"vwap_{removed_window}d" not in detail["ohlcv"][-1]
 
 
-def test_insufficient_history_uses_three_strategy_journal_schema():
+def test_insufficient_history_uses_four_strategy_journal_schema():
     df = make_ohlcv(range(100, 120))
 
     trend, detail = gen.build_asset_outputs("짧은 이력", "SHORT", df)
@@ -560,6 +620,7 @@ def test_insufficient_history_uses_three_strategy_journal_schema():
         gen.ALIGNMENT_1_5_20_60_120,
         gen.ALIGNMENT_5_20_60_120,
         gen.ALIGNMENT_20_60_120,
+        gen.VWAP20_DIRECTION,
     }
     assert all(records == [] for records in detail["backtest_journals"].values())
 
@@ -583,6 +644,7 @@ def test_volatility_breakout_code_and_schema_are_removed():
         "alignment_1_5_20_60_120_return_pct",
         "alignment_5_20_60_120_return_pct",
         "alignment_20_60_120_return_pct",
+        "vwap20_direction_return_pct",
     }
 
 
@@ -597,7 +659,8 @@ def test_zero_volume_windows_emit_none_and_json_remains_strict():
     assert work["vwap_120d"].iloc[-1] is None
 
     trend, detail = gen.build_asset_outputs("무거래 테스트", "ZERO", df)
-    for strategy in trend["strategy_signal"]["strategies"].values():
+    for strategy_key in gen.ALIGNMENT_STRATEGIES:
+        strategy = trend["strategy_signal"]["strategies"][strategy_key]
         latest = strategy["latest"]
         assert latest["vwap5"] is None
         assert latest["vwap20"] is None
@@ -605,6 +668,9 @@ def test_zero_volume_windows_emit_none_and_json_remains_strict():
         assert latest["vwap120"] is None
         assert latest["signal"] == "WAIT"
         assert latest["alignment"] == "N/A"
+    direction_latest = trend["strategy_signal"]["strategies"][gen.VWAP20_DIRECTION]["latest"]
+    assert direction_latest["signal"] == "WAIT"
+    assert direction_latest["direction"] == "대기"
     assert trend["strategy_signal"] == detail["strategy_signal"]
 
     json.dumps(trend, allow_nan=False)

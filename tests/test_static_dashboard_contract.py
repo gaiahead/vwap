@@ -62,7 +62,7 @@ def test_table_columns_and_default_sort_match_current_dashboard_contract():
     assert "평가 첫날 정배열이면 초기 신호" in html
     assert "다음 거래일 1d VWAP" in html
     combined = html + app + generator
-    for token in ["5/20 괴리율", "5/200 괴리율", "MDD", "mdd", "drawdown"]:
+    for token in ["5/20 괴리율", "5/200 괴리율", "drawdown"]:
         assert token not in combined
     for legacy_key in [
         "alignment_1_5_20_200",
@@ -74,7 +74,7 @@ def test_table_columns_and_default_sort_match_current_dashboard_contract():
         assert legacy_key not in combined
 
 
-def test_detail_has_three_clear_strategy_backtest_journals():
+def test_detail_has_four_clear_strategy_backtest_journals():
     app = read("app.js")
     css = read("style.css")
 
@@ -94,9 +94,10 @@ def test_detail_has_three_clear_strategy_backtest_journals():
         assert token in app
 
     assert "function createAlignmentJournalCard" in app
-    assert "최근 120거래일의 초기 진입·전환 매매 기록" in app
+    assert "최근 120거래일의 정배열 3종과 VWAP20 방향 매매 기록" in app
     assert "최근 120 거래일" in app
-    assert "...alignmentContexts.map(context => createAlignmentJournalCard(context, costNote))" in app
+    assert "...alignmentContexts.map(context => createAlignmentJournalCard(context, costNote))," in app
+    assert "createDirectionJournalCard(directionContext, costNote)" in app
     assert "const alignmentContexts = ALIGNMENT_OPTIONS.map" in app
     assert "createHorizonItem(option.horizon, label, backtest.return_pct, option.tone)" in app
     assert "records: journals[option.key] || []" in app
@@ -104,6 +105,7 @@ def test_detail_has_three_clear_strategy_backtest_journals():
         assert f"horizon: '{horizon}'" in app
         assert f"tone: '{tone}'" in app
     assert ".journal-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))" in css
+    assert ".journal-horizon-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr))" in css
 
     for selector in [
         ".alignment-tabs",
@@ -129,6 +131,30 @@ def test_detail_has_three_clear_strategy_backtest_journals():
         "journal-horizon-ultra",
     ]:
         assert removed not in app + css + read("index.html") + read("gen_trend_data.py")
+
+
+def test_detail_adds_vwap20_direction_tab_status_colored_slope_and_fourth_journal():
+    app = read("app.js")
+    css = read("style.css")
+
+    for token in [
+        "const VWAP20_DIRECTION = 'vwap20_direction'",
+        "label: '20일 방향'",
+        "VWAP20 방향 전략",
+        "direction-status",
+        "direction_change_pct",
+        "next_open_action",
+        "segment:",
+        "mdd_pct",
+        "다음 거래일 실제 시초가",
+    ]:
+        assert token in app
+
+    assert "strategies?.[currentAlignmentStrategy]?.signals" in app
+    assert ".journal-card-direction" in css
+    assert ".journal-horizon-direction" in css
+    assert ".direction-status" in css
+    assert "grid-template-columns:repeat(4,minmax(0,1fr))" in css
 
 
 def test_journal_entry_and_exit_prices_render_as_rounded_integers():

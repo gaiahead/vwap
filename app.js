@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260820-0700';
+const DATA_VERSION = 'data-20260820-direction20';
 const CHART_TRADING_DAYS = 120;
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
@@ -11,13 +11,17 @@ const COLOR = {
 const ALIGNMENT_1_5_20_60_120 = 'alignment_1_5_20_60_120';
 const ALIGNMENT_5_20_60_120 = 'alignment_5_20_60_120';
 const ALIGNMENT_20_60_120 = 'alignment_20_60_120';
+const VWAP20_DIRECTION = 'vwap20_direction';
 const ALIGNMENT_OPTIONS = [
   { key: ALIGNMENT_1_5_20_60_120, label: '1>5>20>60>120', fallbackLabel: '1 > 5 > 20 > 60 > 120', horizon: '단기', tone: 'short' },
   { key: ALIGNMENT_5_20_60_120, label: '5>20>60>120', fallbackLabel: '5 > 20 > 60 > 120', horizon: '중기', tone: 'medium' },
   { key: ALIGNMENT_20_60_120, label: '20>60>120', fallbackLabel: '20 > 60 > 120', horizon: '장기', tone: 'long' }
 ];
+const DIRECTION_OPTION = { key: VWAP20_DIRECTION, label: '20일 방향', fallbackLabel: 'VWAP20 방향', horizon: '방향', tone: 'direction' };
+const CHART_STRATEGY_OPTIONS = [...ALIGNMENT_OPTIONS, DIRECTION_OPTION];
 const DEFAULT_ALIGNMENT_STRATEGY = ALIGNMENT_1_5_20_60_120;
 const ALIGNMENT_ENTRY_RULE = '첫 평가 정배열은 초기 진입 · 이후 전환 확인 → 다음 거래일 1d VWAP 체결';
+const DIRECTION_ENTRY_RULE = 'VWAP20 전일 대비 상승 시 보유 · 방향 전환 확인 → 다음 거래일 실제 시초가 체결';
 const DEFAULT_SORT = { key: 'alignment_1_5_20_60_120_return_pct', dir: 'desc' };
 const VP_PERIODS = ['1d', '5d', '20d', '60d', '120d'];
 const PRICE_LINE_DEFS = [
@@ -395,6 +399,25 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     });
   }
 
+  function createDirectionJournalCard({ backtest, buyHoldReturn, latest, records }, costNote) {
+    return createJournalCard({
+      tone: DIRECTION_OPTION.tone,
+      horizon: DIRECTION_OPTION.horizon,
+      title: 'VWAP20 방향 전략',
+      rule: DIRECTION_ENTRY_RULE,
+      metrics: [
+        {label: '120일 전략수익률', value: fmtPct(backtest.return_pct), color: statColor(backtest.return_pct)},
+        {label: '단순 보유', value: fmtPct(buyHoldReturn), color: statColor(buyHoldReturn)},
+        {label: 'MDD', value: fmtPct(backtest.mdd_pct), color: statColor(backtest.mdd_pct)},
+        {label: '완료 거래', value: `${backtest.trades ?? 0}건`},
+        {label: '승률', value: fmtWinRate(backtest.win_rate_pct)},
+        {label: '현재 상태', value: latest.status_text || '–'},
+      ],
+      records,
+      note: `VWAP20 전일 대비 방향 · ${costNote} · 다음 거래일 실제 시초가 · *보유 중은 최신 종가 평가`,
+    });
+  }
+
   function renderBacktestJournals(detailData) {
     const section = document.getElementById('backtest-journal-section');
     if (!section) return;
@@ -411,6 +434,15 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
         records: journals[option.key] || [],
       };
     });
+    const directionPayload = strategy.strategies?.[VWAP20_DIRECTION] || {};
+    const directionContext = {
+      option: DIRECTION_OPTION,
+      label: directionPayload.label || DIRECTION_OPTION.fallbackLabel,
+      backtest: directionPayload.backtest || {},
+      latest: directionPayload.latest || {},
+      buyHoldReturn: strategy.backtest?.rolling_120d?.buy_hold_return_pct,
+      records: journals[VWAP20_DIRECTION] || [],
+    };
 
     const costModel = strategy.cost_model || {};
     const accountLabel = costModel.account_label || '추천계좌';
@@ -429,7 +461,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     const title = document.createElement('h3');
     title.textContent = '전략 백테스트 일지';
     const description = document.createElement('p');
-    description.textContent = '최근 120거래일의 초기 진입·전환 매매 기록을 최신 거래부터 비교합니다.';
+    description.textContent = '최근 120거래일의 정배열 3종과 VWAP20 방향 매매 기록을 비교합니다.';
     copy.append(eyebrow, title, description);
     const period = document.createElement('span');
     period.className = 'journal-period';
@@ -441,13 +473,20 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     horizons.append(
       ...alignmentContexts.map(({ option, label, backtest }) => (
         createHorizonItem(option.horizon, label, backtest.return_pct, option.tone)
-      ))
+      )),
+      createHorizonItem(
+        directionContext.option.horizon,
+        directionContext.label,
+        directionContext.backtest.return_pct,
+        directionContext.option.tone,
+      ),
     );
 
     const grid = document.createElement('div');
     grid.className = 'journal-grid';
     grid.append(
-      ...alignmentContexts.map(context => createAlignmentJournalCard(context, costNote))
+      ...alignmentContexts.map(context => createAlignmentJournalCard(context, costNote)),
+      createDirectionJournalCard(directionContext, costNote),
     );
 
     section.append(sectionHead, horizons, grid);
@@ -459,8 +498,8 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     alignmentTabs.className = 'alignment-tabs';
     alignmentTabs.id = 'alignment-tabs';
     alignmentTabs.setAttribute('role', 'tablist');
-    alignmentTabs.setAttribute('aria-label', '차트 정배열 전략 선택');
-    ALIGNMENT_OPTIONS.forEach(option => {
+    alignmentTabs.setAttribute('aria-label', '차트 전략 선택');
+    CHART_STRATEGY_OPTIONS.forEach(option => {
       const button = document.createElement('button');
       const active = option.key === currentAlignmentStrategy;
       button.className = 'alignment-tab' + (active ? ' active' : '');
@@ -471,6 +510,11 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       alignmentTabs.appendChild(button);
     });
     pricePanel.insertBefore(alignmentTabs, pricePanel.querySelector('.chart-wrap'));
+    const directionStatus = document.createElement('div');
+    directionStatus.className = 'direction-status';
+    directionStatus.id = 'direction-status';
+    directionStatus.hidden = true;
+    pricePanel.insertBefore(directionStatus, pricePanel.querySelector('.chart-wrap'));
     const vpPanel = createChartPanel('Volume Profile', 'chart-vp');
     vpPanel.classList.add('volume-profile-panel');
     const journalSection = document.createElement('section');
@@ -497,7 +541,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     tabs.addEventListener('click', event => {
       if (!event.target.matches('.alignment-tab')) return;
       const strategyKey = event.target.dataset.strategy;
-      if (!ALIGNMENT_OPTIONS.some(option => option.key === strategyKey)) return;
+      if (!CHART_STRATEGY_OPTIONS.some(option => option.key === strategyKey)) return;
       currentAlignmentStrategy = strategyKey;
       document.querySelectorAll('.alignment-tab').forEach(button => {
         const active = button.dataset.strategy === currentAlignmentStrategy;
@@ -532,7 +576,38 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
   }
 
   // ─── Panel A: Price + VWAP ─────────────────────────────
+  function renderDirectionStatus(detailData) {
+    const status = document.getElementById('direction-status');
+    if (!status) return;
+    const isDirection = currentAlignmentStrategy === VWAP20_DIRECTION;
+    status.hidden = !isDirection;
+    if (!isDirection) return;
+
+    const latest = detailData.strategy_signal?.strategies?.[VWAP20_DIRECTION]?.latest || {};
+    const signalTone = latest.signal === 'BUY' ? 'up' : latest.signal === 'SELL' ? 'down' : 'wait';
+    status.className = `direction-status direction-status-${signalTone}`;
+    status.replaceChildren();
+    [
+      ['VWAP20', fmtPct(latest.direction_change_pct)],
+      ['방향', latest.direction || '대기'],
+      ['현재', latest.position || '현금'],
+      ['다음 시초가', latest.next_open_action || '대기'],
+    ].forEach(([label, value]) => {
+      const item = document.createElement('span');
+      const key = document.createElement('small');
+      const result = document.createElement('strong');
+      key.textContent = label;
+      result.textContent = value;
+      item.append(key, result);
+      status.appendChild(item);
+    });
+    const summary = document.createElement('em');
+    summary.textContent = latest.status_text || '방향 미산출 · 대기';
+    status.appendChild(summary);
+  }
+
   function renderPriceChart(detailData) {
+    renderDirectionStatus(detailData);
     const ohlcv = detailData.ohlcv.slice(-CHART_TRADING_DAYS);
     const labels = ohlcv.map(d => d.date);
     const selectedSignals = detailData.strategy_signal?.strategies?.[currentAlignmentStrategy]?.signals || [];
@@ -543,12 +618,21 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       return signal.marker_price ?? ohlcv[i]?.vwap_5d ?? null;
     });
     const lineData = def => ohlcv.map(d => d[`vwap_${def.window}d`] ?? null);
+    const directionMode = currentAlignmentStrategy === VWAP20_DIRECTION;
     const vwapLineDatasets = PRICE_LINE_DEFS.map((def, idx) => ({
       label: def.label,
       data: lineData(def),
       borderColor: def.color,
-      borderWidth: def.width,
+      borderWidth: directionMode && def.window === 20 ? 2.6 : def.width,
       borderDash: def.dash,
+      segment: directionMode && def.window === 20 ? {
+        borderColor: ctx => {
+          const previous = ctx.p0.parsed.y;
+          const current = ctx.p1.parsed.y;
+          if (previous == null || current == null) return def.color;
+          return current > previous ? COLOR.positive : COLOR.negative;
+        },
+      } : undefined,
       pointStyle: 'line',
       pointRadius: 0,
       tension: 0.2,
