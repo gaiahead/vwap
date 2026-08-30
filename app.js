@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260830-price-chart-endpoint-clearance-2px';
+const DATA_VERSION = 'data-20260830-five-vp-directional-vwap-widths';
 const PRICE_CHART_TRADING_DAYS = 120;
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
@@ -17,7 +17,7 @@ const ALIGNMENT_OPTIONS = [
   { key: ALIGNMENT_20_60_120 }
 ];
 const DEFAULT_SORT = { key: 'name', dir: 'asc' };
-const VP_PERIODS = ['1d', '5d', '20d', '60d', '120d', '240d'];
+const VP_PERIODS = ['1d', '5d', '20d', '60d', '120d'];
 const VWAP_LINE_WIDTH = 2;
 const PRICE_CHART_EDGE_HIT_WIDTH = 12;
 const PRICE_CHART_SELECTION_MARKER_RADIUS = 4;
@@ -33,9 +33,9 @@ PRICE_LINE_DEFS.forEach(definition => Object.freeze(definition.dash));
 const PRICE_DATASET_ORDER = PRICE_LINE_DEFS.map(def => def.label);
 
 const VWAP_TREND_STYLE_FACTORS = Object.freeze({
-  rising: Object.freeze({ opacity: 1.12 }),
-  flat: Object.freeze({ opacity: 1 }),
-  falling: Object.freeze({ opacity: 0.58 })
+  rising: Object.freeze({ opacity: 1.12, width: 1 }),
+  flat: Object.freeze({ opacity: 1, width: 1 }),
+  falling: Object.freeze({ opacity: 1.12, width: 0.5 })
 });
 
 function hasFiniteVwapValue(value) {
@@ -71,7 +71,7 @@ function getVwapTrendStyle(period, state = 'flat') {
     state: normalizedState,
     baseColor: definition.color,
     borderColor: colorWithOpacity(definition.color, opacity),
-    borderWidth: VWAP_LINE_WIDTH,
+    borderWidth: VWAP_LINE_WIDTH * factor.width,
     opacity
   });
 }

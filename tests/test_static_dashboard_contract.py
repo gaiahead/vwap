@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NEW_DATA_VERSION = "data-20260830-price-chart-endpoint-clearance-2px"
+NEW_DATA_VERSION = "data-20260830-five-vp-directional-vwap-widths"
 
 
 def read(name: str) -> str:
@@ -93,8 +93,9 @@ def test_price_chart_is_fixed_to_latest_120_rows_without_range_controls():
         assert token not in combined
 
 
-def test_price_chart_has_exact_five_vwap_datasets_and_keeps_240d_volume_profile():
+def test_frontend_has_exact_five_price_lines_and_five_vp_tabs_while_data_keeps_240d():
     app = read("app.js")
+    generator = read("gen_trend_data.py")
     definitions = re.findall(
         r"label: '([^']+)', window: (\d+), color: '(#[0-9a-f]+)'",
         app,
@@ -109,9 +110,16 @@ def test_price_chart_has_exact_five_vwap_datasets_and_keeps_240d_volume_profile(
     ]
     assert "datasets: vwapLineDatasets" in app
     assert "const PRICE_DATASET_ORDER = PRICE_LINE_DEFS.map(def => def.label);" in app
-    assert "const VP_PERIODS = ['1d', '5d', '20d', '60d', '120d', '240d'];" in app
+    assert "const VP_PERIODS = ['1d', '5d', '20d', '60d', '120d'];" in app
+    assert "VP_PERIODS.forEach(period =>" in app
+    assert "'240d'" not in app
     assert "Volume Profile" in app
     assert "vwap_240d" not in app
+
+    assert "WINDOWS: list[int] = [5, 20, 60, 120, 240]" in generator
+    assert "VOLUME_PROFILE_WINDOWS: list[int] = [1, 5, 20, 60, 120, 240]" in generator
+    assert 'rec[f"vwap_{window}d"] = safe_round(row[f"vwap_{window}d"])' in generator
+    assert 'volume_profile[f"{period}d"] = {' in generator
 
     for token in [
         "label: 'BUY'",
@@ -128,7 +136,7 @@ def test_price_chart_has_exact_five_vwap_datasets_and_keeps_240d_volume_profile(
         assert token not in app
 
 
-def test_chart_visual_trend_helpers_preserve_colors_and_slope_opacity_with_uniform_width():
+def test_chart_visual_trend_helpers_keep_period_colors_and_apply_directional_widths():
     app = read("app.js")
     for token in [
         "function classifyVwapSegmentState(values, startIndex, endIndex)",
@@ -178,24 +186,14 @@ const edgeCases = {
   nonFiniteEnd: api.classifyVwapSegmentState([100, Infinity], 0, 1),
 };
 const periods = [1, 5, 20, 60, 120];
-const colors = Object.fromEntries(periods.map(period => [period, {
-  rising: api.getVwapTrendStyle(period, 'rising').baseColor,
-  flat: api.getVwapTrendStyle(period, 'flat').baseColor,
-  falling: api.getVwapTrendStyle(period, 'falling').baseColor,
-}]));
 const states = ['rising', 'flat', 'falling'];
-const widths = periods.flatMap(period => states.map(
-  state => api.getVwapTrendStyle(period, state).borderWidth
-));
-const opacities = Object.fromEntries(states.map(
-  state => [state, api.getVwapTrendStyle(20, state).opacity]
-));
+const styles = Object.fromEntries(periods.map(period => [period, Object.fromEntries(
+  states.map(state => [state, api.getVwapTrendStyle(period, state)])
+)]));
 console.log(JSON.stringify({
   alternating,
   edgeCases,
-  colors,
-  widths,
-  opacities,
+  styles,
   missing240dStyle: api.getVwapTrendStyle(240, 'flat')
 }));
 """
@@ -210,11 +208,22 @@ console.log(JSON.stringify({
 
     assert result["alternating"] == ["rising", "falling", "rising"]
     assert set(result["edgeCases"].values()) == {"flat"}
-    assert set(result["widths"]) == {2}
-    assert result["opacities"] == {"rising": 1, "flat": 0.9, "falling": 0.522}
-    for states in result["colors"].values():
-        assert len(set(states.values())) == 1
-    assert result["colors"]["120"]["flat"] == "#7c3aed"
+    expected_colors = {
+        "1": "#eab308",
+        "5": "#dc2626",
+        "20": "#16a34a",
+        "60": "#2563eb",
+        "120": "#7c3aed",
+    }
+    assert len(set(expected_colors.values())) == 5
+    for period, states in result["styles"].items():
+        assert {state["baseColor"] for state in states.values()} == {expected_colors[period]}
+        assert states["rising"]["borderWidth"] == 2
+        assert states["flat"]["borderWidth"] == 2
+        assert states["falling"]["borderWidth"] == 1
+        assert states["falling"]["borderColor"] == states["rising"]["borderColor"]
+        assert states["falling"]["opacity"] == states["rising"]["opacity"]
+    assert len({states["rising"]["borderColor"] for states in result["styles"].values()}) == 5
     assert result["missing240dStyle"] is None
 
 
