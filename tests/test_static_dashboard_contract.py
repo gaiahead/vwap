@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NEW_DATA_VERSION = "data-20260830-1600"
+NEW_DATA_VERSION = "data-20260830-canvas-date-selection"
 
 
 def read(name: str) -> str:
