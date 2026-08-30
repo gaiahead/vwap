@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260830-live-signal-definitions';
+const DATA_VERSION = 'data-20260831-endpoint-marker-centering';
 const PRICE_CHART_TRADING_DAYS = 120;
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
@@ -21,7 +21,6 @@ const VP_PERIODS = ['1d', '5d', '20d', '60d', '120d'];
 const VWAP_LINE_WIDTH = 2;
 const PRICE_CHART_EDGE_HIT_WIDTH = 12;
 const PRICE_CHART_SELECTION_MARKER_RADIUS = 4;
-const PRICE_CHART_SELECTION_INSET = PRICE_CHART_SELECTION_MARKER_RADIUS + 0.5;
 const PRICE_LINE_DEFS = Object.freeze([
   Object.freeze({ label: '1d', window: 1, color: '#eab308', dash: [], opacity: 0.66 }),
   Object.freeze({ label: '5d', window: 5, color: '#dc2626', dash: [], opacity: 0.72 }),
@@ -204,12 +203,6 @@ function drawPriceChartDateSelection(chart) {
   const ctx = chart?.ctx;
   if (!ctx || typeof ctx.save !== 'function' || typeof ctx.restore !== 'function') return;
 
-  const markerX = selection.index === 0
-    ? left + PRICE_CHART_SELECTION_INSET
-    : selection.index === lastIndex
-      ? right - PRICE_CHART_SELECTION_INSET
-      : selectedX;
-
   ctx.save();
   try {
     ctx.strokeStyle = '#000000';
@@ -233,7 +226,7 @@ function drawPriceChartDateSelection(chart) {
 
       ctx.fillStyle = dataset.borderColor;
       ctx.beginPath();
-      ctx.arc(markerX, y, PRICE_CHART_SELECTION_MARKER_RADIUS, 0, Math.PI * 2);
+      ctx.arc(selectedX, y, PRICE_CHART_SELECTION_MARKER_RADIUS, 0, Math.PI * 2);
       ctx.fill();
     });
   } finally {

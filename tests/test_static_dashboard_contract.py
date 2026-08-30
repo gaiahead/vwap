@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NEW_DATA_VERSION = "data-20260830-live-signal-definitions"
+NEW_DATA_VERSION = "data-20260831-endpoint-marker-centering"
 
 
 def read(name: str) -> str:
@@ -494,7 +494,7 @@ console.log(JSON.stringify(result));
     }
 
 
-def test_price_chart_local_plugin_draws_boundary_lines_and_inset_endpoint_markers():
+def test_price_chart_local_plugin_centers_endpoint_markers_on_boundary_lines():
     app = read("app.js")
     node_script = r"""
 const fs = require('fs');
@@ -804,11 +804,12 @@ console.log(JSON.stringify({
     assert result["hiddenColorWasNotDrawn"] is True
     assert result["everyPointRadiusIsZero"] is True
     assert result["endpointXs"] == [10, 310]
-    assert result["endpointMarkerXs"] == [[14.5], [305.5]]
+    assert result["endpointMarkerXs"] == [[10], [310]]
     assert result["interiorMarkerXs"] == [[110], [210]]
-    marker_clearance = result["circleRadii"][0] + 0.5
-    assert result["endpointMarkerXs"][0][0] - result["endpointXs"][0] == marker_clearance
-    assert result["endpointXs"][1] - result["endpointMarkerXs"][1][0] == marker_clearance
+    assert result["endpointMarkerXs"] == [
+        [result["endpointXs"][0]],
+        [result["endpointXs"][1]],
+    ]
     assert result["interiorMarkerXs"] == [
         [result["lineStyles"][1]["x"]],
         [result["lineStyles"][2]["x"]],
