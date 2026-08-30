@@ -32,6 +32,11 @@ def test_generated_profile_vwaps_match_stored_exact_rolling_vwaps():
         detail = json.loads(path.read_text(encoding="utf-8"))
         latest = detail["ohlcv"][-1]
         for period, profile in detail["volume_profile"].items():
+            if not any(bucket["volume"] > 0 for bucket in profile["buckets"]):
+                # A zero-volume period has no VWAP; the displayed 1d proxy may
+                # still equal its typical price, so it is not a comparable VWAP.
+                assert profile["vwap"] is None, f"{path.name} {period}"
+                continue
             assert profile["vwap"] == pytest.approx(
                 latest[f"vwap_{period}"],
                 abs=0.0001,

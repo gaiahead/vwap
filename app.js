@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260830-uniform-vwap-vp-labels';
+const DATA_VERSION = 'data-20260830-1600';
 const PRICE_CHART_TRADING_DAYS = 240;
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
@@ -90,8 +90,12 @@ function nearestProfileBucketIndex(buckets, price) {
   return nearestIndex;
 }
 
-function formatProfilePrice(price) {
-  return Number(price).toLocaleString('en-US', { maximumFractionDigits: 4 });
+function formatPrice(price) {
+  if (!hasFiniteVwapValue(price)) return '–';
+  return Math.round(Number(price)).toLocaleString('ko-KR', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  });
 }
 
 function buildVpAnnotations(detailData, vp) {
@@ -107,7 +111,7 @@ function buildVpAnnotations(detailData, vp) {
       borderWidth: 2,
       label: {
         display: true,
-        content: 'VWAP ' + formatProfilePrice(vp.vwap),
+        content: 'VWAP ' + formatPrice(vp.vwap),
         color: '#1d4ed8',
         backgroundColor: 'rgba(255,255,255,0.9)',
         font: { size: 9 },
@@ -116,37 +120,161 @@ function buildVpAnnotations(detailData, vp) {
       }
     };
   }
-
-  const ohlcv = detailData?.ohlcv || [];
-  const latestClose = ohlcv[ohlcv.length - 1]?.close;
-  const latestCloseIndex = nearestProfileBucketIndex(buckets, latestClose);
-  if (latestCloseIndex >= 0) {
-    annotations.latestCloseLine = {
-      type: 'line',
-      scaleID: 'y',
-      value: latestCloseIndex,
-      borderColor: '#0f172a',
-      borderWidth: 1.5,
-      borderDash: [5, 3],
-      label: {
-        display: true,
-        content: '최근 종가 ' + formatProfilePrice(latestClose),
-        color: '#0f172a',
-        backgroundColor: 'rgba(255,255,255,0.9)',
-        font: { size: 9 },
-        position: 'start',
-        padding: { x: 3, y: 1 }
-      }
-    };
-  }
   return annotations;
+}
+
+function buildDateSelectionAnnotation(labels, index) {
+  if (!Array.isArray(labels) || !Number.isInteger(index) || index < 0 || index >= labels.length) {
+    return null;
+  }
+  const selectedDate = labels[index];
+  if (selectedDate === null || selectedDate === undefined || selectedDate === '') return null;
+  return {
+    type: 'line',
+    scaleID: 'x',
+    value: selectedDate,
+    borderColor: COLOR.blue,
+    borderWidth: 2,
+    borderDash: [4, 3],
+    drawTime: 'afterDatasetsDraw',
+    label: {
+      display: true,
+      content: '선택 날짜 ' + selectedDate,
+      color: '#1d4ed8',
+      backgroundColor: 'rgba(255,255,255,0.94)',
+      font: { size: 10, weight: 'bold' },
+      position: 'start',
+      padding: { x: 4, y: 2 }
+    }
+  };
+}
+
+function nearestPriceChartIndex(chart, event) {
+  if (!chart || typeof chart.getElementsAtEventForMode !== 'function') return -1;
+  const elements = chart.getElementsAtEventForMode(
+    event,
+    'index',
+    { axis: 'x', intersect: false },
+    false
+  );
+  const index = elements?.[0]?.index;
+  return Number.isInteger(index) ? index : -1;
+}
+
+function selectPriceChartIndex(chart, index) {
+  const annotation = buildDateSelectionAnnotation(chart?.data?.labels, index);
+  const annotations = chart?.options?.plugins?.annotation?.annotations;
+  if (!annotation || !annotations) return false;
+  annotations.selectedDateLine = annotation;
+  chart.update();
+  return true;
+}
+
+function buildPriceChartConfig(detailData) {
+  const ohlcv = detailData.ohlcv.slice(-PRICE_CHART_TRADING_DAYS);
+  const labels = ohlcv.map(day => day.date);
+  const vwapLineDatasets = PRICE_LINE_DEFS.map((definition, index) => {
+    const values = ohlcv.map(day => day['vwap_' + definition.window + 'd'] ?? null);
+    const baseStyle = getVwapTrendStyle(definition.window, 'flat');
+    const segmentStyle = context => getVwapTrendStyle(
+      definition.window,
+      classifyVwapSegmentState(values, context.p0DataIndex, context.p1DataIndex)
+    );
+    return {
+      label: definition.label,
+      data: values,
+      borderColor: baseStyle.borderColor,
+      borderWidth: baseStyle.borderWidth,
+      borderDash: definition.dash,
+      segment: {
+        borderColor: context => segmentStyle(context).borderColor,
+        borderWidth: context => segmentStyle(context).borderWidth
+      },
+      pointStyle: 'line',
+      pointRadius: 0,
+      tension: 0.2,
+      spanGaps: false,
+      fill: false,
+      order: index + 1
+    };
+  });
+  const legendOrder = new Map(PRICE_DATASET_ORDER.map((label, index) => [label, index]));
+  return {
+    type: 'line',
+    data: {
+      labels,
+      datasets: vwapLineDatasets
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 200 },
+      interaction: { mode: 'index', axis: 'x', intersect: false },
+      onClick: (event, _activeElements, chart) => {
+        selectPriceChartIndex(chart, nearestPriceChartIndex(chart, event));
+      },
+      plugins: {
+        legend: {
+          display: true,
+          labels: {
+            color: '#334155',
+            font: { size: 10 },
+            boxWidth: 28,
+            pointStyleWidth: 28,
+            padding: 10,
+            usePointStyle: true,
+            generateLabels: chart => Chart.defaults.plugins.legend.labels.generateLabels(chart).map(item => {
+              const dataset = chart.data.datasets[item.datasetIndex] || {};
+              return {
+                ...item,
+                pointStyle: 'line',
+                rotation: 0,
+                lineDash: dataset.borderDash || [],
+                lineWidth: dataset.borderWidth || 1,
+                strokeStyle: dataset.borderColor,
+                fillStyle: dataset.borderColor
+              };
+            }),
+            sort: (a, b) => (
+              (legendOrder.get(a.text) ?? 999) - (legendOrder.get(b.text) ?? 999)
+            )
+          }
+        },
+        tooltip: {
+          callbacks: {
+            label: context => {
+              const datasetLabel = context.dataset?.label;
+              const formattedPrice = formatPrice(context.parsed?.y);
+              return datasetLabel ? datasetLabel + ': ' + formattedPrice : formattedPrice;
+            }
+          }
+        },
+        annotation: { annotations: {} }
+      },
+      scales: {
+        x: {
+          ticks: { color: TICK, font: { size: 9 }, maxTicksLimit: 12, maxRotation: 0 },
+          grid: { color: GRID }
+        },
+        y: {
+          ticks: { color: TICK, font: { size: 10 }, callback: formatPrice },
+          grid: { color: GRID }
+        }
+      }
+    }
+  };
 }
 
 const VWAP_CHART_TEST_API = Object.freeze({
   lineDefinitions: PRICE_LINE_DEFS,
   classifyVwapSegmentState,
   getVwapTrendStyle,
-  buildVpAnnotations
+  buildVpAnnotations,
+  formatPrice,
+  buildPriceChartConfig,
+  buildDateSelectionAnnotation,
+  nearestPriceChartIndex,
+  selectPriceChartIndex
 });
 if (typeof window !== 'undefined') {
   Object.defineProperty(window, 'VWAP_CHART_TEST_API', {
@@ -392,88 +520,11 @@ fetch('trend_data.json?v=' + DATA_VERSION, { cache: 'no-store' }).then(r => r.js
   }
 
   function renderPriceChart(detailData) {
-    const ohlcv = detailData.ohlcv.slice(-PRICE_CHART_TRADING_DAYS);
-    const labels = ohlcv.map(day => day.date);
-    const vwapLineDatasets = PRICE_LINE_DEFS.map((definition, index) => {
-      const values = ohlcv.map(day => day['vwap_' + definition.window + 'd'] ?? null);
-      const baseStyle = getVwapTrendStyle(definition.window, 'flat');
-      const segmentStyle = context => getVwapTrendStyle(
-        definition.window,
-        classifyVwapSegmentState(values, context.p0DataIndex, context.p1DataIndex)
-      );
-      return {
-        label: definition.label,
-        data: values,
-        borderColor: baseStyle.borderColor,
-        borderWidth: baseStyle.borderWidth,
-        borderDash: definition.dash,
-        segment: {
-          borderColor: context => segmentStyle(context).borderColor,
-          borderWidth: context => segmentStyle(context).borderWidth
-        },
-        pointStyle: 'line',
-        pointRadius: 0,
-        tension: 0.2,
-        spanGaps: false,
-        fill: false,
-        order: index + 1
-      };
-    });
-    const legendOrder = new Map(PRICE_DATASET_ORDER.map((label, index) => [label, index]));
-    const config = {
-      type: 'line',
-      data: {
-        labels,
-        datasets: vwapLineDatasets
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: { duration: 200 },
-        interaction: { mode: 'index', intersect: false },
-        plugins: {
-          legend: {
-            display: true,
-            labels: {
-              color: '#334155',
-              font: { size: 10 },
-              boxWidth: 28,
-              pointStyleWidth: 28,
-              padding: 10,
-              usePointStyle: true,
-              generateLabels: chart => Chart.defaults.plugins.legend.labels.generateLabels(chart).map(item => {
-                const dataset = chart.data.datasets[item.datasetIndex] || {};
-                return {
-                  ...item,
-                  pointStyle: 'line',
-                  rotation: 0,
-                  lineDash: dataset.borderDash || [],
-                  lineWidth: dataset.borderWidth || 1,
-                  strokeStyle: dataset.borderColor,
-                  fillStyle: dataset.borderColor
-                };
-              }),
-              sort: (a, b) => (
-                (legendOrder.get(a.text) ?? 999) - (legendOrder.get(b.text) ?? 999)
-              )
-            }
-          }
-        },
-        scales: {
-          x: {
-            ticks: { color: TICK, font: { size: 9 }, maxTicksLimit: 12, maxRotation: 0 },
-            grid: { color: GRID }
-          },
-          y: {
-            ticks: { color: TICK, font: { size: 10 } },
-            grid: { color: GRID }
-          }
-        }
-      }
-    };
-
     if (priceChart) priceChart.destroy();
-    priceChart = new Chart(document.getElementById('chart-price'), config);
+    priceChart = new Chart(
+      document.getElementById('chart-price'),
+      buildPriceChartConfig(detailData)
+    );
   }
 
   function renderVpChart(detailData, period) {
@@ -485,7 +536,7 @@ fetch('trend_data.json?v=' + DATA_VERSION, { cache: 'no-store' }).then(r => r.js
     }
 
     const buckets = vp.buckets;
-    const labels = buckets.map(bucket => bucket.price.toLocaleString(undefined, { maximumFractionDigits: 2 }));
+    const labels = buckets.map(bucket => formatPrice(bucket.price));
     const volumes = buckets.map(bucket => bucket.volume);
     const annotations = buildVpAnnotations(detailData, vp);
 

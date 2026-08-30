@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NEW_DATA_VERSION = "data-20260830-uniform-vwap-vp-labels"
+NEW_DATA_VERSION = "data-20260830-1600"
 
 
 def read(name: str) -> str:
@@ -221,7 +221,8 @@ def test_volume_profile_tabs_and_panel_survive():
     assert "view.detailContent.replaceChildren(pricePanel, vpPanel);" in app
 
 
-def test_volume_profile_builds_nearest_bucket_labels_for_vwap_and_latest_close():
+def test_volume_profile_keeps_only_rounded_vwap_annotation():
+    app = read("app.js")
     node_script = r"""
 const fs = require('fs');
 const vm = require('vm');
@@ -247,15 +248,147 @@ console.log(JSON.stringify(annotations));
     )
     annotations = json.loads(completed.stdout)
 
-    assert set(annotations) == {"vwapLine", "latestCloseLine"}
+    assert set(annotations) == {"vwapLine"}
     assert annotations["vwapLine"]["value"] == 1
-    assert annotations["latestCloseLine"]["value"] == 0
-    assert annotations["vwapLine"]["label"]["content"] == "VWAP 259,666.6667"
-    assert annotations["latestCloseLine"]["label"]["content"] == "최근 종가 257,000"
+    assert annotations["vwapLine"]["label"]["content"] == "VWAP 259,667"
     assert annotations["vwapLine"]["label"]["position"] == "end"
-    assert annotations["latestCloseLine"]["label"]["position"] == "start"
-    assert annotations["vwapLine"]["borderColor"] != annotations["latestCloseLine"]["borderColor"]
-    assert annotations["latestCloseLine"]["borderDash"] == [5, 3]
+    assert "const labels = buckets.map(bucket => formatPrice(bucket.price));" in app
+    assert "latestCloseLine" not in app
+    assert "최근 종가" not in app
+
+
+def test_korean_integer_price_formatting_rounds_decimals_and_handles_null_safely():
+    node_script = r"""
+const fs = require('fs');
+const vm = require('vm');
+const source = fs.readFileSync('app.js', 'utf8').split('\nfetch(')[0];
+const context = { window: {} };
+vm.createContext(context);
+vm.runInContext(source, context);
+const formatPrice = context.window.VWAP_CHART_TEST_API.formatPrice;
+console.log(JSON.stringify([
+  formatPrice(123456.5),
+  formatPrice('9876.4'),
+  formatPrice(null),
+  formatPrice(undefined),
+  formatPrice('not-a-price')
+]));
+"""
+    completed = subprocess.run(
+        ["node", "-e", node_script],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert json.loads(completed.stdout) == ["123,457", "9,876", "–", "–", "–"]
+
+
+def test_price_chart_config_formats_y_axis_and_tooltip_prices_as_integers():
+    node_script = r"""
+const fs = require('fs');
+const vm = require('vm');
+const source = fs.readFileSync('app.js', 'utf8').split('\nfetch(')[0];
+const context = { window: {} };
+vm.createContext(context);
+vm.runInContext(source, context);
+const api = context.window.VWAP_CHART_TEST_API;
+const config = api.buildPriceChartConfig({
+  ohlcv: [{date: '2026-08-28', vwap_1d: 123456.5}]
+});
+console.log(JSON.stringify({
+  yTick: config.options.scales.y.ticks.callback(123456.5),
+  tooltip: config.options.plugins.tooltip.callbacks.label({
+    dataset: {label: '1d'},
+    parsed: {y: 123456.5}
+  }),
+  rawValue: config.data.datasets[0].data[0],
+  annotationCount: Object.keys(config.options.plugins.annotation.annotations).length
+}));
+"""
+    completed = subprocess.run(
+        ["node", "-e", node_script],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    result = json.loads(completed.stdout)
+
+    assert result == {
+        "yTick": "123,457",
+        "tooltip": "1d: 123,457",
+        "rawValue": 123456.5,
+        "annotationCount": 0,
+    }
+
+
+def test_date_selection_turns_valid_index_into_x_annotation_and_rejects_invalid_input():
+    node_script = r"""
+const fs = require('fs');
+const vm = require('vm');
+const source = fs.readFileSync('app.js', 'utf8').split('\nfetch(')[0];
+const context = { window: {} };
+vm.createContext(context);
+vm.runInContext(source, context);
+const build = context.window.VWAP_CHART_TEST_API.buildDateSelectionAnnotation;
+const api = context.window.VWAP_CHART_TEST_API;
+const labels = ['2026-08-27', '2026-08-28'];
+const config = api.buildPriceChartConfig({ohlcv: labels.map(date => ({date}))});
+let updateCount = 0;
+let nearestMode = null;
+const chart = {
+  data: config.data,
+  options: config.options,
+  getElementsAtEventForMode: (_event, mode, options) => {
+    nearestMode = {mode, options};
+    return [{index: 1}];
+  },
+  update: () => { updateCount += 1; }
+};
+config.options.onClick({x: 42}, [], chart);
+const clicked = chart.options.plugins.annotation.annotations.selectedDateLine;
+const invalidSelection = api.selectPriceChartIndex(chart, 9);
+console.log(JSON.stringify({
+  valid: build(labels, 1),
+  negative: build(labels, -1),
+  outOfRange: build(labels, 2),
+  fractional: build(labels, 0.5),
+  missingLabels: build(null, 0),
+  clicked,
+  nearestMode,
+  updateCount,
+  invalidSelection,
+  persistedValue: chart.options.plugins.annotation.annotations.selectedDateLine.value
+}));
+"""
+    completed = subprocess.run(
+        ["node", "-e", node_script],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    result = json.loads(completed.stdout)
+
+    assert result["valid"]["type"] == "line"
+    assert result["valid"]["scaleID"] == "x"
+    assert result["valid"]["value"] == "2026-08-28"
+    assert result["valid"]["label"]["display"] is True
+    assert result["valid"]["label"]["content"] == "선택 날짜 2026-08-28"
+    assert result["negative"] is None
+    assert result["outOfRange"] is None
+    assert result["fractional"] is None
+    assert result["missingLabels"] is None
+    assert result["clicked"]["value"] == "2026-08-28"
+    assert result["nearestMode"] == {
+        "mode": "index",
+        "options": {"axis": "x", "intersect": False},
+    }
+    assert result["updateCount"] == 1
+    assert result["invalidSelection"] is False
+    assert result["persistedValue"] == "2026-08-28"
 
 
 def test_cache_bust_version_is_consistent_everywhere():
