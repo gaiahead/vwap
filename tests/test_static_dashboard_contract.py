@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NEW_DATA_VERSION = "data-20260830-price-chart-edge-boundaries"
+NEW_DATA_VERSION = "data-20260830-live-signal-definitions"
 
 
 def read(name: str) -> str:
@@ -41,15 +41,26 @@ def test_monitor_has_exact_live_signal_columns_and_name_sort():
 def test_monitor_keeps_three_strict_live_alignment_definitions():
     html = read("index.html")
     app = read("app.js")
+    explanation = re.search(
+        r'<div class="momentum-monitor-sub">([^<]+)</div>',
+        html,
+    )
 
-    assert "신호 1은 1d &gt; 5d &gt; 20d &gt; 60d &gt; 120d" in html
-    assert "신호 2는 5d &gt; 20d &gt; 60d &gt; 120d" in html
-    assert "신호 3은 20d &gt; 60d &gt; 120d" in html
+    assert explanation is not None
+    assert explanation.group(1) == (
+        "신호 1은 1d &gt; 5d &gt; 20d, "
+        "신호 2는 5d &gt; 20d &gt; 60d, "
+        "신호 3은 20d &gt; 60d &gt; 120d입니다."
+    )
     assert "평가 첫날" not in html
     assert "다음 거래일" not in html
-    assert "const ALIGNMENT_1_5_20_60_120 = 'alignment_1_5_20_60_120';" in app
-    assert "const ALIGNMENT_5_20_60_120 = 'alignment_5_20_60_120';" in app
+    assert "const ALIGNMENT_1_5_20 = 'alignment_1_5_20';" in app
+    assert "const ALIGNMENT_5_20_60 = 'alignment_5_20_60';" in app
     assert "const ALIGNMENT_20_60_120 = 'alignment_20_60_120';" in app
+    for obsolete_windows in ((1, 5, 20, 60, 120), (5, 20, 60, 120)):
+        suffix = "_".join(map(str, obsolete_windows))
+        assert f"ALIGNMENT_{suffix}" not in app
+        assert f"'alignment_{suffix}'" not in app
     assert "row-indicator" not in app + read("style.css")
     assert "signal-cell buy" in app
     assert "signal-cell sell" in app

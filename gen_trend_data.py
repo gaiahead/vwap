@@ -140,7 +140,7 @@ WINDOWS: list[int] = [5, 20, 60, 120, 240]  # 1d는 명시적 proxy, 나머지�
 VOLUME_PROFILE_WINDOWS: list[int] = [1, 5, 20, 60, 120, 240]  # 하단 Volume Profile 기간
 STORAGE_TRADING_DAYS: int = 480  # 240일 차트와 VWAP240 준비구간을 함께 저장
 HISTORY_TRADING_DAYS: int = STORAGE_TRADING_DAYS
-MIN_SIGNAL_TRADING_DAYS: int = 25  # 신규 종목도 표에 유지하되, 120d 미산출 시 신호는 WAIT
+MIN_SIGNAL_TRADING_DAYS: int = 25  # 신규 종목도 표에 유지하고, 미산출 기간이 필요한 신호만 WAIT
 DOWNLOAD_CALENDAR_DAYS: int = 1300  # 휴장일을 고려해 저장용 480거래일을 안정적으로 확보
 N_BUCKETS: int = 20
 KST: timezone = timezone(timedelta(hours=9))
@@ -228,19 +228,19 @@ def date_key(value: Any) -> str:
     return str(pd.Timestamp(value).date())
 
 
-ALIGNMENT_1_5_20_60_120 = "alignment_1_5_20_60_120"
-ALIGNMENT_5_20_60_120 = "alignment_5_20_60_120"
+ALIGNMENT_1_5_20 = "alignment_1_5_20"
+ALIGNMENT_5_20_60 = "alignment_5_20_60"
 ALIGNMENT_20_60_120 = "alignment_20_60_120"
 ALIGNMENT_STRATEGIES: dict[str, dict[str, Any]] = {
-    ALIGNMENT_1_5_20_60_120: {
-        "label": "1 > 5 > 20 > 60 > 120",
-        "rule": "VWAP1 > VWAP5 > VWAP20 > VWAP60 > VWAP120",
-        "windows": (1, 5, 20, 60, 120),
+    ALIGNMENT_1_5_20: {
+        "label": "1 > 5 > 20",
+        "rule": "VWAP1 > VWAP5 > VWAP20",
+        "windows": (1, 5, 20),
     },
-    ALIGNMENT_5_20_60_120: {
-        "label": "5 > 20 > 60 > 120",
-        "rule": "VWAP5 > VWAP20 > VWAP60 > VWAP120",
-        "windows": (5, 20, 60, 120),
+    ALIGNMENT_5_20_60: {
+        "label": "5 > 20 > 60",
+        "rule": "VWAP5 > VWAP20 > VWAP60",
+        "windows": (5, 20, 60),
     },
     ALIGNMENT_20_60_120: {
         "label": "20 > 60 > 120",

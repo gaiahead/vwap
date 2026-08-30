@@ -13,8 +13,8 @@ import gen_trend_data as gen
 
 
 ALIGNMENT_KEYS = {
-    "alignment_1_5_20_60_120",
-    "alignment_5_20_60_120",
+    "alignment_1_5_20",
+    "alignment_5_20_60",
     "alignment_20_60_120",
 }
 LATEST_KEYS = {
@@ -89,16 +89,35 @@ def test_current_signal_schema_has_exact_three_alignments_and_latest_snapshot_on
     assert set(signal) == {"available", "strategies"}
     assert signal["available"] is True
     assert set(signal["strategies"]) == ALIGNMENT_KEYS
-    expected_windows = {
-        gen.ALIGNMENT_1_5_20_60_120: [1, 5, 20, 60, 120],
-        gen.ALIGNMENT_5_20_60_120: [5, 20, 60, 120],
-        gen.ALIGNMENT_20_60_120: [20, 60, 120],
+    expected_definitions = {
+        gen.ALIGNMENT_1_5_20: {
+            "label": "1 > 5 > 20",
+            "rule": "VWAP1 > VWAP5 > VWAP20",
+            "windows": [1, 5, 20],
+        },
+        gen.ALIGNMENT_5_20_60: {
+            "label": "5 > 20 > 60",
+            "rule": "VWAP5 > VWAP20 > VWAP60",
+            "windows": [5, 20, 60],
+        },
+        gen.ALIGNMENT_20_60_120: {
+            "label": "20 > 60 > 120",
+            "rule": "VWAP20 > VWAP60 > VWAP120",
+            "windows": [20, 60, 120],
+        },
     }
     for key, payload in signal["strategies"].items():
         assert set(payload) == {"label", "rule", "windows", "latest"}
-        assert payload["windows"] == expected_windows[key]
+        assert {
+            field: payload[field]
+            for field in ("label", "rule", "windows")
+        } == expected_definitions[key]
         assert set(payload["latest"]) == LATEST_KEYS
         assert payload["latest"]["signal"] in {"BUY", "SELL", "WAIT"}
+
+    for obsolete_windows in ((1, 5, 20, 60, 120), (5, 20, 60, 120)):
+        obsolete_constant = "ALIGNMENT_" + "_".join(map(str, obsolete_windows))
+        assert not hasattr(gen, obsolete_constant)
 
     assert not (walk_keys(signal) & RETIRED_SCHEMA_KEYS)
     serialized = json.dumps(signal, ensure_ascii=False, allow_nan=False)
@@ -106,22 +125,26 @@ def test_current_signal_schema_has_exact_three_alignments_and_latest_snapshot_on
         assert token not in serialized.lower()
 
 
-def test_newer_assets_keep_three_live_wait_signals_when_vwap120_is_unavailable():
+def test_newer_assets_evaluate_only_signals_with_complete_window_history():
     signal = gen.build_strategy_signal(make_ohlcv(range(100, 160)))
 
     assert signal["available"] is True
     assert set(signal["strategies"]) == ALIGNMENT_KEYS
-    for strategy in signal["strategies"].values():
-        latest = strategy["latest"]
-        assert latest["vwap5"] is not None
-        assert latest["vwap20"] is not None
-        assert latest["vwap60"] is not None
-        assert latest["vwap120"] is None
-        assert latest["signal"] == "WAIT"
-        assert latest["alignment"] == "N/A"
+    latest_by_key = {
+        key: strategy["latest"]
+        for key, strategy in signal["strategies"].items()
+    }
+    assert all(latest["vwap5"] is not None for latest in latest_by_key.values())
+    assert all(latest["vwap20"] is not None for latest in latest_by_key.values())
+    assert all(latest["vwap60"] is not None for latest in latest_by_key.values())
+    assert all(latest["vwap120"] is None for latest in latest_by_key.values())
+    assert latest_by_key[gen.ALIGNMENT_1_5_20]["signal"] == "BUY"
+    assert latest_by_key[gen.ALIGNMENT_5_20_60]["signal"] == "BUY"
+    assert latest_by_key[gen.ALIGNMENT_20_60_120]["signal"] == "WAIT"
+    assert latest_by_key[gen.ALIGNMENT_20_60_120]["alignment"] == "N/A"
 
 
-def test_insufficient_history_keeps_schema_but_marks_monitor_row_unavailable():
+def test_insufficient_history_keeps_schema_and_marks_only_incomplete_signals_wait():
     signal = gen.build_strategy_signal(make_ohlcv(range(100, 120)))
 
     assert set(signal) == {"available", "reason", "strategies"}
@@ -129,7 +152,9 @@ def test_insufficient_history_keeps_schema_but_marks_monitor_row_unavailable():
     assert signal["reason"] == "insufficient_recent_history"
     assert set(signal["strategies"]) == ALIGNMENT_KEYS
     assert all(set(payload) == {"label", "rule", "windows", "latest"} for payload in signal["strategies"].values())
-    assert all(payload["latest"]["signal"] == "WAIT" for payload in signal["strategies"].values())
+    assert signal["strategies"][gen.ALIGNMENT_1_5_20]["latest"]["signal"] == "BUY"
+    assert signal["strategies"][gen.ALIGNMENT_5_20_60]["latest"]["signal"] == "WAIT"
+    assert signal["strategies"][gen.ALIGNMENT_20_60_120]["latest"]["signal"] == "WAIT"
     assert not (walk_keys(signal) & RETIRED_SCHEMA_KEYS)
 
 
@@ -142,31 +167,47 @@ def test_strict_alignment_signal_requires_all_values_in_descending_order():
     assert gen.strict_alignment_signal(None, 140, 130, 120, 100) == "WAIT"
 
 
-def test_three_alignment_rules_can_have_different_current_states():
-    medium_only = pd.Series(
+def test_signal_1_ignores_vwap60_and_vwap120_that_would_fail_the_old_rule():
+    row = pd.Series(
         {
-            "vwap_1d": 110.0,
-            "vwap_5d": 130.0,
-            "vwap_20d": 120.0,
-            "vwap_60d": 110.0,
-            "vwap_120d": 100.0,
-        }
-    )
-    long_only = pd.Series(
-        {
-            "vwap_1d": 90.0,
-            "vwap_5d": 100.0,
-            "vwap_20d": 120.0,
-            "vwap_60d": 110.0,
-            "vwap_120d": 100.0,
+            "vwap_1d": 130.0,
+            "vwap_5d": 120.0,
+            "vwap_20d": 110.0,
+            "vwap_60d": 115.0,
+            "vwap_120d": 125.0,
         }
     )
 
-    assert gen.alignment_signal(medium_only, gen.ALIGNMENT_1_5_20_60_120) == "SELL"
-    assert gen.alignment_signal(medium_only, gen.ALIGNMENT_5_20_60_120) == "BUY"
-    assert gen.alignment_signal(medium_only, gen.ALIGNMENT_20_60_120) == "BUY"
-    assert gen.alignment_signal(long_only, gen.ALIGNMENT_5_20_60_120) == "SELL"
-    assert gen.alignment_signal(long_only, gen.ALIGNMENT_20_60_120) == "BUY"
+    assert gen.alignment_signal(row, gen.ALIGNMENT_1_5_20) == "BUY"
+
+
+def test_signal_2_ignores_vwap120_that_would_fail_the_old_rule():
+    row = pd.Series(
+        {
+            "vwap_1d": 90.0,
+            "vwap_5d": 130.0,
+            "vwap_20d": 120.0,
+            "vwap_60d": 110.0,
+            "vwap_120d": 115.0,
+        }
+    )
+
+    assert gen.alignment_signal(row, gen.ALIGNMENT_5_20_60) == "BUY"
+
+
+def test_signal_3_keeps_the_20_60_120_rule():
+    buy_row = pd.Series(
+        {
+            "vwap_20d": 120.0,
+            "vwap_60d": 110.0,
+            "vwap_120d": 100.0,
+        }
+    )
+    sell_row = buy_row.copy()
+    sell_row["vwap_120d"] = 115.0
+
+    assert gen.alignment_signal(buy_row, gen.ALIGNMENT_20_60_120) == "BUY"
+    assert gen.alignment_signal(sell_row, gen.ALIGNMENT_20_60_120) == "SELL"
 
 
 def test_asset_outputs_keep_registry_detail_parity_and_live_only_schema():
