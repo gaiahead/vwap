@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NEW_DATA_VERSION = "data-20260830-price-chart-120d-selection"
+NEW_DATA_VERSION = "data-20260830-price-chart-endpoint-clearance-2px"
 
 
 def read(name: str) -> str:
@@ -210,7 +210,7 @@ console.log(JSON.stringify({
 
     assert result["alternating"] == ["rising", "falling", "rising"]
     assert set(result["edgeCases"].values()) == {"flat"}
-    assert set(result["widths"]) == {3}
+    assert set(result["widths"]) == {2}
     assert result["opacities"] == {"rising": 1, "flat": 0.9, "falling": 0.522}
     for states in result["colors"].values():
         assert len(set(states.values())) == 1
@@ -636,6 +636,10 @@ console.log(JSON.stringify({
   ),
   everyPointRadiusIsZero: config.data.datasets.every(dataset => dataset.pointRadius === 0),
   endpointXs: [firstFrame.line.x, lastFrame.line.x],
+  endpointMarkerXs: [
+    [...new Set(firstFrame.circles.map(circle => circle.x))],
+    [...new Set(lastFrame.circles.map(circle => circle.x))]
+  ],
   contextCalls,
   xScaleLookupCount,
   updateCount
@@ -694,7 +698,7 @@ console.log(JSON.stringify({
 
     assert result["lineStyles"] == [
         {
-            "x": 10.5,
+            "x": 14.5,
             "top": 20,
             "bottom": 220,
             "strokeStyle": "#000000",
@@ -718,7 +722,7 @@ console.log(JSON.stringify({
             "dash": [],
         },
         {
-            "x": 309.5,
+            "x": 305.5,
             "top": 20,
             "bottom": 220,
             "strokeStyle": "#000000",
@@ -733,8 +737,11 @@ console.log(JSON.stringify({
     assert result["finiteOnlyMarkerColor"] == result["datasetColors"][0]
     assert result["hiddenColorWasNotDrawn"] is True
     assert result["everyPointRadiusIsZero"] is True
-    assert result["endpointXs"] == [10.5, 309.5]
-    assert all(10 < x < 310 for x in result["endpointXs"])
+    assert result["endpointXs"] == [14.5, 305.5]
+    assert result["endpointMarkerXs"] == [[14.5], [305.5]]
+    marker_clearance = result["circleRadii"][0] + 0.5
+    assert result["endpointXs"][0] - 10 >= marker_clearance
+    assert 310 - result["endpointXs"][1] >= marker_clearance
     assert result["contextCalls"] == {
         "save": 4,
         "restore": 4,
