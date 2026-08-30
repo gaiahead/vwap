@@ -48,8 +48,6 @@ def test_requested_kodex_us_ai_power_core_infrastructure_etf_is_registered():
     asset = ("KODEX 미국AI전력핵심인프라", "487230.KS")
 
     assert asset in gen.ASSETS
-    assert "487230.KS" in gen.PENSION_ETF_TICKERS
-    assert gen.build_strategy_cost_model("487230.KS")["product_class"] == "OVERSEAS_OR_OTHER_ETF"
 
 
 def test_requested_overseas_ai_power_infrastructure_etfs_are_registered():
@@ -57,18 +55,7 @@ def test_requested_overseas_ai_power_infrastructure_etfs_are_registered():
         ("SOL 미국AI전력인프라", "486450.KS"),
         ("TIGER 글로벌AI전력인프라액티브", "491010.KS"),
     }
-    tickers = {ticker for _, ticker in assets}
-
     assert assets <= set(gen.ASSETS)
-    assert tickers <= gen.PENSION_ETF_TICKERS
-    assert all(
-        gen.build_strategy_cost_model(ticker)["product_class"] == "OVERSEAS_OR_OTHER_ETF"
-        for ticker in tickers
-    )
-    assert all(
-        gen.build_strategy_cost_model(ticker)["account_basis"] == "PENSION_OR_IRP"
-        for ticker in tickers
-    )
 
 
 def test_requested_tiger_korea_ai_power_equipment_top3_plus_is_registered():
@@ -86,10 +73,9 @@ def test_requested_korean_humanoid_robot_assets_are_registered():
     }
 
     assert requested_assets <= set(gen.ASSETS)
-    assert {"277810.KQ", "108490.KQ", "058610.KQ", "454910.KS"} <= gen.DOMESTIC_STOCK_TICKERS
 
 
-def test_requested_solar_assets_use_correct_tickers_and_cost_models():
+def test_requested_solar_assets_use_correct_tickers():
     requested_assets = {
         ("HD현대에너지솔루션", "322000.KS"),
         ("PLUS 태양광&ESS", "457990.KS"),
@@ -97,12 +83,8 @@ def test_requested_solar_assets_use_correct_tickers_and_cost_models():
         ("신성이엔지", "011930.KS"),
         ("SDN", "099220.KQ"),
     }
-    domestic_stocks = {"322000.KS", "389260.KQ", "011930.KS", "099220.KQ"}
-
     assert requested_assets <= set(gen.ASSETS)
     assert ("PLUS 태양광&ESS", "389260.KS") not in gen.ASSETS
-    assert domestic_stocks <= gen.DOMESTIC_STOCK_TICKERS
-    assert gen.build_strategy_cost_model("457990.KS")["product_class"] == "DOMESTIC_EQUITY_ETF"
 
 
 def test_requested_world_healthcare_biotech_financial_etfs_are_registered():
@@ -162,41 +144,3 @@ def test_asset_tickers_are_unique():
     tickers = [ticker for _, ticker in gen.ASSETS]
 
     assert len(tickers) == len(set(tickers))
-
-
-def test_strategy_cost_models_cover_all_registered_assets_without_overlap():
-    tickers = {ticker for _, ticker in gen.ASSETS}
-    explicit_groups = [
-        gen.DOMESTIC_STOCK_TICKERS,
-        gen.LEVERAGED_ETF_TICKERS,
-        gen.PENSION_ETF_TICKERS,
-    ]
-
-    assert all(group <= tickers for group in explicit_groups)
-    assert all(not (left & right) for i, left in enumerate(explicit_groups) for right in explicit_groups[i + 1:])
-    assert all(gen.build_strategy_cost_model(ticker)["product_class"] for ticker in tickers)
-
-
-def test_strategy_cost_models_follow_the_user_account_assumptions():
-    domestic_stock = gen.build_strategy_cost_model("005930.KS")
-    domestic_equity_etf = gen.build_strategy_cost_model("069500.KS")
-    leveraged_etf = gen.build_strategy_cost_model("122630.KS")
-    overseas_etf = gen.build_strategy_cost_model("379800.KS")
-
-    assert domestic_stock == {
-        "product_class": "DOMESTIC_STOCK",
-        "account_basis": "TAXABLE_BROKERAGE",
-        "account_label": "일반계좌",
-        "fee_one_way_pct": 0.03,
-        "transaction_tax_sell_pct": 0.2,
-        "income_tax_per_trade_pct": 0.0,
-    }
-    assert domestic_equity_etf["product_class"] == "DOMESTIC_EQUITY_ETF"
-    assert domestic_equity_etf["account_basis"] == "TAXABLE_BROKERAGE"
-    assert domestic_equity_etf["transaction_tax_sell_pct"] == 0.0
-    assert leveraged_etf["product_class"] == "LEVERAGED_ETF"
-    assert leveraged_etf["account_basis"] == "ISA"
-    assert leveraged_etf["transaction_tax_sell_pct"] == 0.0
-    assert overseas_etf["product_class"] == "OVERSEAS_OR_OTHER_ETF"
-    assert overseas_etf["account_basis"] == "PENSION_OR_IRP"
-    assert overseas_etf["transaction_tax_sell_pct"] == 0.0

@@ -4,10 +4,9 @@ header{padding:20px 28px 14px;border-bottom:1px solid #dbe6f3;background:rgba(25
 header h1{font-size:1.2rem;font-weight:700;color:#0f172a}
 header p{font-size:0.74rem;color:#64748b;margin-top:4px}
 
-/* 모니터 섹션 */
 .momentum-monitor-sub{font-size:0.73rem;color:#64748b;line-height:1.45;margin:-4px 0 10px}
 .momentum-table-wrap{overflow:auto;-webkit-overflow-scrolling:touch;max-height:560px;border:1px solid #e2e8f0;border-radius:12px;background:#ffffff}
-.momentum-table{width:100%;border-collapse:separate;border-spacing:0;font-size:0.8rem;min-width:1024px;table-layout:fixed}
+.momentum-table{width:100%;border-collapse:separate;border-spacing:0;font-size:0.8rem;min-width:430px;table-layout:fixed}
 .momentum-table th{position:sticky;top:0;z-index:3;padding:9px 8px;text-align:center;font-size:0.65rem;font-weight:800;color:#475569;letter-spacing:.02em;line-height:1.15;white-space:nowrap;background:#eff6ff;border-bottom:1px solid #cbd5e1;vertical-align:middle;user-select:none}
 .momentum-table th[data-sort]{cursor:pointer;position:sticky}
 .momentum-table th[data-sort]::after{content:'↕';display:inline-block;margin-left:4px;font-size:.58rem;color:#94a3b8;vertical-align:1px}
@@ -16,10 +15,9 @@ header p{font-size:0.74rem;color:#64748b;margin-top:4px}
 .momentum-table th.sort-active[data-sort-dir="asc"]::after{content:'▲';color:#2563eb}
 .momentum-table th:first-child{text-align:left;border-radius:8px 0 0 8px}
 .momentum-table th:last-child{border-radius:0 8px 8px 0}
-.momentum-table td{padding:8px 8px;text-align:right;color:#334155;border-top:1px solid #e2e8f0;vertical-align:middle;font-variant-numeric:tabular-nums;font-feature-settings:"tnum";background:#ffffff;white-space:nowrap}
-.momentum-table th:nth-child(1),.momentum-table td:nth-child(1){width:190px}
+.momentum-table td{padding:8px;text-align:right;color:#334155;border-top:1px solid #e2e8f0;vertical-align:middle;font-variant-numeric:tabular-nums;font-feature-settings:"tnum";background:#ffffff;white-space:nowrap}
+.momentum-table th:nth-child(1),.momentum-table td:nth-child(1){width:220px}
 .momentum-table th:nth-child(2),.momentum-table td:nth-child(2),.momentum-table th:nth-child(3),.momentum-table td:nth-child(3),.momentum-table th:nth-child(4),.momentum-table td:nth-child(4){width:70px;text-align:center}
-.momentum-table th:nth-child(n+5),.momentum-table td:nth-child(n+5){width:156px}
 .momentum-table td:not(:first-child){font-family:'SF Mono','Consolas','Menlo',monospace;font-size:0.78rem}
 .momentum-table td:first-child{text-align:left;font-weight:800;color:#1e293b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .signal-cell{letter-spacing:.04em}
@@ -29,7 +27,7 @@ header p{font-size:0.74rem;color:#64748b;margin-top:4px}
 .momentum-row{cursor:pointer;transition:background .15s}
 .momentum-row:hover td{background:#eef6ff}
 .momentum-row.detail-active td{background:#dbeafe;box-shadow:inset 0 1px 0 #93c5fd,inset 0 -1px 0 #93c5fd}
-/* Detail section */
+
 .detail-section{border-top:1px solid #dbe6f3;padding:20px 28px 0}
 .detail-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
 .detail-title-wrap{min-width:0}
@@ -39,112 +37,19 @@ header p{font-size:0.74rem;color:#64748b;margin-top:4px}
 .close-btn:hover{background:#eff6ff;color:#0f172a;border-color:#93c5fd}
 .loading{text-align:center;padding:40px;color:#64748b}
 
-/* Panel styles (from detail.html) */
 .panel-box{background:rgba(255,255,255,.94);border:1px solid #dbe6f3;border-radius:14px;padding:16px;box-shadow:0 10px 26px rgba(15,23,42,.06)}
 .volume-profile-panel{margin-top:16px}
 .chart-wrap{position:relative;height:440px}
 .section-box{background:rgba(255,255,255,.94);border:1px solid #dbe6f3;border-radius:14px;padding:16px 20px;margin:16px 28px 0;box-shadow:0 10px 26px rgba(15,23,42,.06)}
 .panel-title{font-size:0.7rem;font-weight:800;color:#64748b;letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px}
-
-.chart-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
-.alignment-tabs{display:inline-flex;flex-wrap:wrap;gap:3px;margin:0;padding:3px;border:1px solid #dbe6f3;border-radius:8px;background:#f8fafc}
-.alignment-tab{background:transparent;border:0;border-radius:5px;padding:5px 12px;cursor:pointer;font-size:.7rem;font-weight:800;color:#64748b;transition:all .18s;font-family:inherit}
-.alignment-tab:hover{background:#eff6ff;color:#1e293b}
-.alignment-tab.active{background:#2563eb;color:#fff}
-.alignment-tab:focus-visible{outline:2px solid #60a5fa;outline-offset:2px}
-.chart-range-control{display:flex;align-items:center;gap:7px;flex:none}
-.chart-range-label{font-size:.64rem;font-weight:800;color:#64748b;white-space:nowrap}
-.chart-range-options{display:inline-flex;gap:2px;padding:3px;border:1px solid #dbe6f3;border-radius:8px;background:#f8fafc}
-.chart-range-button{min-width:48px;background:transparent;border:0;border-radius:5px;padding:5px 9px;cursor:pointer;font-family:inherit;font-size:.68rem;font-weight:800;color:#64748b;transition:all .18s}
-.chart-range-button:hover{background:#eff6ff;color:#1e293b}
-.chart-range-button.active{background:#0f172a;color:#fff}
-.chart-range-button:focus-visible{outline:2px solid #60a5fa;outline-offset:2px}
-.direction-status{display:grid;grid-template-columns:repeat(4,minmax(0,auto)) 1fr;align-items:center;gap:8px;margin:0 0 12px;padding:9px 11px;border:1px solid #cbd5e1;border-left:3px solid #64748b;border-radius:8px;background:#f8fafc}
-.direction-status[hidden]{display:none}
-.direction-status span{display:flex;align-items:baseline;gap:5px;padding-right:8px;border-right:1px solid #e2e8f0;white-space:nowrap}
-.direction-status small{font-size:.58rem;font-weight:800;color:#64748b}
-.direction-status strong{font:900 .72rem 'SF Mono','Consolas','Menlo',monospace;color:#0f172a}
-.direction-status em{justify-self:end;font-size:.68rem;font-weight:900;font-style:normal;color:#334155;white-space:nowrap}
-.direction-status-up{border-left-color:#16a34a;background:#f0fdf4}
-.direction-status-down{border-left-color:#dc2626;background:#fef2f2}
-.direction-status-wait{border-left-color:#64748b;background:#f8fafc}
-
 .vp-tabs{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
 .vp-tab{background:#f8fafc;border:1px solid #dbe6f3;border-radius:4px;padding:3px 10px;cursor:pointer;font-size:0.68rem;font-weight:600;color:#475569;transition:all .2s;font-family:inherit}
 .vp-tab:hover{background:#eff6ff;border-color:#93c5fd;color:#1e293b}
 .vp-tab.active{background:#dbeafe;border-color:#60a5fa;color:#1d4ed8}
 
-/* Strategy backtest journals */
-.backtest-journal-section{margin-top:16px;padding:20px;background:rgba(255,255,255,.96);border:1px solid #dbe6f3;border-radius:14px;box-shadow:0 10px 26px rgba(15,23,42,.06)}
-.journal-section-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:14px}
-.journal-eyebrow{font-size:.62rem;font-weight:900;letter-spacing:.12em;color:#2563eb;margin-bottom:5px}
-.journal-section-head h3{font-size:1.02rem;color:#0f172a;line-height:1.25}
-.journal-section-head p{font-size:.72rem;color:#64748b;line-height:1.5;margin-top:5px}
-.journal-period{flex:none;padding:5px 9px;border:1px solid #bfdbfe;border-radius:999px;background:#eff6ff;color:#1d4ed8;font-size:.65rem;font-weight:800;white-space:nowrap}
-.journal-horizon-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:16px}
-.journal-horizon-item{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:8px;min-width:0;padding:9px 11px;border:1px solid #e2e8f0;border-radius:9px;background:#f8fafc}
-.journal-horizon-item span{font-size:.6rem;font-weight:900;padding:3px 6px;border-radius:999px}
-.journal-horizon-item strong{font-size:.72rem;color:#334155;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.journal-horizon-item em{font:800 .72rem 'SF Mono','Consolas','Menlo',monospace;font-style:normal;white-space:nowrap}
-.journal-horizon-short span{background:#dbeafe;color:#1d4ed8}
-.journal-horizon-medium span{background:#ede9fe;color:#6d28d9}
-.journal-horizon-long span{background:#dcfce7;color:#166534}
-.journal-horizon-direction span{background:#ccfbf1;color:#0f766e}
-.journal-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;align-items:start}
-.journal-card{min-width:0;border:1px solid #dbe6f3;border-top-width:3px;border-radius:12px;padding:14px;background:#fff;box-shadow:0 5px 16px rgba(15,23,42,.04)}
-.journal-card-short{border-top-color:#2563eb}
-.journal-card-medium{border-top-color:#7c3aed}
-.journal-card-long{border-top-color:#16a34a}
-.journal-card-direction{border-top-color:#0d9488}
-.journal-card-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
-.journal-card-head>div{display:flex;align-items:center;gap:7px;min-width:0}
-.journal-card-head h4{font-size:.88rem;color:#0f172a;white-space:nowrap}
-.journal-horizon-badge{font-size:.58rem;font-weight:900;padding:3px 6px;border-radius:999px;background:#e2e8f0;color:#475569;white-space:nowrap}
-.journal-card-short .journal-horizon-badge{background:#dbeafe;color:#1d4ed8}
-.journal-card-medium .journal-horizon-badge{background:#ede9fe;color:#6d28d9}
-.journal-card-long .journal-horizon-badge{background:#dcfce7;color:#166534}
-.journal-card-direction .journal-horizon-badge{background:#ccfbf1;color:#0f766e}
-.journal-card-direction .journal-metric:last-child strong{font-family:'Apple SD Gothic Neo','Pretendard',sans-serif;font-size:.68rem;line-height:1.35;white-space:normal}
-.journal-count{font-size:.62rem;font-weight:700;color:#94a3b8;white-space:nowrap}
-.journal-rule{font-size:.67rem;color:#64748b;line-height:1.45;margin:7px 0 10px}
-.journal-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-bottom:10px}
-.journal-metric{display:flex;flex-direction:column;gap:3px;padding:8px 9px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;min-width:0}
-.journal-metric span{font-size:.58rem;font-weight:700;color:#64748b;white-space:nowrap}
-.journal-metric strong{font:800 .76rem 'SF Mono','Consolas','Menlo',monospace;color:#0f172a;white-space:nowrap}
-.journal-table-wrap{max-height:360px;overflow:auto;-webkit-overflow-scrolling:touch;border:1px solid #e2e8f0;border-radius:9px;background:#fff}
-.journal-table{width:100%;min-width:510px;border-collapse:separate;border-spacing:0;table-layout:fixed;font-size:.67rem}
-.journal-table th{position:sticky;top:0;z-index:2;padding:7px 6px;background:#f1f5f9;border-bottom:1px solid #cbd5e1;color:#64748b;font-size:.58rem;font-weight:900;text-align:center;white-space:nowrap}
-.journal-table td{padding:7px 6px;border-top:1px solid #eef2f7;color:#334155;text-align:right;font-family:'SF Mono','Consolas','Menlo',monospace;font-variant-numeric:tabular-nums;white-space:nowrap}
-.journal-table td:nth-child(1),.journal-table td:nth-child(3){text-align:center;color:#475569}
-.journal-table tbody tr:first-child td{border-top:0}
-.journal-table tbody tr:hover td{background:#f8fafc}
-.journal-return{font-weight:900}
-.journal-open-row td{background:#fffbeb}
-.journal-open-label{color:#b45309!important;font-weight:900}
-.journal-initial-label{color:#1d4ed8!important;font-weight:900}
-.journal-empty{padding:36px 16px;text-align:center;color:#94a3b8;font-size:.68rem}
-.journal-note{font-size:.59rem;color:#94a3b8;line-height:1.45;margin-top:8px}
-
-@media (max-width:960px){
-  .journal-grid{grid-template-columns:1fr}
-  .journal-table-wrap{max-height:320px}
-  .direction-status{grid-template-columns:repeat(4,minmax(0,1fr))}
-  .direction-status em{grid-column:1/-1;justify-self:start}
-}
 @media (max-width:640px){
   header{padding:16px 14px 12px}
   .section-box{margin:12px 12px 0;padding:14px}
   .detail-section{padding:16px 12px 0}
   .chart-wrap{height:360px}
-  .backtest-journal-section{padding:14px}
-  .journal-section-head{align-items:center}
-  .journal-section-head p{max-width:250px}
-  .chart-toolbar{align-items:stretch;flex-direction:column;gap:7px}
-  .alignment-tabs{display:flex}
-  .chart-range-control{justify-content:space-between}
-  .direction-status{grid-template-columns:repeat(2,minmax(0,1fr))}
-  .direction-status span:nth-child(2){border-right:0}
-  .journal-horizon-strip{grid-template-columns:1fr;gap:6px}
-  .journal-summary{gap:5px}
-  .journal-metric{padding:7px}
 }
