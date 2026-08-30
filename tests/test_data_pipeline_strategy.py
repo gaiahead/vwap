@@ -33,14 +33,15 @@ def test_prepare_strategy_frame_uses_stored_history_but_returns_recent_120_days(
     work = gen.prepare_strategy_frame(df)
 
     assert gen.LOOKBACK_TRADING_DAYS == 120
-    assert gen.STORAGE_TRADING_DAYS == 240
-    assert gen.HISTORY_TRADING_DAYS == gen.STORAGE_TRADING_DAYS == 240
+    assert gen.STORAGE_TRADING_DAYS == 480
+    assert gen.HISTORY_TRADING_DAYS == gen.STORAGE_TRADING_DAYS == 480
+    assert gen.DOWNLOAD_CALENDAR_DAYS == 1300
     assert len(work) == gen.LOOKBACK_TRADING_DAYS
     assert work.index[0] == df.index[-gen.LOOKBACK_TRADING_DAYS]
     first = work.iloc[0]
     assert first["vwap_1d"] == (first["high"] + first["low"] + first["close"]) / 3
     assert "vwap_2d" not in work
-    assert not work[["vwap_5d", "vwap_20d", "vwap_60d", "vwap_120d"]].isna().any().any()
+    assert not work[["vwap_5d", "vwap_20d", "vwap_60d", "vwap_120d", "vwap_240d"]].isna().any().any()
     source = df.tail(gen.HISTORY_TRADING_DAYS).copy()
     source_proxy = (source["high"] + source["low"] + source["close"]) / 3
     expected_vwap120 = source_proxy.rolling(120).mean()
@@ -578,7 +579,7 @@ def test_build_strategy_simulates_visible_window_once_per_alignment(monkeypatch)
 
 
 def test_build_asset_outputs_keeps_trend_and_detail_strategy_contract_in_sync():
-    df = make_ohlcv([100] * 220 + [130] * 80 + [82] * 60 + [150] * 60)
+    df = make_ohlcv([100] * 300 + [130] * 100 + [82] * 80 + [150] * 120)
 
     trend, detail = gen.build_asset_outputs("테스트", "TEST", df)
 
@@ -596,13 +597,15 @@ def test_build_asset_outputs_keeps_trend_and_detail_strategy_contract_in_sync():
     assert trend["lookback_trading_days"] == detail["lookback_trading_days"] == gen.LOOKBACK_TRADING_DAYS
     assert trend["storage_trading_days"] == detail["storage_trading_days"] == gen.STORAGE_TRADING_DAYS
     assert trend["latest_price"] == detail["latest_price"] == round(float(df["close"].iloc[-1]), 2)
-    assert gen.WINDOWS == [5, 20, 60, 120]
-    assert gen.VOLUME_PROFILE_WINDOWS == [1, 5, 20, 60, 120]
+    assert gen.WINDOWS == [5, 20, 60, 120, 240]
+    assert gen.VOLUME_PROFILE_WINDOWS == [1, 5, 20, 60, 120, 240]
     assert len(trend["records"]) == gen.STORAGE_TRADING_DAYS
     assert len(detail["ohlcv"]) == gen.STORAGE_TRADING_DAYS
     assert detail["ohlcv"][0]["vwap_120d"] is None
     assert detail["ohlcv"][-gen.LOOKBACK_TRADING_DAYS]["vwap_120d"] is not None
-    assert set(detail["volume_profile"]) == {"1d", "5d", "20d", "60d", "120d"}
+    assert detail["ohlcv"][0]["vwap_240d"] is None
+    assert detail["ohlcv"][-240]["vwap_240d"] is not None
+    assert set(detail["volume_profile"]) == {"1d", "5d", "20d", "60d", "120d", "240d"}
     for window in gen.WINDOWS:
         assert f"vwap_{window}d" in detail["ohlcv"][-1]
     assert "vwap_1d" in detail["ohlcv"][-1]

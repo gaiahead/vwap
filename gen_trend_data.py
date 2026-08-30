@@ -160,13 +160,13 @@ PENSION_ETF_TICKERS: frozenset[str] = frozenset({
     "390390.KS", "446770.KS", "474800.KS", "497780.KS", "0036Z0.KS",
     "415920.KS", "487230.KS", "486450.KS", "491010.KS",
 })
-WINDOWS: list[int] = [5, 20, 60, 120]  # 1d는 명시적 proxy, 나머지는 상세 차트용 롤링 VWAP 기간
-VOLUME_PROFILE_WINDOWS: list[int] = [1, 5, 20, 60, 120]  # 하단 Volume Profile 기간
-LOOKBACK_TRADING_DAYS: int = 120  # 차트·백테스트 표시/평가 구간
-STORAGE_TRADING_DAYS: int = 240  # 종목별 상세 OHLCV 저장 구간
+WINDOWS: list[int] = [5, 20, 60, 120, 240]  # 1d는 명시적 proxy, 나머지는 상세 차트용 롤링 VWAP 기간
+VOLUME_PROFILE_WINDOWS: list[int] = [1, 5, 20, 60, 120, 240]  # 하단 Volume Profile 기간
+LOOKBACK_TRADING_DAYS: int = 120  # 전략·백테스트 평가 구간(차트 범위와 독립)
+STORAGE_TRADING_DAYS: int = 480  # 240일 차트와 VWAP240 준비구간을 함께 저장
 HISTORY_TRADING_DAYS: int = STORAGE_TRADING_DAYS
 MIN_STRATEGY_TRADING_DAYS: int = 25  # 신규 종목도 표에 유지하되, 120d 미산출 시 신호는 WAIT
-DOWNLOAD_CALENDAR_DAYS: int = 650  # 휴장일을 고려해 저장용 240거래일을 안정적으로 확보
+DOWNLOAD_CALENDAR_DAYS: int = 1300  # 휴장일을 고려해 저장용 480거래일을 안정적으로 확보
 N_BUCKETS: int = 20
 KST: timezone = timezone(timedelta(hours=9))
 KRX_TODAY_PATCH_AFTER = time(15, 30)  # 장중 Naver 일봉은 미확정값이므로 15:30 이후만 반영
@@ -369,10 +369,11 @@ def prepare_strategy_frame(
 
 
 def prepare_storage_frame(df: pd.DataFrame) -> pd.DataFrame:
-    """저장할 최근 240거래일 자체로 VWAP 지표를 계산한다.
+    """저장할 최근 480거래일 자체로 VWAP 지표를 계산한다.
 
-    앞 119개 저장 행의 VWAP120은 준비구간이라 None일 수 있다. 차트와
-    백테스트는 마지막 120개 행만 사용하므로 표시 첫날부터 VWAP120이 유효하다.
+    앞 239개 저장 행의 VWAP240은 준비구간이라 None일 수 있다. 240일
+    차트는 마지막 240개 행만 사용하므로 표시 첫날부터 VWAP240이 유효하다.
+    전략과 백테스트는 별도의 최근 120거래일 프레임을 계속 사용한다.
     """
     source = df.tail(STORAGE_TRADING_DAYS).copy()
     source["vwap_1d"] = typical_price_series(source).astype(float)
@@ -1172,7 +1173,7 @@ def maybe_patch_krx_today(
 
 
 def download_ohlcv(ticker: str, end_date: str) -> pd.DataFrame:
-    """저장용 최근 240거래일 OHLCV를 다운로드한다."""
+    """저장용 최근 480거래일 OHLCV를 다운로드한다."""
     end_dt = datetime.strptime(end_date, "%Y-%m-%d")
     start_date = (end_dt - timedelta(days=DOWNLOAD_CALENDAR_DAYS)).strftime("%Y-%m-%d")
     # yfinance의 end는 배타적이라 다음 날짜를 넘겨준다. 그래도 KRX 당일이 없으면 Naver로 보강한다.
@@ -1215,7 +1216,7 @@ def build_vwap_structure(df: pd.DataFrame) -> tuple[list[dict[str, Any]], float 
 
 
 def build_recent_records(df: pd.DataFrame) -> list[dict[str, Any]]:
-    """저장용 최근 240거래일 close 기반 미니 레코드."""
+    """저장용 최근 480거래일 close 기반 미니 레코드."""
     return [
         {"date": date_key(dt), "price": round(float(row["close"]), 2)}
         for dt, row in df.tail(STORAGE_TRADING_DAYS).iterrows()
@@ -1229,7 +1230,7 @@ def build_detail_data(
     strategy_signal: dict[str, Any] | None = None,
     backtest_journals: dict[str, list[dict[str, Any]]] | None = None,
 ) -> dict[str, Any]:
-    """상세 저장 데이터 240일 생성; 차트·백테스트는 최근 120일을 사용한다."""
+    """상세 저장 데이터 480일 생성; 전략·백테스트는 최근 120일을 사용한다."""
     if strategy_signal is None:
         strategy_payload = build_strategy_signal(df, ticker=ticker)
         if backtest_journals is None:

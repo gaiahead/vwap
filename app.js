@@ -1,5 +1,9 @@
-const DATA_VERSION = 'data-20260829-1800';
-const CHART_TRADING_DAYS = 120;
+const DATA_VERSION = 'data-20260830-vwap240';
+const DEFAULT_CHART_TRADING_DAYS = 120;
+const CHART_TRADING_DAY_OPTIONS = [120, 240];
+const VWAP_TREND_LOOKBACK = 3;
+const VWAP_TREND_DEADBAND_PCT = 0.04;
+const VWAP_TREND_CONFIRMATION_SEGMENTS = 2;
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -23,15 +27,127 @@ const DEFAULT_ALIGNMENT_STRATEGY = ALIGNMENT_1_5_20_60_120;
 const ALIGNMENT_ENTRY_RULE = '첫 평가 정배열은 초기 진입 · 이후 전환 확인 → 다음 거래일 1d VWAP 체결';
 const DIRECTION_ENTRY_RULE = 'VWAP20 전일 대비 상승 시 보유 · 방향 전환 확인 → 다음 거래일 실제 시초가 체결';
 const DEFAULT_SORT = { key: 'alignment_1_5_20_60_120_return_pct', dir: 'desc' };
-const VP_PERIODS = ['1d', '5d', '20d', '60d', '120d'];
-const PRICE_LINE_DEFS = [
-  { label: '1d', window: 1, color: '#eab308', dash: [], width: 1.15 },
-  { label: '5d', window: 5, color: '#dc2626', dash: [], width: 1.15 },
-  { label: '20d', window: 20, color: '#16a34a', dash: [], width: 1.15 },
-  { label: '60d', window: 60, color: '#2563eb', dash: [], width: 1.15 },
-  { label: '120d', window: 120, color: '#000000', dash: [], width: 1.15 }
-];
+const VP_PERIODS = ['1d', '5d', '20d', '60d', '120d', '240d'];
+const PRICE_LINE_DEFS = Object.freeze([
+  Object.freeze({ label: '1d', window: 1, color: '#eab308', dash: [], width: 1.00, opacity: 0.66 }),
+  Object.freeze({ label: '5d', window: 5, color: '#dc2626', dash: [], width: 1.15, opacity: 0.72 }),
+  Object.freeze({ label: '20d', window: 20, color: '#16a34a', dash: [], width: 1.80, opacity: 0.90 }),
+  Object.freeze({ label: '60d', window: 60, color: '#2563eb', dash: [], width: 1.25, opacity: 0.74 }),
+  Object.freeze({ label: '120d', window: 120, color: '#111827', dash: [], width: 1.35, opacity: 0.78 }),
+  Object.freeze({ label: '240d', window: 240, color: '#7c3aed', dash: [], width: 1.45, opacity: 0.82 })
+]);
+PRICE_LINE_DEFS.forEach(definition => Object.freeze(definition.dash));
 const PRICE_DATASET_ORDER = ['BUY', 'SELL', ...PRICE_LINE_DEFS.map(def => def.label)];
+
+const VWAP_TREND_STYLE_FACTORS = Object.freeze({
+  rising: Object.freeze({ width: 1.28, opacity: 1.12 }),
+  flat: Object.freeze({ width: 1, opacity: 1 }),
+  falling: Object.freeze({ width: 0.76, opacity: 0.58 })
+});
+
+function hasFiniteVwapValue(value) {
+  return value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
+}
+
+function classifyVwapTrendCandidate(
+  values,
+  index,
+  lookback = VWAP_TREND_LOOKBACK,
+  deadbandPct = VWAP_TREND_DEADBAND_PCT
+) {
+  const current = values?.[index];
+  const reference = values?.[index - lookback];
+  if (index < lookback || !hasFiniteVwapValue(current) || !hasFiniteVwapValue(reference)) return 'flat';
+  const referenceValue = Number(reference);
+  if (referenceValue === 0) return 'flat';
+  const changePct = ((Number(current) - referenceValue) / Math.abs(referenceValue)) * 100;
+  if (changePct > deadbandPct) return 'rising';
+  if (changePct < -deadbandPct) return 'falling';
+  return 'flat';
+}
+
+function classifyVwapTrendStates(
+  values,
+  {
+    lookback = VWAP_TREND_LOOKBACK,
+    deadbandPct = VWAP_TREND_DEADBAND_PCT,
+    confirmations = VWAP_TREND_CONFIRMATION_SEGMENTS
+  } = {}
+) {
+  let state = 'flat';
+  let pendingState = null;
+  let pendingCount = 0;
+  return (values || []).map((value, index) => {
+    const reference = values[index - lookback];
+    if (index < lookback || !hasFiniteVwapValue(value) || !hasFiniteVwapValue(reference)) {
+      state = 'flat';
+      pendingState = null;
+      pendingCount = 0;
+      return state;
+    }
+
+    const candidate = classifyVwapTrendCandidate(values, index, lookback, deadbandPct);
+    if (candidate === state) {
+      pendingState = null;
+      pendingCount = 0;
+      return state;
+    }
+
+    if (candidate === pendingState) {
+      pendingCount += 1;
+    } else {
+      pendingState = candidate;
+      pendingCount = 1;
+    }
+    if (pendingCount >= Math.max(1, confirmations)) {
+      state = candidate;
+      pendingState = null;
+      pendingCount = 0;
+    }
+    return state;
+  });
+}
+
+function colorWithOpacity(hexColor, opacity) {
+  const hex = String(hexColor).replace('#', '');
+  const red = parseInt(hex.slice(0, 2), 16);
+  const green = parseInt(hex.slice(2, 4), 16);
+  const blue = parseInt(hex.slice(4, 6), 16);
+  return `rgba(${red}, ${green}, ${blue}, ${opacity})`;
+}
+
+function getVwapTrendStyle(period, state = 'flat') {
+  const definition = PRICE_LINE_DEFS.find(def => def.window === Number(period));
+  if (!definition) return null;
+  const normalizedState = VWAP_TREND_STYLE_FACTORS[state] ? state : 'flat';
+  const factor = VWAP_TREND_STYLE_FACTORS[normalizedState];
+  const opacity = Math.min(1, Number((definition.opacity * factor.opacity).toFixed(3)));
+  return Object.freeze({
+    state: normalizedState,
+    baseColor: definition.color,
+    borderColor: colorWithOpacity(definition.color, opacity),
+    borderWidth: Number((definition.width * factor.width).toFixed(3)),
+    opacity
+  });
+}
+
+const VWAP_CHART_TEST_API = Object.freeze({
+  trendLookback: VWAP_TREND_LOOKBACK,
+  deadbandPct: VWAP_TREND_DEADBAND_PCT,
+  confirmationSegments: VWAP_TREND_CONFIRMATION_SEGMENTS,
+  lineDefinitions: PRICE_LINE_DEFS,
+  classifyVwapTrendCandidate,
+  classifyVwapTrendStates,
+  getVwapTrendStyle
+});
+if (typeof window !== 'undefined') {
+  Object.defineProperty(window, 'VWAP_CHART_TEST_API', {
+    value: VWAP_CHART_TEST_API,
+    writable: false,
+    configurable: false,
+    enumerable: true
+  });
+}
 
 const ALIGNMENT_SIGNAL_COLUMNS = ALIGNMENT_OPTIONS.map((option, index) => ({
   key: `signal_${index + 1}`,
@@ -57,6 +173,7 @@ const NUMERIC_SORT_FIELDS = new Set(MOMENTUM_COLUMNS.filter(column => column.typ
 let priceChart = null;
 let vpChart = null;
 let currentVpPeriod = '1d';
+let currentChartTradingDays = DEFAULT_CHART_TRADING_DAYS;
 let currentAlignmentStrategy = DEFAULT_ALIGNMENT_STRATEGY;
 let currentDetailName = null;
 const detailCache = {};
@@ -214,6 +331,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       if (!document.getElementById('chart-price') || !document.getElementById('chart-vp')) {
         renderDetailPanels();
         initAlignmentTabs();
+        initChartRangeSelector();
         initVpTabs();
       }
       renderDetail(detailCache[ticker], ticker, name);
@@ -230,6 +348,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       detailCache[ticker] = json;
       renderDetailPanels();
       initAlignmentTabs();
+      initChartRangeSelector();
       initVpTabs();
       renderDetail(json, ticker, name);
     } catch {
@@ -494,6 +613,8 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
 
   function renderDetailPanels() {
     const pricePanel = createChartPanel('', 'chart-price');
+    const chartToolbar = document.createElement('div');
+    chartToolbar.className = 'chart-toolbar';
     const alignmentTabs = document.createElement('div');
     alignmentTabs.className = 'alignment-tabs';
     alignmentTabs.id = 'alignment-tabs';
@@ -502,6 +623,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     CHART_STRATEGY_OPTIONS.forEach(option => {
       const button = document.createElement('button');
       const active = option.key === currentAlignmentStrategy;
+      button.type = 'button';
       button.className = 'alignment-tab' + (active ? ' active' : '');
       button.dataset.strategy = option.key;
       button.textContent = option.label;
@@ -509,7 +631,29 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       button.setAttribute('aria-selected', String(active));
       alignmentTabs.appendChild(button);
     });
-    pricePanel.insertBefore(alignmentTabs, pricePanel.querySelector('.chart-wrap'));
+    const rangeControl = document.createElement('div');
+    rangeControl.className = 'chart-range-control';
+    rangeControl.setAttribute('role', 'group');
+    rangeControl.setAttribute('aria-labelledby', 'chart-range-label');
+    const rangeLabel = document.createElement('span');
+    rangeLabel.className = 'chart-range-label';
+    rangeLabel.id = 'chart-range-label';
+    rangeLabel.textContent = '차트 범위';
+    const rangeOptions = document.createElement('span');
+    rangeOptions.className = 'chart-range-options';
+    CHART_TRADING_DAY_OPTIONS.forEach(days => {
+      const button = document.createElement('button');
+      const active = days === currentChartTradingDays;
+      button.type = 'button';
+      button.className = 'chart-range-button' + (active ? ' active' : '');
+      button.dataset.days = String(days);
+      button.textContent = `${days}일`;
+      button.setAttribute('aria-pressed', String(active));
+      rangeOptions.appendChild(button);
+    });
+    rangeControl.append(rangeLabel, rangeOptions);
+    chartToolbar.append(alignmentTabs, rangeControl);
+    pricePanel.insertBefore(chartToolbar, pricePanel.querySelector('.chart-wrap'));
     const directionStatus = document.createElement('div');
     directionStatus.className = 'direction-status';
     directionStatus.id = 'direction-status';
@@ -526,6 +670,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
     tabs.id = 'vp-tabs';
     VP_PERIODS.forEach(period => {
       const button = document.createElement('button');
+      button.type = 'button';
       button.className = 'vp-tab' + (period === currentVpPeriod ? ' active' : '');
       button.dataset.period = period;
       button.textContent = period;
@@ -564,6 +709,24 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       e.target.classList.add('active');
       const ticker = data[currentDetailName]?.ticker;
       if (ticker && detailCache[ticker]) renderVpChart(detailCache[ticker], currentVpPeriod);
+    });
+  }
+
+  function initChartRangeSelector() {
+    const control = document.querySelector('.chart-range-control');
+    if (!control) return;
+    control.addEventListener('click', event => {
+      if (!event.target.matches('.chart-range-button')) return;
+      const days = Number(event.target.dataset.days);
+      if (!CHART_TRADING_DAY_OPTIONS.includes(days) || days === currentChartTradingDays) return;
+      currentChartTradingDays = days;
+      control.querySelectorAll('.chart-range-button').forEach(button => {
+        const active = Number(button.dataset.days) === currentChartTradingDays;
+        button.classList.toggle('active', active);
+        button.setAttribute('aria-pressed', String(active));
+      });
+      const ticker = data[currentDetailName]?.ticker;
+      if (ticker && detailCache[ticker]) renderPriceChart(detailCache[ticker]);
     });
   }
 
@@ -608,7 +771,7 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
 
   function renderPriceChart(detailData) {
     renderDirectionStatus(detailData);
-    const ohlcv = detailData.ohlcv.slice(-CHART_TRADING_DAYS);
+    const ohlcv = detailData.ohlcv.slice(-currentChartTradingDays);
     const labels = ohlcv.map(d => d.date);
     const selectedSignals = detailData.strategy_signal?.strategies?.[currentAlignmentStrategy]?.signals || [];
     const signalMap = new Map(selectedSignals.map(signal => [signal.date, signal]));
@@ -618,27 +781,29 @@ fetch(`trend_data.json?v=${DATA_VERSION}`, { cache: 'no-store' }).then(r=>r.json
       return signal.marker_price ?? ohlcv[i]?.vwap_5d ?? null;
     });
     const lineData = def => ohlcv.map(d => d[`vwap_${def.window}d`] ?? null);
-    const directionMode = currentAlignmentStrategy === VWAP20_DIRECTION;
-    const vwapLineDatasets = PRICE_LINE_DEFS.map((def, idx) => ({
-      label: def.label,
-      data: lineData(def),
-      borderColor: def.color,
-      borderWidth: directionMode && def.window === 20 ? 2.6 : def.width,
-      borderDash: def.dash,
-      segment: directionMode && def.window === 20 ? {
-        borderColor: ctx => {
-          const previous = ctx.p0.parsed.y;
-          const current = ctx.p1.parsed.y;
-          if (previous == null || current == null) return def.color;
-          return current > previous ? COLOR.positive : COLOR.negative;
+    const vwapLineDatasets = PRICE_LINE_DEFS.map((def, idx) => {
+      const values = lineData(def);
+      const trendStates = classifyVwapTrendStates(values);
+      const baseStyle = getVwapTrendStyle(def.window, 'flat');
+      const segmentStyle = ctx => getVwapTrendStyle(def.window, trendStates[ctx.p1DataIndex]);
+      return {
+        label: def.label,
+        data: values,
+        borderColor: baseStyle.borderColor,
+        borderWidth: baseStyle.borderWidth,
+        borderDash: def.dash,
+        segment: {
+          borderColor: ctx => segmentStyle(ctx).borderColor,
+          borderWidth: ctx => segmentStyle(ctx).borderWidth
         },
-      } : undefined,
-      pointStyle: 'line',
-      pointRadius: 0,
-      tension: 0.2,
-      fill: false,
-      order: idx + 2
-    }));
+        pointStyle: 'line',
+        pointRadius: 0,
+        tension: 0.2,
+        spanGaps: false,
+        fill: false,
+        order: idx + 2
+      };
+    });
     const signalDatasets = [
       { label: 'BUY', data: markerData('BUY'), type: 'line', showLine: false, pointStyle: 'triangle', pointRotation: 0, pointRadius: 7, pointHoverRadius: 9, pointBackgroundColor: COLOR.positive, pointBorderColor: '#166534', pointBorderWidth: 1.5, order: 1 },
       { label: 'SELL', data: markerData('SELL'), type: 'line', showLine: false, pointStyle: 'triangle', pointRotation: 180, pointRadius: 7, pointHoverRadius: 9, pointBackgroundColor: COLOR.negative, pointBorderColor: '#991b1b', pointBorderWidth: 1.5, order: 1 }

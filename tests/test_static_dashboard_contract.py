@@ -1,4 +1,6 @@
+import json
 import re
+import subprocess
 from pathlib import Path
 
 
@@ -201,26 +203,39 @@ def test_signal_cell_uses_buy_sell_colors_without_name_indicator():
     assert ".signal-cell.sell" in css
 
 
-def test_detail_panels_vp_tabs_and_price_datasets_use_1_5_20_60_120_with_trade_markers():
+def test_detail_panels_add_vwap240_range_control_and_keep_trade_markers():
     app = read("app.js")
 
-    assert "const CHART_TRADING_DAYS = 120;" in app
-    assert "const ohlcv = detailData.ohlcv.slice(-CHART_TRADING_DAYS);" in app
+    assert "const DEFAULT_CHART_TRADING_DAYS = 120;" in app
+    assert "const CHART_TRADING_DAY_OPTIONS = [120, 240];" in app
+    assert "let currentChartTradingDays = DEFAULT_CHART_TRADING_DAYS;" in app
+    assert "const ohlcv = detailData.ohlcv.slice(-currentChartTradingDays);" in app
+    assert "chart-range-control" in app
+    assert "chart-range-button" in app
+    assert "차트 범위" in app
+    assert "button.setAttribute('aria-pressed', String(active));" in app
     assert "VWAP Lines · 3/5/10/20/40/60/100/200" not in app
     assert "VWAP Lines · 1/5/20/40/60/100/200" not in app
     assert "VWAP Lines · 2/5/20/40/60/100/200" not in app
     assert "Volume Profile" in app
-    assert "const VP_PERIODS = ['1d', '5d', '20d', '60d', '120d']" in app
+    assert "const VP_PERIODS = ['1d', '5d', '20d', '60d', '120d', '240d']" in app
     assert "let currentVpPeriod = '1d';" in app
     assert "currentVpPeriod = '1d';" in app
     assert "const PRICE_DATASET_ORDER = ['BUY', 'SELL', ...PRICE_LINE_DEFS.map(def => def.label)];" in app
     assert "const legendOrder = new Map(PRICE_DATASET_ORDER.map((label, idx) => [label, idx]));" in app
     assert "label.startsWith('VWAP 5')" not in app
-    assert "{ label: '1d', window: 1, color: '#eab308', dash: [], width: 1.15 }" in app
-    assert "{ label: '5d', window: 5, color: '#dc2626', dash: [], width: 1.15 }" in app
-    assert "{ label: '20d', window: 20, color: '#16a34a', dash: [], width: 1.15 }" in app
-    assert "{ label: '60d', window: 60, color: '#2563eb', dash: [], width: 1.15 }" in app
-    assert "{ label: '120d', window: 120, color: '#000000', dash: [], width: 1.15" in app
+    for label, window, color in [
+        ("1d", 1, "#eab308"),
+        ("5d", 5, "#dc2626"),
+        ("20d", 20, "#16a34a"),
+        ("60d", 60, "#2563eb"),
+        ("120d", 120, "#111827"),
+        ("240d", 240, "#7c3aed"),
+    ]:
+        assert re.search(
+            rf"label: '{label}', window: {window}, color: '{color}', dash: \[\], width: [\d.]+, opacity: [\d.]+",
+            app,
+        )
     assert "{ label: '200d', window: 200" not in app
     assert "dash: [5, 3]" not in app
     assert "{ label: '3d'" not in app
@@ -247,7 +262,89 @@ def test_detail_panels_vp_tabs_and_price_datasets_use_1_5_20_60_120_with_trade_m
     assert "journals[currentAlignmentStrategy]" not in app
 
     line_labels = re.findall(r"\{ label: '([^']+)'", app)
-    assert line_labels == ["1d", "5d", "20d", "60d", "120d", "BUY", "SELL"]
+    assert line_labels == ["1d", "5d", "20d", "60d", "120d", "240d", "BUY", "SELL"]
+
+
+def test_chart_visual_trend_helpers_are_buffered_fixed_color_and_read_only():
+    app = read("app.js")
+
+    for token in [
+        "const VWAP_TREND_LOOKBACK = 3;",
+        "const VWAP_TREND_DEADBAND_PCT = 0.04;",
+        "const VWAP_TREND_CONFIRMATION_SEGMENTS = 2;",
+        "function classifyVwapTrendCandidate",
+        "function classifyVwapTrendStates",
+        "function getVwapTrendStyle",
+        "Object.defineProperty(window, 'VWAP_CHART_TEST_API'",
+        "Object.freeze",
+    ]:
+        assert token in app
+
+    assert "directionMode && def.window === 20" not in app
+    assert "current > previous ? COLOR.positive : COLOR.negative" not in app
+
+    node_script = r"""
+const fs = require('fs');
+const vm = require('vm');
+const source = fs.readFileSync('app.js', 'utf8').split('\nfetch(`trend_data')[0];
+const context = { window: {} };
+vm.createContext(context);
+vm.runInContext(source, context);
+const api = context.window.VWAP_CHART_TEST_API;
+const rising = api.classifyVwapTrendStates([100, 100, 100, 100.1, 100.2]);
+const falling = api.classifyVwapTrendStates([100, 100, 100, 99.9, 99.8]);
+const flat = api.classifyVwapTrendStates([100, 100, 100, 100.03, 100.03]);
+const buffered = api.classifyVwapTrendStates([100, 100, 100, 100.1, 100.2, 99.9, 99.8]);
+const missing = api.classifyVwapTrendStates([100, 100, 100, 100.1, 100.2, null]);
+const styles = {
+  rising20: api.getVwapTrendStyle(20, 'rising'),
+  flat20: api.getVwapTrendStyle(20, 'flat'),
+  falling20: api.getVwapTrendStyle(20, 'falling'),
+  rising5: api.getVwapTrendStyle(5, 'rising'),
+};
+console.log(JSON.stringify({
+  rising, falling, flat, buffered, missing, styles,
+  frozen: Object.isFrozen(api) && Object.isFrozen(api.lineDefinitions),
+  property: Object.getOwnPropertyDescriptor(context.window, 'VWAP_CHART_TEST_API'),
+}));
+"""
+    completed = subprocess.run(
+        ["node", "-e", node_script],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    result = json.loads(completed.stdout)
+
+    assert result["rising"][-2:] == ["flat", "rising"]
+    assert result["falling"][-2:] == ["flat", "falling"]
+    assert set(result["flat"]) == {"flat"}
+    assert result["buffered"][-3:] == ["rising", "rising", "falling"]
+    assert result["missing"][-1] == "flat"
+    styles = result["styles"]
+    assert styles["rising20"]["borderWidth"] > styles["flat20"]["borderWidth"] > styles["falling20"]["borderWidth"]
+    assert styles["rising20"]["opacity"] > styles["flat20"]["opacity"] > styles["falling20"]["opacity"]
+    assert styles["rising20"]["borderWidth"] > styles["rising5"]["borderWidth"]
+    assert styles["rising20"]["baseColor"] == styles["falling20"]["baseColor"] == "#16a34a"
+    assert result["frozen"] is True
+    assert result["property"]["writable"] is False
+    assert result["property"]["configurable"] is False
+
+
+def test_chart_toolbar_has_minimal_responsive_css():
+    css = read("style.css")
+
+    for selector in [
+        ".chart-toolbar",
+        ".chart-range-control",
+        ".chart-range-label",
+        ".chart-range-options",
+        ".chart-range-button",
+        ".chart-range-button:focus-visible",
+    ]:
+        assert selector in css
+    assert "@media (max-width:640px)" in css
 
 
 def test_cache_bust_version_is_consistent_everywhere():

@@ -46,11 +46,19 @@ header p{font-size:0.74rem;color:#64748b;margin-top:4px}
 .section-box{background:rgba(255,255,255,.94);border:1px solid #dbe6f3;border-radius:14px;padding:16px 20px;margin:16px 28px 0;box-shadow:0 10px 26px rgba(15,23,42,.06)}
 .panel-title{font-size:0.7rem;font-weight:800;color:#64748b;letter-spacing:.06em;text-transform:uppercase;margin-bottom:10px}
 
-.alignment-tabs{display:inline-flex;gap:3px;margin-bottom:10px;padding:3px;border:1px solid #dbe6f3;border-radius:8px;background:#f8fafc}
+.chart-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+.alignment-tabs{display:inline-flex;flex-wrap:wrap;gap:3px;margin:0;padding:3px;border:1px solid #dbe6f3;border-radius:8px;background:#f8fafc}
 .alignment-tab{background:transparent;border:0;border-radius:5px;padding:5px 12px;cursor:pointer;font-size:.7rem;font-weight:800;color:#64748b;transition:all .18s;font-family:inherit}
 .alignment-tab:hover{background:#eff6ff;color:#1e293b}
 .alignment-tab.active{background:#2563eb;color:#fff}
 .alignment-tab:focus-visible{outline:2px solid #60a5fa;outline-offset:2px}
+.chart-range-control{display:flex;align-items:center;gap:7px;flex:none}
+.chart-range-label{font-size:.64rem;font-weight:800;color:#64748b;white-space:nowrap}
+.chart-range-options{display:inline-flex;gap:2px;padding:3px;border:1px solid #dbe6f3;border-radius:8px;background:#f8fafc}
+.chart-range-button{min-width:48px;background:transparent;border:0;border-radius:5px;padding:5px 9px;cursor:pointer;font-family:inherit;font-size:.68rem;font-weight:800;color:#64748b;transition:all .18s}
+.chart-range-button:hover{background:#eff6ff;color:#1e293b}
+.chart-range-button.active{background:#0f172a;color:#fff}
+.chart-range-button:focus-visible{outline:2px solid #60a5fa;outline-offset:2px}
 .direction-status{display:grid;grid-template-columns:repeat(4,minmax(0,auto)) 1fr;align-items:center;gap:8px;margin:0 0 12px;padding:9px 11px;border:1px solid #cbd5e1;border-left:3px solid #64748b;border-radius:8px;background:#f8fafc}
 .direction-status[hidden]{display:none}
 .direction-status span{display:flex;align-items:baseline;gap:5px;padding-right:8px;border-right:1px solid #e2e8f0;white-space:nowrap}
@@ -131,7 +139,9 @@ header p{font-size:0.74rem;color:#64748b;margin-top:4px}
   .backtest-journal-section{padding:14px}
   .journal-section-head{align-items:center}
   .journal-section-head p{max-width:250px}
-  .alignment-tabs{display:flex;flex-wrap:wrap}
+  .chart-toolbar{align-items:stretch;flex-direction:column;gap:7px}
+  .alignment-tabs{display:flex}
+  .chart-range-control{justify-content:space-between}
   .direction-status{grid-template-columns:repeat(2,minmax(0,1fr))}
   .direction-status span:nth-child(2){border-right:0}
   .journal-horizon-strip{grid-template-columns:1fr;gap:6px}
