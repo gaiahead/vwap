@@ -336,19 +336,12 @@ const build = context.window.VWAP_CHART_TEST_API.buildDateSelectionAnnotation;
 const api = context.window.VWAP_CHART_TEST_API;
 const labels = ['2026-08-27', '2026-08-28'];
 const config = api.buildPriceChartConfig({ohlcv: labels.map(date => ({date}))});
-let updateCount = 0;
-let nearestMode = null;
 const chart = {
   data: config.data,
-  options: config.options,
-  getElementsAtEventForMode: (_event, mode, options) => {
-    nearestMode = {mode, options};
-    return [{index: 1}];
-  },
-  update: () => { updateCount += 1; }
+  options: config.options
 };
-config.options.onClick({x: 42}, [], chart);
-const clicked = chart.options.plugins.annotation.annotations.selectedDateLine;
+const selected = api.selectPriceChartIndex(chart, 1);
+const sameSelection = api.selectPriceChartIndex(chart, 1);
 const invalidSelection = api.selectPriceChartIndex(chart, 9);
 console.log(JSON.stringify({
   valid: build(labels, 1),
@@ -356,9 +349,8 @@ console.log(JSON.stringify({
   outOfRange: build(labels, 2),
   fractional: build(labels, 0.5),
   missingLabels: build(null, 0),
-  clicked,
-  nearestMode,
-  updateCount,
+  selected,
+  sameSelection,
   invalidSelection,
   persistedValue: chart.options.plugins.annotation.annotations.selectedDateLine.value
 }));
@@ -381,12 +373,8 @@ console.log(JSON.stringify({
     assert result["outOfRange"] is None
     assert result["fractional"] is None
     assert result["missingLabels"] is None
-    assert result["clicked"]["value"] == "2026-08-28"
-    assert result["nearestMode"] == {
-        "mode": "index",
-        "options": {"axis": "x", "intersect": False},
-    }
-    assert result["updateCount"] == 1
+    assert result["selected"] is True
+    assert result["sameSelection"] is False
     assert result["invalidSelection"] is False
     assert result["persistedValue"] == "2026-08-28"
 
@@ -485,7 +473,8 @@ console.log(JSON.stringify(result));
     }
 
 
-def test_price_chart_pointer_drag_selects_edges_and_cleans_up_pointer_state():
+def test_price_chart_local_plugin_selects_from_chart_events_and_persists_on_release():
+    app = read("app.js")
     node_script = r"""
 const fs = require('fs');
 const vm = require('vm');
@@ -495,102 +484,62 @@ vm.createContext(context);
 vm.runInContext(source, context);
 const api = context.window.VWAP_CHART_TEST_API;
 const labels = ['first', 'second', 'third', 'last'];
+const config = api.buildPriceChartConfig({
+  ohlcv: labels.map(date => ({date, vwap_1d: null}))
+});
+const plugin = config.plugins.find(candidate => candidate.id === 'priceChartDateSelection');
+let updateCount = 0;
+const scalePixels = [];
+const chart = {
+  data: config.data,
+  options: config.options,
+  scales: {x: {getValueForPixel: pixel => {
+    scalePixels.push(pixel);
+    return pixel / 100;
+  }}},
+  getElementsAtEventForMode: () => {
+    throw new Error('normalized x coordinates should select the index');
+  },
+  update: () => { updateCount += 1; }
+};
 
-function makeCanvas() {
-  const listeners = new Map();
-  const captured = new Set();
-  const captureCalls = [];
-  const releaseCalls = [];
+function dispatch(type, x, inChartArea = true) {
+  const args = {event: {type, x}, inChartArea, changed: false};
+  plugin.afterEvent(chart, args);
   return {
-    style: {cursor: 'crosshair'},
-    addEventListener: (type, listener) => listeners.set(type, listener),
-    removeEventListener: (type, listener) => {
-      if (listeners.get(type) === listener) listeners.delete(type);
-    },
-    getBoundingClientRect: () => ({left: 100}),
-    setPointerCapture: pointerId => {
-      captureCalls.push(pointerId);
-      captured.add(pointerId);
-    },
-    hasPointerCapture: pointerId => captured.has(pointerId),
-    releasePointerCapture: pointerId => {
-      releaseCalls.push(pointerId);
-      captured.delete(pointerId);
-    },
-    dispatch: (type, event) => listeners.get(type)?.(event),
-    captureCalls,
-    releaseCalls
+    changed: args.changed,
+    value: chart.options.plugins.annotation.annotations.selectedDateLine?.value ?? null
   };
 }
 
-function makeChart() {
-  const canvas = makeCanvas();
-  const config = api.buildPriceChartConfig({ohlcv: labels.map(date => ({date}))});
-  let updateCount = 0;
-  const chart = {
-    canvas,
-    data: config.data,
-    options: config.options,
-    scales: {x: {getValueForPixel: pixel => pixel / 100}},
-    getElementsAtEventForMode: () => [],
-    update: () => { updateCount += 1; }
-  };
-  api.attachPriceChartPointerDrag(chart);
-  return {chart, canvas, updateCount: () => updateCount};
-}
-
-const ended = makeChart();
-ended.canvas.dispatch('pointerdown', {pointerId: 7, offsetX: 0});
-const down = {
-  value: ended.chart.options.plugins.annotation.annotations.selectedDateLine.value,
-  cursor: ended.canvas.style.cursor,
-  captureCalls: [...ended.canvas.captureCalls]
-};
-ended.canvas.dispatch('pointermove', {pointerId: 7, offsetX: 999});
-const movedValue = ended.chart.options.plugins.annotation.annotations.selectedDateLine.value;
-ended.canvas.dispatch('pointerup', {pointerId: 7});
-const afterUp = {
-  cursor: ended.canvas.style.cursor,
-  releaseCalls: [...ended.canvas.releaseCalls]
-};
-ended.chart.options.onClick({x: 0}, [], ended.chart);
-const updatesAfterDuplicateClick = ended.updateCount();
-ended.canvas.dispatch('pointermove', {pointerId: 7, offsetX: 100});
-
-const cancelled = makeChart();
-cancelled.canvas.dispatch('pointerdown', {pointerId: 8, offsetX: 100});
-cancelled.canvas.dispatch('pointercancel', {pointerId: 8});
-const afterCancel = {
-  cursor: cancelled.canvas.style.cursor,
-  releaseCalls: [...cancelled.canvas.releaseCalls]
-};
-const cancelUpdates = cancelled.updateCount();
-cancelled.canvas.dispatch('pointermove', {pointerId: 8, offsetX: 300});
-
-const fallback = makeChart();
-fallback.canvas.dispatch('pointerdown', {pointerId: 9, clientX: 300});
-const clientXValue = fallback.chart.options.plugins.annotation.annotations.selectedDateLine.value;
-fallback.canvas.dispatch('pointerup', {pointerId: 9});
-
-const invalid = makeChart();
-invalid.canvas.dispatch('pointerdown', {pointerId: 10, offsetX: NaN, clientX: NaN});
-const invalidUpdates = invalid.updateCount();
-invalid.canvas.dispatch('pointercancel', {pointerId: 10});
+const first = dispatch('mousemove', -500);
+const sameFirst = dispatch('mousemove', -100);
+const interiorMove = dispatch('mousemove', 100);
+const interiorClick = dispatch('click', 200);
+const interiorTouch = dispatch('touchstart', 100);
+const last = dispatch('touchmove', 999);
+const outside = dispatch('mousemove', 0, false);
+const unrelated = dispatch('mouseout', 0);
+const mouseRelease = dispatch('mouseup', 0);
+const pointerRelease = dispatch('pointerup', 0);
 
 console.log(JSON.stringify({
-  down,
-  movedValue,
-  updatesAfterDuplicateClick,
-  updatesAfterUpMove: ended.updateCount(),
-  afterUp,
-  cancelUpdates,
-  updatesAfterCancelMove: cancelled.updateCount(),
-  afterCancel,
-  clientXValue,
-  invalidUpdates,
-  invalidAnnotationCount: Object.keys(
-    invalid.chart.options.plugins.annotation.annotations
-  ).length
+  pluginIds: config.plugins.map(candidate => candidate.id),
+  interaction: config.options.interaction,
+  hasOnClick: Object.hasOwn(config.options, 'onClick'),
+  first,
+  sameFirst,
+  interiorMove,
+  interiorClick,
+  interiorTouch,
+  last,
+  outside,
+  unrelated,
+  mouseRelease,
+  pointerRelease,
+  persistedLabel: chart.options.plugins.annotation.annotations.selectedDateLine.label.content,
+  scalePixels,
+  updateCount
 }));
 """
     completed = subprocess.run(
@@ -602,22 +551,37 @@ console.log(JSON.stringify({
     )
 
     assert json.loads(completed.stdout) == {
-        "down": {
-            "value": "first",
-            "cursor": "ew-resize",
-            "captureCalls": [7],
-        },
-        "movedValue": "last",
-        "updatesAfterDuplicateClick": 2,
-        "updatesAfterUpMove": 2,
-        "afterUp": {"cursor": "crosshair", "releaseCalls": [7]},
-        "cancelUpdates": 1,
-        "updatesAfterCancelMove": 1,
-        "afterCancel": {"cursor": "crosshair", "releaseCalls": [8]},
-        "clientXValue": "third",
-        "invalidUpdates": 0,
-        "invalidAnnotationCount": 0,
+        "pluginIds": ["priceChartDateSelection"],
+        "interaction": {"mode": "index", "axis": "x", "intersect": False},
+        "hasOnClick": False,
+        "first": {"changed": True, "value": "first"},
+        "sameFirst": {"changed": False, "value": "first"},
+        "interiorMove": {"changed": True, "value": "second"},
+        "interiorClick": {"changed": True, "value": "third"},
+        "interiorTouch": {"changed": True, "value": "second"},
+        "last": {"changed": True, "value": "last"},
+        "outside": {"changed": False, "value": "last"},
+        "unrelated": {"changed": False, "value": "last"},
+        "mouseRelease": {"changed": False, "value": "last"},
+        "pointerRelease": {"changed": False, "value": "last"},
+        "persistedLabel": "선택 날짜 last",
+        "scalePixels": [-500, -100, 100, 200, 100, 999],
+        "updateCount": 0,
     }
+
+    for obsolete in [
+        "PRICE_CHART_POINTER_STATES",
+        "priceChartPointerX",
+        "attachPriceChartPointerDrag",
+        "detachPriceChartPointerDrag",
+        "pointerdown",
+        "pointermove",
+        "pointerup",
+        "pointercancel",
+        "onClick:",
+    ]:
+        assert obsolete not in app
+    assert "plugins: [dateSelectionPlugin]" in app
 
 
 def test_cache_bust_version_is_consistent_everywhere():
