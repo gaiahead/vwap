@@ -391,6 +391,100 @@ console.log(JSON.stringify({
     assert result["persistedValue"] == "2026-08-28"
 
 
+def test_nearest_price_chart_index_prefers_coordinates_and_bounds_fallback_results():
+    node_script = r"""
+const fs = require('fs');
+const vm = require('vm');
+const source = fs.readFileSync('app.js', 'utf8').split('\nfetch(')[0];
+const context = { window: {} };
+vm.createContext(context);
+vm.runInContext(source, context);
+const nearest = context.window.VWAP_CHART_TEST_API.nearestPriceChartIndex;
+const labels = ['first', 'second', 'third', 'last'];
+
+function chartWithCoordinate(value, fallbackIndex = 0) {
+  let elementLookupCount = 0;
+  const chart = {
+    data: {labels},
+    scales: {x: {getValueForPixel: pixel => {
+      if (pixel !== 42) throw new Error('unexpected pixel');
+      return value;
+    }}},
+    getElementsAtEventForMode: () => {
+      elementLookupCount += 1;
+      return [{index: fallbackIndex}];
+    }
+  };
+  return {chart, elementLookupCount: () => elementLookupCount};
+}
+
+const exactFirst = chartWithCoordinate(0, 3);
+const exactLast = chartWithCoordinate(3, 0);
+const interior = chartWithCoordinate(1.6, 0);
+const beforeFirst = chartWithCoordinate(-10, 2);
+const afterLast = chartWithCoordinate(10, 1);
+const invalidCoordinate = chartWithCoordinate(NaN, 2);
+
+const result = {
+  exactFirst: nearest(exactFirst.chart, {x: 42}),
+  exactLast: nearest(exactLast.chart, {x: 42}),
+  interiorRounded: nearest(interior.chart, {x: 42}),
+  beforeFirstClamped: nearest(beforeFirst.chart, {x: 42}),
+  afterLastClamped: nearest(afterLast.chart, {x: 42}),
+  coordinateElementLookups: [
+    exactFirst.elementLookupCount(),
+    exactLast.elementLookupCount(),
+    interior.elementLookupCount(),
+    beforeFirst.elementLookupCount(),
+    afterLast.elementLookupCount()
+  ],
+  invalidCoordinateFallback: nearest(invalidCoordinate.chart, {x: 42}),
+  invalidCoordinateElementLookups: invalidCoordinate.elementLookupCount(),
+  missingScaleFallback: nearest({
+    data: {labels},
+    getElementsAtEventForMode: () => [{index: 1}]
+  }, {x: 42}),
+  missingCoordinateWithoutFallback: nearest({
+    data: {labels},
+    scales: {x: {getValueForPixel: () => 1}},
+    getElementsAtEventForMode: () => []
+  }, {}),
+  outOfRangeFallback: nearest({
+    data: {labels},
+    scales: {x: {getValueForPixel: () => NaN}},
+    getElementsAtEventForMode: () => [{index: labels.length}]
+  }, {x: 42}),
+  missingLabels: nearest({
+    scales: {x: {getValueForPixel: () => 0}},
+    getElementsAtEventForMode: () => [{index: 0}]
+  }, {x: 42})
+};
+console.log(JSON.stringify(result));
+"""
+    completed = subprocess.run(
+        ["node", "-e", node_script],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert json.loads(completed.stdout) == {
+        "exactFirst": 0,
+        "exactLast": 3,
+        "interiorRounded": 2,
+        "beforeFirstClamped": 0,
+        "afterLastClamped": 3,
+        "coordinateElementLookups": [0, 0, 0, 0, 0],
+        "invalidCoordinateFallback": 2,
+        "invalidCoordinateElementLookups": 1,
+        "missingScaleFallback": 1,
+        "missingCoordinateWithoutFallback": -1,
+        "outOfRangeFallback": -1,
+        "missingLabels": -1,
+    }
+
+
 def test_cache_bust_version_is_consistent_everywhere():
     html = read("index.html")
     app = read("app.js")

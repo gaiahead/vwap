@@ -150,15 +150,34 @@ function buildDateSelectionAnnotation(labels, index) {
 }
 
 function nearestPriceChartIndex(chart, event) {
-  if (!chart || typeof chart.getElementsAtEventForMode !== 'function') return -1;
-  const elements = chart.getElementsAtEventForMode(
-    event,
-    'index',
-    { axis: 'x', intersect: false },
-    false
-  );
-  const index = elements?.[0]?.index;
-  return Number.isInteger(index) ? index : -1;
+  const labels = chart?.data?.labels;
+  if (!Array.isArray(labels) || labels.length === 0) return -1;
+
+  const xScale = chart?.scales?.x;
+  if (typeof xScale?.getValueForPixel === 'function' && Number.isFinite(event?.x)) {
+    try {
+      const scaleIndex = xScale.getValueForPixel(event.x);
+      if (Number.isFinite(scaleIndex)) {
+        return Math.min(labels.length - 1, Math.max(0, Math.round(scaleIndex)));
+      }
+    } catch (_error) {
+      // Fall back to Chart.js element lookup when the scale cannot map this event.
+    }
+  }
+
+  if (typeof chart.getElementsAtEventForMode !== 'function') return -1;
+  try {
+    const elements = chart.getElementsAtEventForMode(
+      event,
+      'index',
+      { axis: 'x', intersect: false },
+      false
+    );
+    const index = elements?.[0]?.index;
+    return Number.isInteger(index) && index >= 0 && index < labels.length ? index : -1;
+  } catch (_error) {
+    return -1;
+  }
 }
 
 function selectPriceChartIndex(chart, index) {
