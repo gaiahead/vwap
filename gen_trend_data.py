@@ -1,6 +1,6 @@
 """VWAP 추세 데이터 생성기.
 
-yfinance에서 주가 데이터를 받아 정규분포 기반 Volume Profile VWAP를 계산하고,
+yfinance에서 주가 데이터를 받아 VWAP와 정규분포 기반 Volume Profile을 계산하고,
 trend_data.json으로 출력한다.
 """
 
@@ -152,13 +152,14 @@ DETAIL_DIR: str = "detail_data"
 
 def compute_vwap_with_profile(
     df_window: pd.DataFrame,
-) -> tuple[float, list[dict[str, float]]]:
-    """정규분포 기반 Volume Profile VWAP + 버킷 배열 반환."""
+) -> tuple[float | None, list[dict[str, float]]]:
+    """정확한 대표가격 VWAP와 정규분포 기반 프로필 버킷 배열을 반환."""
+    exact_vwap = compute_proxy_vwap_series(df_window, len(df_window))[-1]
     lo = float(df_window["low"].min())
     hi = float(df_window["high"].max())
     if hi == lo:
         mid = float(df_window["close"].mean())
-        return mid, [{"price": mid, "volume": 0.0} for _ in range(N_BUCKETS)]
+        return exact_vwap, [{"price": mid, "volume": 0.0} for _ in range(N_BUCKETS)]
 
     bsize = (hi - lo) / N_BUCKETS
     bucket_prices = np.array([lo + (b + 0.5) * bsize for b in range(N_BUCKETS)])
@@ -176,17 +177,11 @@ def compute_vwap_with_profile(
         if total_w > 0:
             bvol += float(r["volume"]) * (weights / total_w)
 
-    total_vol = bvol.sum()
-    if total_vol == 0:
-        vwap = float(df_window["close"].iloc[-1])
-    else:
-        vwap = float((bucket_prices * bvol).sum() / total_vol)
-
     buckets = [
         {"price": round(float(bucket_prices[i]), 4), "volume": round(float(bvol[i]), 2)}
         for i in range(N_BUCKETS)
     ]
-    return vwap, buckets
+    return exact_vwap, buckets
 
 
 def typical_price_series(df: pd.DataFrame) -> pd.Series:
@@ -490,7 +485,7 @@ def build_detail_data(
             vwap_val, buckets = compute_vwap_with_profile(work.iloc[-period:])
             volume_profile[f"{period}d"] = {
                 "buckets": buckets,
-                "vwap": round(vwap_val, 4),
+                "vwap": safe_round(vwap_val),
             }
 
     return {

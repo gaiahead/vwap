@@ -188,6 +188,9 @@ def test_asset_outputs_keep_registry_detail_parity_and_live_only_schema():
     assert detail["ohlcv"][0]["vwap_240d"] is None
     assert detail["ohlcv"][-240]["vwap_240d"] is not None
     assert set(detail["volume_profile"]) == {"1d", "5d", "20d", "60d", "120d", "240d"}
+    for period, profile in detail["volume_profile"].items():
+        latest_rolling_vwap = detail["ohlcv"][-1][f"vwap_{period}"]
+        assert profile["vwap"] == pytest.approx(latest_rolling_vwap, abs=0.0001)
     for window in gen.WINDOWS:
         assert f"vwap_{window}d" in detail["ohlcv"][-1]
     assert "vwap_1d" in detail["ohlcv"][-1]
@@ -195,6 +198,30 @@ def test_asset_outputs_keep_registry_detail_parity_and_live_only_schema():
         assert f"vwap_{removed_window}d" not in detail["ohlcv"][-1]
     json.dumps(trend, allow_nan=False)
     json.dumps(detail, allow_nan=False)
+
+
+def test_volume_profile_vwap_uses_the_matching_exact_rolling_calculation():
+    rows = 300
+    prices = [100 + index * 0.25 for index in range(rows)]
+    df = pd.DataFrame(
+        {
+            "open": prices,
+            "high": [price + 1 + index % 4 for index, price in enumerate(prices)],
+            "low": [price - 0.5 - index % 3 * 0.25 for index, price in enumerate(prices)],
+            "close": [price + 0.5 for price in prices],
+            "volume": [10_000 + index * 137 for index in range(rows)],
+        },
+        index=pd.bdate_range(start="2025-01-01", periods=rows),
+    )
+
+    detail = gen.build_detail_data("VWAP 테스트", "TEST", df)
+    latest = detail["ohlcv"][-1]
+
+    for period, profile in detail["volume_profile"].items():
+        assert profile["vwap"] == pytest.approx(
+            latest[f"vwap_{period}"],
+            abs=0.0001,
+        ), period
 
 
 def test_top_level_metadata_has_storage_but_no_retired_lookback(monkeypatch):

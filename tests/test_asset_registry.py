@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 import gen_trend_data as gen
 
 
@@ -23,6 +25,17 @@ def test_generated_data_matches_registered_korean_listings():
     assert actual_names == expected_names
     assert actual_detail_tickers == expected_tickers
     assert all(ticker.endswith(KOREAN_SUFFIXES) for ticker in actual_detail_tickers)
+
+
+def test_generated_profile_vwaps_match_stored_exact_rolling_vwaps():
+    for path in (ROOT / "detail_data").glob("*.json"):
+        detail = json.loads(path.read_text(encoding="utf-8"))
+        latest = detail["ohlcv"][-1]
+        for period, profile in detail["volume_profile"].items():
+            assert profile["vwap"] == pytest.approx(
+                latest[f"vwap_{period}"],
+                abs=0.0001,
+            ), f"{path.name} {period}"
 
 
 def test_tiger_us_dividend_dow_jones_is_registered():

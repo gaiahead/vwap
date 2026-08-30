@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NEW_DATA_VERSION = "data-20260830-exact-segment-slope"
+NEW_DATA_VERSION = "data-20260830-uniform-vwap-vp-labels"
 
 
 def read(name: str) -> str:
@@ -128,7 +128,7 @@ def test_price_chart_has_exact_six_vwap_datasets_and_no_trade_markers():
         assert token not in app
 
 
-def test_chart_visual_trend_helpers_change_only_width_and_opacity():
+def test_chart_visual_trend_helpers_preserve_colors_and_slope_opacity_with_uniform_width():
     app = read("app.js")
     for token in [
         "function classifyVwapSegmentState(values, startIndex, endIndex)",
@@ -183,12 +183,14 @@ const colors = Object.fromEntries(periods.map(period => [period, {
   flat: api.getVwapTrendStyle(period, 'flat').baseColor,
   falling: api.getVwapTrendStyle(period, 'falling').baseColor,
 }]));
-const widths = {
-  rising: api.getVwapTrendStyle(20, 'rising').borderWidth,
-  flat: api.getVwapTrendStyle(20, 'flat').borderWidth,
-  falling: api.getVwapTrendStyle(20, 'falling').borderWidth,
-};
-console.log(JSON.stringify({alternating, edgeCases, colors, widths}));
+const states = ['rising', 'flat', 'falling'];
+const widths = periods.flatMap(period => states.map(
+  state => api.getVwapTrendStyle(period, state).borderWidth
+));
+const opacities = Object.fromEntries(states.map(
+  state => [state, api.getVwapTrendStyle(20, state).opacity]
+));
+console.log(JSON.stringify({alternating, edgeCases, colors, widths, opacities}));
 """
     completed = subprocess.run(
         ["node", "-e", node_script],
@@ -201,7 +203,8 @@ console.log(JSON.stringify({alternating, edgeCases, colors, widths}));
 
     assert result["alternating"] == ["rising", "falling", "rising"]
     assert set(result["edgeCases"].values()) == {"flat"}
-    assert result["widths"]["rising"] > result["widths"]["flat"] > result["widths"]["falling"]
+    assert len(set(result["widths"])) == 1
+    assert result["opacities"] == {"rising": 1, "flat": 0.9, "falling": 0.522}
     for states in result["colors"].values():
         assert len(set(states.values())) == 1
     assert result["colors"]["120"]["flat"] == "#7c3aed"
@@ -216,6 +219,43 @@ def test_volume_profile_tabs_and_panel_survive():
     assert "button.className = 'vp-tab'" in app
     assert "renderVpChart(detailData, currentVpPeriod);" in app
     assert "view.detailContent.replaceChildren(pricePanel, vpPanel);" in app
+
+
+def test_volume_profile_builds_nearest_bucket_labels_for_vwap_and_latest_close():
+    node_script = r"""
+const fs = require('fs');
+const vm = require('vm');
+const source = fs.readFileSync('app.js', 'utf8').split('\nfetch(')[0];
+const context = { window: {} };
+vm.createContext(context);
+vm.runInContext(source, context);
+const api = context.window.VWAP_CHART_TEST_API;
+const detailData = { ohlcv: [{close: 1}, {close: 257000}] };
+const vp = {
+  vwap: 259666.6667,
+  buckets: [{price: 257250}, {price: 259750}]
+};
+const annotations = api.buildVpAnnotations(detailData, vp);
+console.log(JSON.stringify(annotations));
+"""
+    completed = subprocess.run(
+        ["node", "-e", node_script],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    annotations = json.loads(completed.stdout)
+
+    assert set(annotations) == {"vwapLine", "latestCloseLine"}
+    assert annotations["vwapLine"]["value"] == 1
+    assert annotations["latestCloseLine"]["value"] == 0
+    assert annotations["vwapLine"]["label"]["content"] == "VWAP 259,666.6667"
+    assert annotations["latestCloseLine"]["label"]["content"] == "최근 종가 257,000"
+    assert annotations["vwapLine"]["label"]["position"] == "end"
+    assert annotations["latestCloseLine"]["label"]["position"] == "start"
+    assert annotations["vwapLine"]["borderColor"] != annotations["latestCloseLine"]["borderColor"]
+    assert annotations["latestCloseLine"]["borderDash"] == [5, 3]
 
 
 def test_cache_bust_version_is_consistent_everywhere():

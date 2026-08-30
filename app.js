@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260830-exact-segment-slope';
+const DATA_VERSION = 'data-20260830-uniform-vwap-vp-labels';
 const PRICE_CHART_TRADING_DAYS = 240;
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
@@ -18,21 +18,22 @@ const ALIGNMENT_OPTIONS = [
 ];
 const DEFAULT_SORT = { key: 'name', dir: 'asc' };
 const VP_PERIODS = ['1d', '5d', '20d', '60d', '120d', '240d'];
+const VWAP_LINE_WIDTH = 1.25;
 const PRICE_LINE_DEFS = Object.freeze([
-  Object.freeze({ label: '1d', window: 1, color: '#eab308', dash: [], width: 1.00, opacity: 0.66 }),
-  Object.freeze({ label: '5d', window: 5, color: '#dc2626', dash: [], width: 1.15, opacity: 0.72 }),
-  Object.freeze({ label: '20d', window: 20, color: '#16a34a', dash: [], width: 1.80, opacity: 0.90 }),
-  Object.freeze({ label: '60d', window: 60, color: '#2563eb', dash: [], width: 1.25, opacity: 0.74 }),
-  Object.freeze({ label: '120d', window: 120, color: '#7c3aed', dash: [], width: 1.35, opacity: 0.78 }),
-  Object.freeze({ label: '240d', window: 240, color: '#000000', dash: [], width: 1.45, opacity: 0.82 })
+  Object.freeze({ label: '1d', window: 1, color: '#eab308', dash: [], opacity: 0.66 }),
+  Object.freeze({ label: '5d', window: 5, color: '#dc2626', dash: [], opacity: 0.72 }),
+  Object.freeze({ label: '20d', window: 20, color: '#16a34a', dash: [], opacity: 0.90 }),
+  Object.freeze({ label: '60d', window: 60, color: '#2563eb', dash: [], opacity: 0.74 }),
+  Object.freeze({ label: '120d', window: 120, color: '#7c3aed', dash: [], opacity: 0.78 }),
+  Object.freeze({ label: '240d', window: 240, color: '#000000', dash: [], opacity: 0.82 })
 ]);
 PRICE_LINE_DEFS.forEach(definition => Object.freeze(definition.dash));
 const PRICE_DATASET_ORDER = PRICE_LINE_DEFS.map(def => def.label);
 
 const VWAP_TREND_STYLE_FACTORS = Object.freeze({
-  rising: Object.freeze({ width: 1.28, opacity: 1.12 }),
-  flat: Object.freeze({ width: 1, opacity: 1 }),
-  falling: Object.freeze({ width: 0.76, opacity: 0.58 })
+  rising: Object.freeze({ opacity: 1.12 }),
+  flat: Object.freeze({ opacity: 1 }),
+  falling: Object.freeze({ opacity: 0.58 })
 });
 
 function hasFiniteVwapValue(value) {
@@ -68,15 +69,84 @@ function getVwapTrendStyle(period, state = 'flat') {
     state: normalizedState,
     baseColor: definition.color,
     borderColor: colorWithOpacity(definition.color, opacity),
-    borderWidth: Number((definition.width * factor.width).toFixed(3)),
+    borderWidth: VWAP_LINE_WIDTH,
     opacity
   });
+}
+
+function nearestProfileBucketIndex(buckets, price) {
+  if (!Array.isArray(buckets) || buckets.length === 0 || !hasFiniteVwapValue(price)) return -1;
+  const numericPrice = Number(price);
+  let nearestIndex = -1;
+  let nearestDistance = Infinity;
+  buckets.forEach((bucket, index) => {
+    if (!hasFiniteVwapValue(bucket?.price)) return;
+    const distance = Math.abs(Number(bucket.price) - numericPrice);
+    if (distance < nearestDistance) {
+      nearestIndex = index;
+      nearestDistance = distance;
+    }
+  });
+  return nearestIndex;
+}
+
+function formatProfilePrice(price) {
+  return Number(price).toLocaleString('en-US', { maximumFractionDigits: 4 });
+}
+
+function buildVpAnnotations(detailData, vp) {
+  const annotations = {};
+  const buckets = vp?.buckets || [];
+  const vwapIndex = nearestProfileBucketIndex(buckets, vp?.vwap);
+  if (vwapIndex >= 0) {
+    annotations.vwapLine = {
+      type: 'line',
+      scaleID: 'y',
+      value: vwapIndex,
+      borderColor: COLOR.blue,
+      borderWidth: 2,
+      label: {
+        display: true,
+        content: 'VWAP ' + formatProfilePrice(vp.vwap),
+        color: '#1d4ed8',
+        backgroundColor: 'rgba(255,255,255,0.9)',
+        font: { size: 9 },
+        position: 'end',
+        padding: { x: 3, y: 1 }
+      }
+    };
+  }
+
+  const ohlcv = detailData?.ohlcv || [];
+  const latestClose = ohlcv[ohlcv.length - 1]?.close;
+  const latestCloseIndex = nearestProfileBucketIndex(buckets, latestClose);
+  if (latestCloseIndex >= 0) {
+    annotations.latestCloseLine = {
+      type: 'line',
+      scaleID: 'y',
+      value: latestCloseIndex,
+      borderColor: '#0f172a',
+      borderWidth: 1.5,
+      borderDash: [5, 3],
+      label: {
+        display: true,
+        content: '최근 종가 ' + formatProfilePrice(latestClose),
+        color: '#0f172a',
+        backgroundColor: 'rgba(255,255,255,0.9)',
+        font: { size: 9 },
+        position: 'start',
+        padding: { x: 3, y: 1 }
+      }
+    };
+  }
+  return annotations;
 }
 
 const VWAP_CHART_TEST_API = Object.freeze({
   lineDefinitions: PRICE_LINE_DEFS,
   classifyVwapSegmentState,
-  getVwapTrendStyle
+  getVwapTrendStyle,
+  buildVpAnnotations
 });
 if (typeof window !== 'undefined') {
   Object.defineProperty(window, 'VWAP_CHART_TEST_API', {
@@ -417,26 +487,7 @@ fetch('trend_data.json?v=' + DATA_VERSION, { cache: 'no-store' }).then(r => r.js
     const buckets = vp.buckets;
     const labels = buckets.map(bucket => bucket.price.toLocaleString(undefined, { maximumFractionDigits: 2 }));
     const volumes = buckets.map(bucket => bucket.volume);
-    const annotations = {};
-    const vwapIndex = buckets.findIndex(bucket => bucket.price >= vp.vwap);
-    if (vwapIndex >= 0) {
-      annotations.vwapLine = {
-        type: 'line',
-        scaleID: 'y',
-        value: vwapIndex,
-        borderColor: COLOR.blue,
-        borderWidth: 2,
-        label: {
-          display: true,
-          content: 'VWAP ' + vp.vwap.toLocaleString(),
-          color: '#1d4ed8',
-          backgroundColor: 'rgba(255,255,255,0.9)',
-          font: { size: 9 },
-          position: 'end',
-          padding: { x: 3, y: 1 }
-        }
-      };
-    }
+    const annotations = buildVpAnnotations(detailData, vp);
 
     const config = {
       type: 'bar',
