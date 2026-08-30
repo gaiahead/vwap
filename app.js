@@ -1,8 +1,5 @@
-const DATA_VERSION = 'data-20260830-chart240-no-backtest';
+const DATA_VERSION = 'data-20260830-exact-segment-slope';
 const PRICE_CHART_TRADING_DAYS = 240;
-const VWAP_TREND_LOOKBACK = 3;
-const VWAP_TREND_DEADBAND_PCT = 0.04;
-const VWAP_TREND_CONFIRMATION_SEGMENTS = 2;
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -42,63 +39,15 @@ function hasFiniteVwapValue(value) {
   return value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
 }
 
-function classifyVwapTrendCandidate(
-  values,
-  index,
-  lookback = VWAP_TREND_LOOKBACK,
-  deadbandPct = VWAP_TREND_DEADBAND_PCT
-) {
-  const current = values?.[index];
-  const reference = values?.[index - lookback];
-  if (index < lookback || !hasFiniteVwapValue(current) || !hasFiniteVwapValue(reference)) return 'flat';
-  const referenceValue = Number(reference);
-  if (referenceValue === 0) return 'flat';
-  const changePct = ((Number(current) - referenceValue) / Math.abs(referenceValue)) * 100;
-  if (changePct > deadbandPct) return 'rising';
-  if (changePct < -deadbandPct) return 'falling';
+function classifyVwapSegmentState(values, startIndex, endIndex) {
+  const startValue = values?.[startIndex];
+  const endValue = values?.[endIndex];
+  if (!hasFiniteVwapValue(startValue) || !hasFiniteVwapValue(endValue)) return 'flat';
+  const numericStart = Number(startValue);
+  const numericEnd = Number(endValue);
+  if (numericEnd > numericStart) return 'rising';
+  if (numericEnd < numericStart) return 'falling';
   return 'flat';
-}
-
-function classifyVwapTrendStates(
-  values,
-  {
-    lookback = VWAP_TREND_LOOKBACK,
-    deadbandPct = VWAP_TREND_DEADBAND_PCT,
-    confirmations = VWAP_TREND_CONFIRMATION_SEGMENTS
-  } = {}
-) {
-  let state = 'flat';
-  let pendingState = null;
-  let pendingCount = 0;
-  return (values || []).map((value, index) => {
-    const reference = values[index - lookback];
-    if (index < lookback || !hasFiniteVwapValue(value) || !hasFiniteVwapValue(reference)) {
-      state = 'flat';
-      pendingState = null;
-      pendingCount = 0;
-      return state;
-    }
-
-    const candidate = classifyVwapTrendCandidate(values, index, lookback, deadbandPct);
-    if (candidate === state) {
-      pendingState = null;
-      pendingCount = 0;
-      return state;
-    }
-
-    if (candidate === pendingState) {
-      pendingCount += 1;
-    } else {
-      pendingState = candidate;
-      pendingCount = 1;
-    }
-    if (pendingCount >= Math.max(1, confirmations)) {
-      state = candidate;
-      pendingState = null;
-      pendingCount = 0;
-    }
-    return state;
-  });
 }
 
 function colorWithOpacity(hexColor, opacity) {
@@ -125,12 +74,8 @@ function getVwapTrendStyle(period, state = 'flat') {
 }
 
 const VWAP_CHART_TEST_API = Object.freeze({
-  trendLookback: VWAP_TREND_LOOKBACK,
-  deadbandPct: VWAP_TREND_DEADBAND_PCT,
-  confirmationSegments: VWAP_TREND_CONFIRMATION_SEGMENTS,
   lineDefinitions: PRICE_LINE_DEFS,
-  classifyVwapTrendCandidate,
-  classifyVwapTrendStates,
+  classifyVwapSegmentState,
   getVwapTrendStyle
 });
 if (typeof window !== 'undefined') {
@@ -381,11 +326,10 @@ fetch('trend_data.json?v=' + DATA_VERSION, { cache: 'no-store' }).then(r => r.js
     const labels = ohlcv.map(day => day.date);
     const vwapLineDatasets = PRICE_LINE_DEFS.map((definition, index) => {
       const values = ohlcv.map(day => day['vwap_' + definition.window + 'd'] ?? null);
-      const trendStates = classifyVwapTrendStates(values);
       const baseStyle = getVwapTrendStyle(definition.window, 'flat');
       const segmentStyle = context => getVwapTrendStyle(
         definition.window,
-        trendStates[context.p1DataIndex]
+        classifyVwapSegmentState(values, context.p0DataIndex, context.p1DataIndex)
       );
       return {
         label: definition.label,

@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NEW_DATA_VERSION = "data-20260830-chart240-no-backtest"
+NEW_DATA_VERSION = "data-20260830-exact-segment-slope"
 
 
 def read(name: str) -> str:
@@ -131,15 +131,29 @@ def test_price_chart_has_exact_six_vwap_datasets_and_no_trade_markers():
 def test_chart_visual_trend_helpers_change_only_width_and_opacity():
     app = read("app.js")
     for token in [
-        "const VWAP_TREND_LOOKBACK = 3;",
-        "const VWAP_TREND_DEADBAND_PCT = 0.04;",
-        "const VWAP_TREND_CONFIRMATION_SEGMENTS = 2;",
-        "function classifyVwapTrendCandidate",
-        "function classifyVwapTrendStates",
+        "function classifyVwapSegmentState(values, startIndex, endIndex)",
         "function getVwapTrendStyle",
         "Object.defineProperty(window, 'VWAP_CHART_TEST_API'",
     ]:
         assert token in app
+
+    assert re.search(
+        r"classifyVwapSegmentState\(\s*values,\s*context\.p0DataIndex,\s*context\.p1DataIndex\s*\)",
+        app,
+    )
+    for obsolete_token in [
+        "VWAP_TREND_LOOKBACK",
+        "VWAP_TREND_DEADBAND_PCT",
+        "VWAP_TREND_CONFIRMATION_SEGMENTS",
+        "classifyVwapTrendCandidate",
+        "classifyVwapTrendStates",
+        "trendLookback",
+        "deadbandPct",
+        "confirmationSegments",
+        "pendingState",
+        "pendingCount",
+    ]:
+        assert obsolete_token not in app
 
     assert "current > previous ? COLOR.positive : COLOR.negative" not in app
     node_script = r"""
@@ -150,9 +164,19 @@ const context = { window: {} };
 vm.createContext(context);
 vm.runInContext(source, context);
 const api = context.window.VWAP_CHART_TEST_API;
-const rising = api.classifyVwapTrendStates([100, 100, 100, 100.1, 100.2]);
-const falling = api.classifyVwapTrendStates([100, 100, 100, 99.9, 99.8]);
-const flat = api.classifyVwapTrendStates([100, 100, 100, 100.03, 100.03]);
+const shortOscillation = [100, 100.0001, 100, 100.0002];
+const alternating = [
+  api.classifyVwapSegmentState(shortOscillation, 0, 1),
+  api.classifyVwapSegmentState(shortOscillation, 1, 2),
+  api.classifyVwapSegmentState(shortOscillation, 2, 3),
+];
+const edgeCases = {
+  equal: api.classifyVwapSegmentState([100, 100], 0, 1),
+  missingStart: api.classifyVwapSegmentState([null, 100], 0, 1),
+  missingEnd: api.classifyVwapSegmentState([100], 0, 1),
+  nonFiniteStart: api.classifyVwapSegmentState([NaN, 100], 0, 1),
+  nonFiniteEnd: api.classifyVwapSegmentState([100, Infinity], 0, 1),
+};
 const periods = [1, 5, 20, 60, 120, 240];
 const colors = Object.fromEntries(periods.map(period => [period, {
   rising: api.getVwapTrendStyle(period, 'rising').baseColor,
@@ -164,7 +188,7 @@ const widths = {
   flat: api.getVwapTrendStyle(20, 'flat').borderWidth,
   falling: api.getVwapTrendStyle(20, 'falling').borderWidth,
 };
-console.log(JSON.stringify({rising, falling, flat, colors, widths}));
+console.log(JSON.stringify({alternating, edgeCases, colors, widths}));
 """
     completed = subprocess.run(
         ["node", "-e", node_script],
@@ -175,9 +199,8 @@ console.log(JSON.stringify({rising, falling, flat, colors, widths}));
     )
     result = json.loads(completed.stdout)
 
-    assert result["rising"][-2:] == ["flat", "rising"]
-    assert result["falling"][-2:] == ["flat", "falling"]
-    assert set(result["flat"]) == {"flat"}
+    assert result["alternating"] == ["rising", "falling", "rising"]
+    assert set(result["edgeCases"].values()) == {"flat"}
     assert result["widths"]["rising"] > result["widths"]["flat"] > result["widths"]["falling"]
     for states in result["colors"].values():
         assert len(set(states.values())) == 1
