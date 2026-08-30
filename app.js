@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260831-endpoint-marker-centering';
+const DATA_VERSION = 'data-20260831-right-marker-padding';
 const PRICE_CHART_TRADING_DAYS = 120;
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
@@ -300,6 +300,9 @@ function buildPriceChartConfig(detailData) {
       maintainAspectRatio: false,
       animation: { duration: 200 },
       interaction: { mode: 'index', axis: 'x', intersect: false },
+      layout: {
+        padding: { right: PRICE_CHART_SELECTION_MARKER_RADIUS + 0.5 }
+      },
       plugins: {
         legend: {
           display: true,

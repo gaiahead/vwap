@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NEW_DATA_VERSION = "data-20260831-endpoint-marker-centering"
+NEW_DATA_VERSION = "data-20260831-right-marker-padding"
 
 
 def read(name: str) -> str:
@@ -494,7 +494,7 @@ console.log(JSON.stringify(result));
     }
 
 
-def test_price_chart_local_plugin_centers_endpoint_markers_on_boundary_lines():
+def test_price_chart_local_plugin_pads_right_and_centers_endpoint_markers_on_boundary_lines():
     app = read("app.js")
     node_script = r"""
 const fs = require('fs');
@@ -649,6 +649,7 @@ console.log(JSON.stringify({
   hasBoundaryHook: typeof plugin.beforeDatasetsDraw === 'function',
   hasDrawHook: typeof plugin.afterDatasetsDraw === 'function',
   interaction: config.options.interaction,
+  rightLayoutPadding: config.options.layout?.padding?.right,
   hasTooltip: typeof config.options.plugins.tooltip.callbacks.label === 'function',
   tooltipKeepsDefaultDateTitle: !Object.hasOwn(config.options.plugins.tooltip.callbacks, 'title'),
   hasPriceAnnotationOptions: Object.hasOwn(config.options.plugins, 'annotation'),
@@ -708,6 +709,7 @@ console.log(JSON.stringify({
     assert result["hasBoundaryHook"] is True
     assert result["hasDrawHook"] is True
     assert result["interaction"] == {"mode": "index", "axis": "x", "intersect": False}
+    assert result["rightLayoutPadding"] == result["circleRadii"][0] + 0.5
     assert result["hasTooltip"] is True
     assert result["tooltipKeepsDefaultDateTitle"] is True
     assert result["hasPriceAnnotationOptions"] is False
