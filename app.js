@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260830-five-vp-directional-vwap-widths';
+const DATA_VERSION = 'data-20260830-price-chart-edge-boundaries';
 const PRICE_CHART_TRADING_DAYS = 120;
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
@@ -163,6 +163,27 @@ function selectPriceChartIndex(chart, index) {
   return true;
 }
 
+function drawPriceChartTerminalGridline(chart) {
+  const { right, top, bottom } = chart?.chartArea || {};
+  if (![right, top, bottom].every(Number.isFinite) || bottom <= top) return;
+
+  const ctx = chart?.ctx;
+  if (!ctx || typeof ctx.save !== 'function' || typeof ctx.restore !== 'function') return;
+
+  ctx.save();
+  try {
+    ctx.strokeStyle = GRID;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(right, top);
+    ctx.lineTo(right, bottom);
+    ctx.stroke();
+  } finally {
+    ctx.restore();
+  }
+}
+
 function drawPriceChartDateSelection(chart) {
   const currentSelection = chart?.$priceChartDateSelection;
   const selection = buildPriceChartDateSelection(
@@ -183,10 +204,11 @@ function drawPriceChartDateSelection(chart) {
   const ctx = chart?.ctx;
   if (!ctx || typeof ctx.save !== 'function' || typeof ctx.restore !== 'function') return;
 
-  const x = Math.min(
-    right - PRICE_CHART_SELECTION_INSET,
-    Math.max(left + PRICE_CHART_SELECTION_INSET, selectedX)
-  );
+  const markerX = selection.index === 0
+    ? left + PRICE_CHART_SELECTION_INSET
+    : selection.index === lastIndex
+      ? right - PRICE_CHART_SELECTION_INSET
+      : selectedX;
 
   ctx.save();
   try {
@@ -194,8 +216,8 @@ function drawPriceChartDateSelection(chart) {
     ctx.lineWidth = 1;
     ctx.setLineDash([]);
     ctx.beginPath();
-    ctx.moveTo(x, top);
-    ctx.lineTo(x, bottom);
+    ctx.moveTo(selectedX, top);
+    ctx.lineTo(selectedX, bottom);
     ctx.stroke();
 
     const yScale = chart?.scales?.y;
@@ -211,12 +233,25 @@ function drawPriceChartDateSelection(chart) {
 
       ctx.fillStyle = dataset.borderColor;
       ctx.beginPath();
-      ctx.arc(x, y, PRICE_CHART_SELECTION_MARKER_RADIUS, 0, Math.PI * 2);
+      ctx.arc(markerX, y, PRICE_CHART_SELECTION_MARKER_RADIUS, 0, Math.PI * 2);
       ctx.fill();
     });
   } finally {
     ctx.restore();
   }
+}
+
+function formatPriceChartDateTick(value) {
+  const labels = typeof this?.getLabels === 'function' ? this.getLabels() : [];
+  const labelIndex = Number(value);
+  if (Number.isInteger(labelIndex) && (
+    labelIndex === 0 || labelIndex === labels.length - 1
+  )) {
+    return '';
+  }
+  return typeof this?.getLabelForValue === 'function'
+    ? this.getLabelForValue(value)
+    : value;
 }
 
 function buildPriceChartConfig(detailData) {
@@ -257,6 +292,7 @@ function buildPriceChartConfig(detailData) {
       const index = nearestPriceChartIndex(chart, event);
       if (selectPriceChartIndex(chart, index)) args.changed = true;
     },
+    beforeDatasetsDraw: chart => drawPriceChartTerminalGridline(chart),
     afterDatasetsDraw: chart => drawPriceChartDateSelection(chart)
   };
   return {
@@ -310,7 +346,13 @@ function buildPriceChartConfig(detailData) {
       },
       scales: {
         x: {
-          ticks: { color: TICK, font: { size: 9 }, maxTicksLimit: 12, maxRotation: 0 },
+          ticks: {
+            color: TICK,
+            font: { size: 9 },
+            maxTicksLimit: 12,
+            maxRotation: 0,
+            callback: formatPriceChartDateTick
+          },
           grid: { color: GRID }
         },
         y: {
@@ -332,6 +374,7 @@ const VWAP_CHART_TEST_API = Object.freeze({
   buildPriceChartDateSelection,
   nearestPriceChartIndex,
   selectPriceChartIndex,
+  drawPriceChartTerminalGridline,
   drawPriceChartDateSelection
 });
 if (typeof window !== 'undefined') {

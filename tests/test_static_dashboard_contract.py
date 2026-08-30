@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NEW_DATA_VERSION = "data-20260830-five-vp-directional-vwap-widths"
+NEW_DATA_VERSION = "data-20260830-price-chart-edge-boundaries"
 
 
 def read(name: str) -> str:
@@ -315,11 +315,21 @@ const ohlcv = Array.from({length: 125}, (_, index) => ({
   vwap_1d: index === 124 ? 123456.5 : index
 }));
 const config = api.buildPriceChartConfig({ohlcv});
+const xTick = config.options.scales.x.ticks.callback;
+const xScale = {
+  getLabels: () => config.data.labels,
+  getLabelForValue: value => config.data.labels[value]
+};
 console.log(JSON.stringify({
   rowCount: config.data.labels.length,
   dateBounds: [config.data.labels[0], config.data.labels.at(-1)],
   datasetLabels: config.data.datasets.map(dataset => dataset.label),
   yTick: config.options.scales.y.ticks.callback(123456.5),
+  xTicks: {
+    first: xTick.call(xScale, 0, 7, [{value: 0}]),
+    interior: xTick.call(xScale, 42, 0, [{value: 42}]),
+    last: xTick.call(xScale, 119, 1, [{value: 42}, {value: 119}])
+  },
   tooltip: config.options.plugins.tooltip.callbacks.label({
     dataset: {label: '1d'},
     parsed: {y: 123456.5}
@@ -342,6 +352,7 @@ console.log(JSON.stringify({
         "dateBounds": ["day-5", "day-124"],
         "datasetLabels": ["1d", "5d", "20d", "60d", "120d"],
         "yTick": "123,457",
+        "xTicks": {"first": "", "interior": "day-47", "last": ""},
         "tooltip": "1d: 123,457",
         "rawValue": 123456.5,
         "hasPriceAnnotationOptions": False,
@@ -472,7 +483,7 @@ console.log(JSON.stringify(result));
     }
 
 
-def test_price_chart_local_plugin_draws_finite_circles_and_inset_endpoint_lines():
+def test_price_chart_local_plugin_draws_boundary_lines_and_inset_endpoint_markers():
     app = read("app.js")
     node_script = r"""
 const fs = require('fs');
@@ -534,7 +545,7 @@ const ctx = {
   moveTo(x, y) { path.from = [x, y]; },
   lineTo(x, y) { path.to = [x, y]; },
   stroke() {
-    activeFrame.line = {
+    const line = {
       x: path.from[0],
       top: path.from[1],
       bottom: path.to[1],
@@ -542,6 +553,8 @@ const ctx = {
       lineWidth: this.lineWidth,
       dash: this.dash
     };
+    activeFrame.lines.push(line);
+    activeFrame.drawOrder.push('stroke:' + this.strokeStyle);
   },
   arc(x, y, radius, startAngle, endAngle) {
     path.circle = {x, y, radius, startAngle, endAngle};
@@ -585,7 +598,9 @@ function dispatch(type, x, y, inChartArea = false) {
 }
 
 function drawFrame() {
-  activeFrame = {line: null, circles: []};
+  activeFrame = {lines: [], circles: [], drawOrder: []};
+  plugin.beforeDatasetsDraw(chart);
+  activeFrame.drawOrder.push('datasets');
   plugin.afterDatasetsDraw(chart);
   frames.push(activeFrame);
   return activeFrame;
@@ -612,15 +627,24 @@ const unrelated = dispatch('mouseout', 110, 100);
 const drawnFrames = [firstFrame, finiteOnlyFrame, hiddenDatasetFrame, lastFrame];
 const datasetColors = config.data.datasets.map(dataset => dataset.borderColor);
 const circles = drawnFrames.flatMap(frame => frame.circles);
+const selectionLines = drawnFrames.map(frame => (
+  frame.lines.find(line => line.strokeStyle === '#000000')
+));
+const terminalLines = frames.map(frame => (
+  frame.lines.find(line => line.strokeStyle === '#e2e8f0')
+));
 console.log(JSON.stringify({
   pluginIds: config.plugins.map(candidate => candidate.id),
+  hasBoundaryHook: typeof plugin.beforeDatasetsDraw === 'function',
   hasDrawHook: typeof plugin.afterDatasetsDraw === 'function',
   interaction: config.options.interaction,
   hasTooltip: typeof config.options.plugins.tooltip.callbacks.label === 'function',
   tooltipKeepsDefaultDateTitle: !Object.hasOwn(config.options.plugins.tooltip.callbacks, 'title'),
   hasPriceAnnotationOptions: Object.hasOwn(config.options.plugins, 'annotation'),
   hasOnClick: Object.hasOwn(config.options, 'onClick'),
-  drawsWithoutSelection: Number(emptyFrame.line !== null) + emptyFrame.circles.length,
+  selectionDrawsWithoutSelection: emptyFrame.lines.filter(
+    line => line.strokeStyle === '#000000'
+  ).length + emptyFrame.circles.length,
   first,
   sameFirst,
   finiteOnlyDate,
@@ -631,7 +655,9 @@ console.log(JSON.stringify({
   abovePlot,
   beyondEdgeArea,
   unrelated,
-  lineStyles: drawnFrames.map(frame => frame.line),
+  lineStyles: selectionLines,
+  terminalLineStyles: terminalLines,
+  finalFrameDrawOrder: lastFrame.drawOrder,
   circleCounts: drawnFrames.map(frame => frame.circles.length),
   circleRadii: [...new Set(circles.map(circle => circle.radius))],
   circlesAreComplete: circles.every(circle => (
@@ -644,10 +670,14 @@ console.log(JSON.stringify({
     circle => circle.color === datasetColors[2]
   ),
   everyPointRadiusIsZero: config.data.datasets.every(dataset => dataset.pointRadius === 0),
-  endpointXs: [firstFrame.line.x, lastFrame.line.x],
+  endpointXs: [selectionLines[0].x, selectionLines[3].x],
   endpointMarkerXs: [
     [...new Set(firstFrame.circles.map(circle => circle.x))],
     [...new Set(lastFrame.circles.map(circle => circle.x))]
+  ],
+  interiorMarkerXs: [
+    [...new Set(finiteOnlyFrame.circles.map(circle => circle.x))],
+    [...new Set(hiddenDatasetFrame.circles.map(circle => circle.x))]
   ],
   contextCalls,
   xScaleLookupCount,
@@ -664,13 +694,14 @@ console.log(JSON.stringify({
     result = json.loads(completed.stdout)
 
     assert result["pluginIds"] == ["priceChartDateSelection"]
+    assert result["hasBoundaryHook"] is True
     assert result["hasDrawHook"] is True
     assert result["interaction"] == {"mode": "index", "axis": "x", "intersect": False}
     assert result["hasTooltip"] is True
     assert result["tooltipKeepsDefaultDateTitle"] is True
     assert result["hasPriceAnnotationOptions"] is False
     assert result["hasOnClick"] is False
-    assert result["drawsWithoutSelection"] == 0
+    assert result["selectionDrawsWithoutSelection"] == 0
     assert result["first"] == {
         "changed": True,
         "selection": {"index": 0, "date": "first"},
@@ -707,7 +738,7 @@ console.log(JSON.stringify({
 
     assert result["lineStyles"] == [
         {
-            "x": 14.5,
+            "x": 10,
             "top": 20,
             "bottom": 220,
             "strokeStyle": "#000000",
@@ -731,13 +762,28 @@ console.log(JSON.stringify({
             "dash": [],
         },
         {
-            "x": 305.5,
+            "x": 310,
             "top": 20,
             "bottom": 220,
             "strokeStyle": "#000000",
             "lineWidth": 1,
             "dash": [],
         },
+    ]
+    assert result["terminalLineStyles"] == [
+        {
+            "x": 310,
+            "top": 20,
+            "bottom": 220,
+            "strokeStyle": "#e2e8f0",
+            "lineWidth": 1,
+            "dash": [],
+        }
+    ] * 5
+    assert result["finalFrameDrawOrder"] == [
+        "stroke:#e2e8f0",
+        "datasets",
+        "stroke:#000000",
     ]
     assert result["circleCounts"] == [5, 1, 4, 5]
     assert result["circleRadii"] == [4]
@@ -746,14 +792,19 @@ console.log(JSON.stringify({
     assert result["finiteOnlyMarkerColor"] == result["datasetColors"][0]
     assert result["hiddenColorWasNotDrawn"] is True
     assert result["everyPointRadiusIsZero"] is True
-    assert result["endpointXs"] == [14.5, 305.5]
+    assert result["endpointXs"] == [10, 310]
     assert result["endpointMarkerXs"] == [[14.5], [305.5]]
+    assert result["interiorMarkerXs"] == [[110], [210]]
     marker_clearance = result["circleRadii"][0] + 0.5
-    assert result["endpointXs"][0] - 10 >= marker_clearance
-    assert 310 - result["endpointXs"][1] >= marker_clearance
+    assert result["endpointMarkerXs"][0][0] - result["endpointXs"][0] == marker_clearance
+    assert result["endpointXs"][1] - result["endpointMarkerXs"][1][0] == marker_clearance
+    assert result["interiorMarkerXs"] == [
+        [result["lineStyles"][1]["x"]],
+        [result["lineStyles"][2]["x"]],
+    ]
     assert result["contextCalls"] == {
-        "save": 4,
-        "restore": 4,
+        "save": 9,
+        "restore": 9,
         "fillText": 0,
         "fillRect": 0,
     }
