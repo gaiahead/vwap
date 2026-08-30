@@ -5,7 +5,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NEW_DATA_VERSION = "data-20260830-canvas-date-selection"
+NEW_DATA_VERSION = "data-20260830-price-chart-120d-selection"
 
 
 def read(name: str) -> str:
@@ -74,11 +74,11 @@ def test_frontend_removes_backtest_journal_and_strategy_chart_runtime():
         assert token not in lowered
 
 
-def test_price_chart_is_fixed_to_latest_240_rows_without_range_controls():
+def test_price_chart_is_fixed_to_latest_120_rows_without_range_controls():
     app = read("app.js")
     combined = app + read("index.html") + read("style.css")
 
-    assert "const PRICE_CHART_TRADING_DAYS = 240;" in app
+    assert "const PRICE_CHART_TRADING_DAYS = 120;" in app
     assert "const ohlcv = detailData.ohlcv.slice(-PRICE_CHART_TRADING_DAYS);" in app
     assert "currentChartTradingDays" not in app
     assert "CHART_TRADING_DAY_OPTIONS" not in app
@@ -93,7 +93,7 @@ def test_price_chart_is_fixed_to_latest_240_rows_without_range_controls():
         assert token not in combined
 
 
-def test_price_chart_has_exact_six_vwap_datasets_and_no_trade_markers():
+def test_price_chart_has_exact_five_vwap_datasets_and_keeps_240d_volume_profile():
     app = read("app.js")
     definitions = re.findall(
         r"label: '([^']+)', window: (\d+), color: '(#[0-9a-f]+)'",
@@ -106,12 +106,12 @@ def test_price_chart_has_exact_six_vwap_datasets_and_no_trade_markers():
         ("20d", "20", "#16a34a"),
         ("60d", "60", "#2563eb"),
         ("120d", "120", "#7c3aed"),
-        ("240d", "240", "#000000"),
     ]
     assert "datasets: vwapLineDatasets" in app
     assert "const PRICE_DATASET_ORDER = PRICE_LINE_DEFS.map(def => def.label);" in app
     assert "const VP_PERIODS = ['1d', '5d', '20d', '60d', '120d', '240d'];" in app
     assert "Volume Profile" in app
+    assert "vwap_240d" not in app
 
     for token in [
         "label: 'BUY'",
@@ -177,7 +177,7 @@ const edgeCases = {
   nonFiniteStart: api.classifyVwapSegmentState([NaN, 100], 0, 1),
   nonFiniteEnd: api.classifyVwapSegmentState([100, Infinity], 0, 1),
 };
-const periods = [1, 5, 20, 60, 120, 240];
+const periods = [1, 5, 20, 60, 120];
 const colors = Object.fromEntries(periods.map(period => [period, {
   rising: api.getVwapTrendStyle(period, 'rising').baseColor,
   flat: api.getVwapTrendStyle(period, 'flat').baseColor,
@@ -190,7 +190,14 @@ const widths = periods.flatMap(period => states.map(
 const opacities = Object.fromEntries(states.map(
   state => [state, api.getVwapTrendStyle(20, state).opacity]
 ));
-console.log(JSON.stringify({alternating, edgeCases, colors, widths, opacities}));
+console.log(JSON.stringify({
+  alternating,
+  edgeCases,
+  colors,
+  widths,
+  opacities,
+  missing240dStyle: api.getVwapTrendStyle(240, 'flat')
+}));
 """
     completed = subprocess.run(
         ["node", "-e", node_script],
@@ -203,12 +210,12 @@ console.log(JSON.stringify({alternating, edgeCases, colors, widths, opacities}))
 
     assert result["alternating"] == ["rising", "falling", "rising"]
     assert set(result["edgeCases"].values()) == {"flat"}
-    assert len(set(result["widths"])) == 1
+    assert set(result["widths"]) == {3}
     assert result["opacities"] == {"rising": 1, "flat": 0.9, "falling": 0.522}
     for states in result["colors"].values():
         assert len(set(states.values())) == 1
     assert result["colors"]["120"]["flat"] == "#7c3aed"
-    assert result["colors"]["240"]["flat"] == "#000000"
+    assert result["missing240dStyle"] is None
 
 
 def test_volume_profile_tabs_and_panel_survive():
@@ -294,16 +301,21 @@ const context = { window: {} };
 vm.createContext(context);
 vm.runInContext(source, context);
 const api = context.window.VWAP_CHART_TEST_API;
-const config = api.buildPriceChartConfig({
-  ohlcv: [{date: '2026-08-28', vwap_1d: 123456.5}]
-});
+const ohlcv = Array.from({length: 125}, (_, index) => ({
+  date: 'day-' + index,
+  vwap_1d: index === 124 ? 123456.5 : index
+}));
+const config = api.buildPriceChartConfig({ohlcv});
 console.log(JSON.stringify({
+  rowCount: config.data.labels.length,
+  dateBounds: [config.data.labels[0], config.data.labels.at(-1)],
+  datasetLabels: config.data.datasets.map(dataset => dataset.label),
   yTick: config.options.scales.y.ticks.callback(123456.5),
   tooltip: config.options.plugins.tooltip.callbacks.label({
     dataset: {label: '1d'},
     parsed: {y: 123456.5}
   }),
-  rawValue: config.data.datasets[0].data[0],
+  rawValue: config.data.datasets[0].data.at(-1),
   hasPriceAnnotationOptions: Object.hasOwn(config.options.plugins, 'annotation')
 }));
 """
@@ -317,6 +329,9 @@ console.log(JSON.stringify({
     result = json.loads(completed.stdout)
 
     assert result == {
+        "rowCount": 120,
+        "dateBounds": ["day-5", "day-124"],
+        "datasetLabels": ["1d", "5d", "20d", "60d", "120d"],
         "yTick": "123,457",
         "tooltip": "1d: 123,457",
         "rawValue": 123456.5,
@@ -376,7 +391,7 @@ console.log(JSON.stringify({
     assert result["hasPriceAnnotationOptions"] is False
 
 
-def test_nearest_price_chart_index_prefers_coordinates_and_bounds_fallback_results():
+def test_nearest_price_chart_index_uses_chart_area_math_and_accepts_edge_hit_area():
     node_script = r"""
 const fs = require('fs');
 const vm = require('vm');
@@ -386,63 +401,39 @@ vm.createContext(context);
 vm.runInContext(source, context);
 const nearest = context.window.VWAP_CHART_TEST_API.nearestPriceChartIndex;
 const labels = ['first', 'second', 'third', 'last'];
-
-function chartWithCoordinate(value, fallbackIndex = 0) {
-  let elementLookupCount = 0;
-  const chart = {
-    data: {labels},
-    scales: {x: {getValueForPixel: pixel => {
-      if (pixel !== 42) throw new Error('unexpected pixel');
-      return value;
-    }}},
-    getElementsAtEventForMode: () => {
-      elementLookupCount += 1;
-      return [{index: fallbackIndex}];
-    }
-  };
-  return {chart, elementLookupCount: () => elementLookupCount};
-}
-
-const exactFirst = chartWithCoordinate(0, 3);
-const exactLast = chartWithCoordinate(3, 0);
-const interior = chartWithCoordinate(1.6, 0);
-const beforeFirst = chartWithCoordinate(-10, 2);
-const afterLast = chartWithCoordinate(10, 1);
-const invalidCoordinate = chartWithCoordinate(NaN, 2);
+let scaleLookupCount = 0;
+let elementLookupCount = 0;
+const chart = {
+  data: {labels},
+  chartArea: {left: 10, right: 310, top: 20, bottom: 220},
+  scales: {x: {getValueForPixel: () => {
+    scaleLookupCount += 1;
+    throw new Error('selection must not depend on the category scale');
+  }}},
+  getElementsAtEventForMode: () => {
+    elementLookupCount += 1;
+    throw new Error('selection must not depend on element lookup');
+  }
+};
 
 const result = {
-  exactFirst: nearest(exactFirst.chart, {x: 42}),
-  exactLast: nearest(exactLast.chart, {x: 42}),
-  interiorRounded: nearest(interior.chart, {x: 42}),
-  beforeFirstClamped: nearest(beforeFirst.chart, {x: 42}),
-  afterLastClamped: nearest(afterLast.chart, {x: 42}),
-  coordinateElementLookups: [
-    exactFirst.elementLookupCount(),
-    exactLast.elementLookupCount(),
-    interior.elementLookupCount(),
-    beforeFirst.elementLookupCount(),
-    afterLast.elementLookupCount()
-  ],
-  invalidCoordinateFallback: nearest(invalidCoordinate.chart, {x: 42}),
-  invalidCoordinateElementLookups: invalidCoordinate.elementLookupCount(),
-  missingScaleFallback: nearest({
-    data: {labels},
-    getElementsAtEventForMode: () => [{index: 1}]
-  }, {x: 42}),
-  missingCoordinateWithoutFallback: nearest({
-    data: {labels},
-    scales: {x: {getValueForPixel: () => 1}},
-    getElementsAtEventForMode: () => []
-  }, {}),
-  outOfRangeFallback: nearest({
-    data: {labels},
-    scales: {x: {getValueForPixel: () => NaN}},
-    getElementsAtEventForMode: () => [{index: labels.length}]
-  }, {x: 42}),
-  missingLabels: nearest({
-    scales: {x: {getValueForPixel: () => 0}},
-    getElementsAtEventForMode: () => [{index: 0}]
-  }, {x: 42})
+  exactFirst: nearest(chart, {x: 10, y: 100}),
+  exactLast: nearest(chart, {x: 310, y: 100}),
+  interiorRounded: nearest(chart, {x: 160, y: 100}),
+  leftEdgeClamped: nearest(chart, {x: -2, y: 20}),
+  rightEdgeClamped: nearest(chart, {x: 322, y: 220}),
+  tooFarLeft: nearest(chart, {x: -3, y: 100}),
+  tooFarRight: nearest(chart, {x: 323, y: 100}),
+  abovePlot: nearest(chart, {x: 10, y: 19}),
+  belowPlot: nearest(chart, {x: 310, y: 221}),
+  missingY: nearest(chart, {x: 160}),
+  missingLabels: nearest({chartArea: chart.chartArea}, {x: 10, y: 100}),
+  oneLabel: nearest({
+    data: {labels: ['only']},
+    chartArea: chart.chartArea
+  }, {x: 322, y: 100}),
+  scaleLookupCount,
+  elementLookupCount
 };
 console.log(JSON.stringify(result));
 """
@@ -458,19 +449,21 @@ console.log(JSON.stringify(result));
         "exactFirst": 0,
         "exactLast": 3,
         "interiorRounded": 2,
-        "beforeFirstClamped": 0,
-        "afterLastClamped": 3,
-        "coordinateElementLookups": [0, 0, 0, 0, 0],
-        "invalidCoordinateFallback": 2,
-        "invalidCoordinateElementLookups": 1,
-        "missingScaleFallback": 1,
-        "missingCoordinateWithoutFallback": -1,
-        "outOfRangeFallback": -1,
+        "leftEdgeClamped": 0,
+        "rightEdgeClamped": 3,
+        "tooFarLeft": -1,
+        "tooFarRight": -1,
+        "abovePlot": -1,
+        "belowPlot": -1,
+        "missingY": -1,
         "missingLabels": -1,
+        "oneLabel": 0,
+        "scaleLookupCount": 0,
+        "elementLookupCount": 0,
     }
 
 
-def test_price_chart_local_plugin_draws_selected_dates_and_persists_on_release():
+def test_price_chart_local_plugin_draws_finite_circles_and_inset_endpoint_lines():
     app = read("app.js")
     node_script = r"""
 const fs = require('fs');
@@ -480,17 +473,50 @@ const context = { window: {} };
 vm.createContext(context);
 vm.runInContext(source, context);
 const api = context.window.VWAP_CHART_TEST_API;
-const labels = ['first', 'second', 'third', 'last'];
 const config = api.buildPriceChartConfig({
-  ohlcv: labels.map(date => ({date, vwap_1d: null}))
+  ohlcv: [
+    {
+      date: 'first',
+      vwap_1d: 11,
+      vwap_5d: 21,
+      vwap_20d: 31,
+      vwap_60d: 41,
+      vwap_120d: 51
+    },
+    {
+      date: 'second',
+      vwap_1d: 12,
+      vwap_5d: null,
+      vwap_20d: '',
+      vwap_60d: NaN,
+      vwap_120d: Infinity
+    },
+    {
+      date: 'third',
+      vwap_1d: 13,
+      vwap_5d: 23,
+      vwap_20d: 33,
+      vwap_60d: 43,
+      vwap_120d: 53
+    },
+    {
+      date: 'last',
+      vwap_1d: 14,
+      vwap_5d: 24,
+      vwap_20d: 34,
+      vwap_60d: 44,
+      vwap_120d: 54
+    }
+  ]
 });
 const plugin = config.plugins.find(candidate => candidate.id === 'priceChartDateSelection');
-let updateCount = 0;
-const scalePixels = [];
-const selectedIndexes = [];
-const draws = [];
-const contextCalls = {save: 0, restore: 0};
+const frames = [];
+const contextCalls = {save: 0, restore: 0, fillText: 0, fillRect: 0};
+let activeFrame = null;
 let path = null;
+let hiddenDatasetIndex = -1;
+let updateCount = 0;
+let xScaleLookupCount = 0;
 const ctx = {
   save() { contextCalls.save += 1; },
   restore() { contextCalls.restore += 1; },
@@ -499,50 +525,47 @@ const ctx = {
   moveTo(x, y) { path.from = [x, y]; },
   lineTo(x, y) { path.to = [x, y]; },
   stroke() {
-    draws.push({
+    activeFrame.line = {
       x: path.from[0],
       top: path.from[1],
       bottom: path.to[1],
       strokeStyle: this.strokeStyle,
       lineWidth: this.lineWidth,
       dash: this.dash
-    });
+    };
   },
-  measureText: () => ({width: 120}),
-  fillRect(left, top, width, height) {
-    Object.assign(draws[draws.length - 1], {
-      labelBackground: {left, top, right: left + width, bottom: top + height}
-    });
+  arc(x, y, radius, startAngle, endAngle) {
+    path.circle = {x, y, radius, startAngle, endAngle};
   },
-  fillText(text, x, y, maxWidth) {
-    Object.assign(draws[draws.length - 1], {
-      label: {text, x, y, maxWidth, color: this.fillStyle}
-    });
-  }
+  fill() {
+    activeFrame.circles.push({...path.circle, color: this.fillStyle});
+  },
+  fillText() { contextCalls.fillText += 1; },
+  fillRect() { contextCalls.fillRect += 1; }
 };
 const chart = {
   data: config.data,
   options: config.options,
   chartArea: {left: 10, right: 310, top: 20, bottom: 220},
   ctx,
-  scales: {x: {
-    getValueForPixel: pixel => {
-      scalePixels.push(pixel);
-      return pixel / 100;
+  scales: {
+    x: {
+      getPixelForValue: () => {
+        xScaleLookupCount += 1;
+        throw new Error('selection x must come from chart-area math');
+      }
     },
-    getPixelForValue: index => {
-      selectedIndexes.push(index);
-      return 10 + index * 100;
-    }
-  }},
+    y: {getPixelForValue: value => 210 - Number(value)}
+  },
+  isDatasetVisible: datasetIndex => datasetIndex !== hiddenDatasetIndex,
   getElementsAtEventForMode: () => {
-    throw new Error('normalized x coordinates should select the index');
+    throw new Error('the local plugin must not use element lookup');
   },
   update: () => { updateCount += 1; }
 };
 
-function dispatch(type, x, inChartArea = true) {
-  const args = {event: {type, x}, inChartArea, changed: false};
+function dispatch(type, x, y, inChartArea = false) {
+  const args = {event: {type, x, y}, inChartArea, changed: false};
   plugin.afterEvent(chart, args);
   return {
     changed: args.changed,
@@ -552,49 +575,69 @@ function dispatch(type, x, inChartArea = true) {
   };
 }
 
-plugin.afterDatasetsDraw(chart);
-const drawsWithoutSelection = draws.length;
-const first = dispatch('mousemove', -500);
-plugin.afterDatasetsDraw(chart);
-const sameFirst = dispatch('mousemove', -100);
-const nullDataDate = dispatch('click', 100);
-plugin.afterDatasetsDraw(chart);
-const mouseRelease = dispatch('mouseup', 0);
-plugin.afterDatasetsDraw(chart);
-const pointerRelease = dispatch('pointerup', 0);
-plugin.afterDatasetsDraw(chart);
-const interiorTouch = dispatch('touchstart', 200);
-const last = dispatch('touchmove', 999);
-plugin.afterDatasetsDraw(chart);
-const outside = dispatch('mousemove', 0, false);
-const unrelated = dispatch('mouseout', 0);
+function drawFrame() {
+  activeFrame = {line: null, circles: []};
+  plugin.afterDatasetsDraw(chart);
+  frames.push(activeFrame);
+  return activeFrame;
+}
 
+const emptyFrame = drawFrame();
+const first = dispatch('mousemove', -2, 100);
+const firstFrame = drawFrame();
+const sameFirst = dispatch('mousemove', 0, 100);
+const finiteOnlyDate = dispatch('click', 110, 100);
+const finiteOnlyFrame = drawFrame();
+const mouseRelease = dispatch('mouseup', 210, 100);
+const pointerRelease = dispatch('pointerup', 210, 100);
+hiddenDatasetIndex = 2;
+const interiorTouch = dispatch('touchstart', 210, 100);
+const hiddenDatasetFrame = drawFrame();
+hiddenDatasetIndex = -1;
+const last = dispatch('touchmove', 322, 100);
+const lastFrame = drawFrame();
+const abovePlot = dispatch('mousemove', 10, 19);
+const beyondEdgeArea = dispatch('mousemove', -3, 100);
+const unrelated = dispatch('mouseout', 110, 100);
+
+const drawnFrames = [firstFrame, finiteOnlyFrame, hiddenDatasetFrame, lastFrame];
+const datasetColors = config.data.datasets.map(dataset => dataset.borderColor);
+const circles = drawnFrames.flatMap(frame => frame.circles);
 console.log(JSON.stringify({
   pluginIds: config.plugins.map(candidate => candidate.id),
   hasDrawHook: typeof plugin.afterDatasetsDraw === 'function',
   interaction: config.options.interaction,
   hasTooltip: typeof config.options.plugins.tooltip.callbacks.label === 'function',
+  tooltipKeepsDefaultDateTitle: !Object.hasOwn(config.options.plugins.tooltip.callbacks, 'title'),
   hasPriceAnnotationOptions: Object.hasOwn(config.options.plugins, 'annotation'),
   hasOnClick: Object.hasOwn(config.options, 'onClick'),
-  drawsWithoutSelection,
+  drawsWithoutSelection: Number(emptyFrame.line !== null) + emptyFrame.circles.length,
   first,
   sameFirst,
-  nullDataDate,
-  interiorTouch,
-  last,
-  outside,
-  unrelated,
+  finiteOnlyDate,
   mouseRelease,
   pointerRelease,
-  everyDatasetNullAtSelectedDate: config.data.datasets.every(dataset => dataset.data[1] === null),
-  draws,
-  labelsStayInsidePlot: draws.every(draw => (
-    draw.labelBackground.left >= chart.chartArea.left &&
-    draw.labelBackground.right <= chart.chartArea.right
+  interiorTouch,
+  last,
+  abovePlot,
+  beyondEdgeArea,
+  unrelated,
+  lineStyles: drawnFrames.map(frame => frame.line),
+  circleCounts: drawnFrames.map(frame => frame.circles.length),
+  circleRadii: [...new Set(circles.map(circle => circle.radius))],
+  circlesAreComplete: circles.every(circle => (
+    circle.startAngle === 0 && circle.endAngle === Math.PI * 2
   )),
-  scalePixels,
-  selectedIndexes,
+  firstMarkerColors: firstFrame.circles.map(circle => circle.color),
+  datasetColors,
+  finiteOnlyMarkerColor: finiteOnlyFrame.circles[0]?.color,
+  hiddenColorWasNotDrawn: !hiddenDatasetFrame.circles.some(
+    circle => circle.color === datasetColors[2]
+  ),
+  everyPointRadiusIsZero: config.data.datasets.every(dataset => dataset.pointRadius === 0),
+  endpointXs: [firstFrame.line.x, lastFrame.line.x],
   contextCalls,
+  xScaleLookupCount,
   updateCount
 }));
 """
@@ -605,113 +648,101 @@ console.log(JSON.stringify({
         capture_output=True,
         text=True,
     )
+    result = json.loads(completed.stdout)
 
-    assert json.loads(completed.stdout) == {
-        "pluginIds": ["priceChartDateSelection"],
-        "hasDrawHook": True,
-        "interaction": {"mode": "index", "axis": "x", "intersect": False},
-        "hasTooltip": True,
-        "hasPriceAnnotationOptions": False,
-        "hasOnClick": False,
-        "drawsWithoutSelection": 0,
-        "first": {"changed": True, "selection": {"index": 0, "date": "first"}},
-        "sameFirst": {"changed": False, "selection": {"index": 0, "date": "first"}},
-        "nullDataDate": {"changed": True, "selection": {"index": 1, "date": "second"}},
-        "interiorTouch": {"changed": True, "selection": {"index": 2, "date": "third"}},
-        "last": {"changed": True, "selection": {"index": 3, "date": "last"}},
-        "outside": {"changed": False, "selection": {"index": 3, "date": "last"}},
-        "unrelated": {"changed": False, "selection": {"index": 3, "date": "last"}},
-        "mouseRelease": {"changed": False, "selection": {"index": 1, "date": "second"}},
-        "pointerRelease": {"changed": False, "selection": {"index": 1, "date": "second"}},
-        "everyDatasetNullAtSelectedDate": True,
-        "draws": [
-            {
-                "x": 10,
-                "top": 20,
-                "bottom": 220,
-                "strokeStyle": "#2563eb",
-                "lineWidth": 2,
-                "dash": [4, 3],
-                "labelBackground": {"left": 16, "top": 24, "right": 144, "bottom": 42},
-                "label": {
-                    "text": "선택 날짜 first",
-                    "x": 20,
-                    "y": 26,
-                    "maxWidth": 120,
-                    "color": "#1d4ed8",
-                },
-            },
-            {
-                "x": 110,
-                "top": 20,
-                "bottom": 220,
-                "strokeStyle": "#2563eb",
-                "lineWidth": 2,
-                "dash": [4, 3],
-                "labelBackground": {"left": 116, "top": 24, "right": 244, "bottom": 42},
-                "label": {
-                    "text": "선택 날짜 second",
-                    "x": 120,
-                    "y": 26,
-                    "maxWidth": 120,
-                    "color": "#1d4ed8",
-                },
-            },
-            {
-                "x": 110,
-                "top": 20,
-                "bottom": 220,
-                "strokeStyle": "#2563eb",
-                "lineWidth": 2,
-                "dash": [4, 3],
-                "labelBackground": {"left": 116, "top": 24, "right": 244, "bottom": 42},
-                "label": {
-                    "text": "선택 날짜 second",
-                    "x": 120,
-                    "y": 26,
-                    "maxWidth": 120,
-                    "color": "#1d4ed8",
-                },
-            },
-            {
-                "x": 110,
-                "top": 20,
-                "bottom": 220,
-                "strokeStyle": "#2563eb",
-                "lineWidth": 2,
-                "dash": [4, 3],
-                "labelBackground": {"left": 116, "top": 24, "right": 244, "bottom": 42},
-                "label": {
-                    "text": "선택 날짜 second",
-                    "x": 120,
-                    "y": 26,
-                    "maxWidth": 120,
-                    "color": "#1d4ed8",
-                },
-            },
-            {
-                "x": 310,
-                "top": 20,
-                "bottom": 220,
-                "strokeStyle": "#2563eb",
-                "lineWidth": 2,
-                "dash": [4, 3],
-                "labelBackground": {"left": 176, "top": 24, "right": 304, "bottom": 42},
-                "label": {
-                    "text": "선택 날짜 last",
-                    "x": 180,
-                    "y": 26,
-                    "maxWidth": 120,
-                    "color": "#1d4ed8",
-                },
-            },
-        ],
-        "labelsStayInsidePlot": True,
-        "scalePixels": [-500, -100, 100, 200, 999],
-        "selectedIndexes": [0, 1, 1, 1, 3],
-        "contextCalls": {"save": 5, "restore": 5},
-        "updateCount": 0,
+    assert result["pluginIds"] == ["priceChartDateSelection"]
+    assert result["hasDrawHook"] is True
+    assert result["interaction"] == {"mode": "index", "axis": "x", "intersect": False}
+    assert result["hasTooltip"] is True
+    assert result["tooltipKeepsDefaultDateTitle"] is True
+    assert result["hasPriceAnnotationOptions"] is False
+    assert result["hasOnClick"] is False
+    assert result["drawsWithoutSelection"] == 0
+    assert result["first"] == {
+        "changed": True,
+        "selection": {"index": 0, "date": "first"},
     }
+    assert result["sameFirst"] == {
+        "changed": False,
+        "selection": {"index": 0, "date": "first"},
+    }
+    assert result["finiteOnlyDate"] == {
+        "changed": True,
+        "selection": {"index": 1, "date": "second"},
+    }
+    assert result["mouseRelease"] == {
+        "changed": False,
+        "selection": {"index": 1, "date": "second"},
+    }
+    assert result["pointerRelease"] == {
+        "changed": False,
+        "selection": {"index": 1, "date": "second"},
+    }
+    assert result["interiorTouch"] == {
+        "changed": True,
+        "selection": {"index": 2, "date": "third"},
+    }
+    assert result["last"] == {
+        "changed": True,
+        "selection": {"index": 3, "date": "last"},
+    }
+    for ignored_event in ["abovePlot", "beyondEdgeArea", "unrelated"]:
+        assert result[ignored_event] == {
+            "changed": False,
+            "selection": {"index": 3, "date": "last"},
+        }
+
+    assert result["lineStyles"] == [
+        {
+            "x": 10.5,
+            "top": 20,
+            "bottom": 220,
+            "strokeStyle": "#000000",
+            "lineWidth": 1,
+            "dash": [],
+        },
+        {
+            "x": 110,
+            "top": 20,
+            "bottom": 220,
+            "strokeStyle": "#000000",
+            "lineWidth": 1,
+            "dash": [],
+        },
+        {
+            "x": 210,
+            "top": 20,
+            "bottom": 220,
+            "strokeStyle": "#000000",
+            "lineWidth": 1,
+            "dash": [],
+        },
+        {
+            "x": 309.5,
+            "top": 20,
+            "bottom": 220,
+            "strokeStyle": "#000000",
+            "lineWidth": 1,
+            "dash": [],
+        },
+    ]
+    assert result["circleCounts"] == [5, 1, 4, 5]
+    assert result["circleRadii"] == [4]
+    assert result["circlesAreComplete"] is True
+    assert result["firstMarkerColors"] == result["datasetColors"]
+    assert result["finiteOnlyMarkerColor"] == result["datasetColors"][0]
+    assert result["hiddenColorWasNotDrawn"] is True
+    assert result["everyPointRadiusIsZero"] is True
+    assert result["endpointXs"] == [10.5, 309.5]
+    assert all(10 < x < 310 for x in result["endpointXs"])
+    assert result["contextCalls"] == {
+        "save": 4,
+        "restore": 4,
+        "fillText": 0,
+        "fillRect": 0,
+    }
+    assert result["xScaleLookupCount"] == 0
+    assert result["updateCount"] == 0
 
     for obsolete in [
         "PRICE_CHART_POINTER_STATES",
@@ -725,6 +756,11 @@ console.log(JSON.stringify({
         "onClick:",
         "selectedDateLine",
         "buildDateSelectionAnnotation",
+        "getValueForPixel",
+        "getElementsAtEventForMode",
+        "선택 날짜",
+        "fillText(",
+        "fillRect(",
     ]:
         assert obsolete not in app
     assert "plugins: [dateSelectionPlugin]" in app

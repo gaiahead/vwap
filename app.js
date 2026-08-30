@@ -1,5 +1,5 @@
-const DATA_VERSION = 'data-20260830-canvas-date-selection';
-const PRICE_CHART_TRADING_DAYS = 240;
+const DATA_VERSION = 'data-20260830-price-chart-120d-selection';
+const PRICE_CHART_TRADING_DAYS = 120;
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
 const COLOR = {
@@ -18,14 +18,16 @@ const ALIGNMENT_OPTIONS = [
 ];
 const DEFAULT_SORT = { key: 'name', dir: 'asc' };
 const VP_PERIODS = ['1d', '5d', '20d', '60d', '120d', '240d'];
-const VWAP_LINE_WIDTH = 1.25;
+const VWAP_LINE_WIDTH = 3;
+const PRICE_CHART_EDGE_HIT_WIDTH = 12;
+const PRICE_CHART_SELECTION_INSET = 0.5;
+const PRICE_CHART_SELECTION_MARKER_RADIUS = 4;
 const PRICE_LINE_DEFS = Object.freeze([
   Object.freeze({ label: '1d', window: 1, color: '#eab308', dash: [], opacity: 0.66 }),
   Object.freeze({ label: '5d', window: 5, color: '#dc2626', dash: [], opacity: 0.72 }),
   Object.freeze({ label: '20d', window: 20, color: '#16a34a', dash: [], opacity: 0.90 }),
   Object.freeze({ label: '60d', window: 60, color: '#2563eb', dash: [], opacity: 0.74 }),
-  Object.freeze({ label: '120d', window: 120, color: '#7c3aed', dash: [], opacity: 0.78 }),
-  Object.freeze({ label: '240d', window: 240, color: '#000000', dash: [], opacity: 0.82 })
+  Object.freeze({ label: '120d', window: 120, color: '#7c3aed', dash: [], opacity: 0.78 })
 ]);
 PRICE_LINE_DEFS.forEach(definition => Object.freeze(definition.dash));
 const PRICE_DATASET_ORDER = PRICE_LINE_DEFS.map(def => def.label);
@@ -135,32 +137,19 @@ function buildPriceChartDateSelection(labels, index) {
 function nearestPriceChartIndex(chart, event) {
   const labels = chart?.data?.labels;
   if (!Array.isArray(labels) || labels.length === 0) return -1;
-
-  const xScale = chart?.scales?.x;
-  if (typeof xScale?.getValueForPixel === 'function' && Number.isFinite(event?.x)) {
-    try {
-      const scaleIndex = xScale.getValueForPixel(event.x);
-      if (Number.isFinite(scaleIndex)) {
-        return Math.min(labels.length - 1, Math.max(0, Math.round(scaleIndex)));
-      }
-    } catch (_error) {
-      // Fall back to Chart.js element lookup when the scale cannot map this event.
-    }
-  }
-
-  if (typeof chart.getElementsAtEventForMode !== 'function') return -1;
-  try {
-    const elements = chart.getElementsAtEventForMode(
-      event,
-      'index',
-      { axis: 'x', intersect: false },
-      false
-    );
-    const index = elements?.[0]?.index;
-    return Number.isInteger(index) && index >= 0 && index < labels.length ? index : -1;
-  } catch (_error) {
+  const { left, right, top, bottom } = chart?.chartArea || {};
+  const eventX = event?.x;
+  const eventY = event?.y;
+  if (![left, right, top, bottom, eventX, eventY].every(Number.isFinite)) return -1;
+  if (right <= left || bottom <= top || eventY < top || eventY > bottom) return -1;
+  if (eventX < left - PRICE_CHART_EDGE_HIT_WIDTH || eventX > right + PRICE_CHART_EDGE_HIT_WIDTH) {
     return -1;
   }
+
+  const lastIndex = labels.length - 1;
+  if (lastIndex === 0) return 0;
+  const chartAreaIndex = Math.round(((eventX - left) / (right - left)) * lastIndex);
+  return Math.min(lastIndex, Math.max(0, chartAreaIndex));
 }
 
 function selectPriceChartIndex(chart, index) {
@@ -182,54 +171,49 @@ function drawPriceChartDateSelection(chart) {
   );
   if (!selection || selection.date !== currentSelection.date) return;
 
-  const xScale = chart?.scales?.x;
-  if (typeof xScale?.getPixelForValue !== 'function') return;
-  const selectedX = xScale.getPixelForValue(selection.index);
   const { left, right, top, bottom } = chart?.chartArea || {};
-  if (![selectedX, left, right, top, bottom].every(Number.isFinite) || right <= left || bottom <= top) {
+  if (![left, right, top, bottom].every(Number.isFinite) || right <= left || bottom <= top) {
     return;
   }
+  const lastIndex = chart.data.labels.length - 1;
+  const selectedX = lastIndex === 0
+    ? (left + right) / 2
+    : left + ((right - left) * selection.index) / lastIndex;
 
   const ctx = chart?.ctx;
   if (!ctx || typeof ctx.save !== 'function' || typeof ctx.restore !== 'function') return;
 
-  const x = Math.min(right, Math.max(left, selectedX));
-  const label = '선택 날짜 ' + selection.date;
-  const horizontalPadding = 4;
-  const verticalPadding = 2;
-  const labelHeight = Math.min(bottom - top, 14 + verticalPadding * 2);
-  const labelGap = 6;
+  const x = Math.min(
+    right - PRICE_CHART_SELECTION_INSET,
+    Math.max(left + PRICE_CHART_SELECTION_INSET, selectedX)
+  );
 
   ctx.save();
   try {
-    ctx.strokeStyle = COLOR.blue;
-    ctx.lineWidth = 2;
-    ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([]);
     ctx.beginPath();
     ctx.moveTo(x, top);
     ctx.lineTo(x, bottom);
     ctx.stroke();
 
-    ctx.font = 'bold 10px sans-serif';
-    ctx.textBaseline = 'top';
-    const measuredText = typeof ctx.measureText === 'function' ? ctx.measureText(label) : null;
-    const measuredWidth = Number.isFinite(measuredText?.width) ? measuredText.width : label.length * 10;
-    const availableWidth = right - left;
-    const labelWidth = Math.min(availableWidth, measuredWidth + horizontalPadding * 2);
-    let labelLeft = x + labelGap;
-    if (labelLeft + labelWidth > right) labelLeft = x - labelGap - labelWidth;
-    labelLeft = Math.min(right - labelWidth, Math.max(left, labelLeft));
-    const labelTop = Math.max(top, Math.min(bottom - labelHeight, top + 4));
+    const yScale = chart?.scales?.y;
+    if (typeof yScale?.getPixelForValue !== 'function') return;
+    chart.data.datasets.forEach((dataset, datasetIndex) => {
+      const isVisible = typeof chart.isDatasetVisible === 'function'
+        ? chart.isDatasetVisible(datasetIndex)
+        : dataset.hidden !== true;
+      const value = dataset.data?.[selection.index];
+      if (!isVisible || !hasFiniteVwapValue(value)) return;
+      const y = yScale.getPixelForValue(Number(value));
+      if (!Number.isFinite(y) || y < top || y > bottom) return;
 
-    ctx.fillStyle = 'rgba(255,255,255,0.94)';
-    ctx.fillRect(labelLeft, labelTop, labelWidth, labelHeight);
-    ctx.fillStyle = '#1d4ed8';
-    ctx.fillText(
-      label,
-      labelLeft + horizontalPadding,
-      labelTop + verticalPadding,
-      Math.max(0, labelWidth - horizontalPadding * 2)
-    );
+      ctx.fillStyle = dataset.borderColor;
+      ctx.beginPath();
+      ctx.arc(x, y, PRICE_CHART_SELECTION_MARKER_RADIUS, 0, Math.PI * 2);
+      ctx.fill();
+    });
   } finally {
     ctx.restore();
   }
@@ -269,7 +253,7 @@ function buildPriceChartConfig(detailData) {
     id: 'priceChartDateSelection',
     afterEvent: (chart, args) => {
       const event = args?.event;
-      if (!args?.inChartArea || !selectionEvents.has(event?.type)) return;
+      if (!selectionEvents.has(event?.type)) return;
       const index = nearestPriceChartIndex(chart, event);
       if (selectPriceChartIndex(chart, index)) args.changed = true;
     },
