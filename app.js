@@ -189,6 +189,108 @@ function selectPriceChartIndex(chart, index) {
   return true;
 }
 
+const PRICE_CHART_POINTER_STATES = new WeakMap();
+
+function priceChartPointerX(canvas, event) {
+  if (Number.isFinite(event?.offsetX)) return event.offsetX;
+  if (!Number.isFinite(event?.clientX) || typeof canvas?.getBoundingClientRect !== 'function') {
+    return null;
+  }
+  try {
+    const left = canvas.getBoundingClientRect()?.left;
+    return Number.isFinite(left) ? event.clientX - left : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function attachPriceChartPointerDrag(chart) {
+  const canvas = chart?.canvas;
+  if (typeof canvas?.addEventListener !== 'function') return () => {};
+
+  let dragging = false;
+  let activePointerId;
+  let capturedPointerId;
+  let priorCursor = '';
+  const pointerState = { suppressNextClick: false };
+
+  const matchesActivePointer = event => (
+    activePointerId === undefined || event?.pointerId === activePointerId
+  );
+  const selectFromPointer = event => {
+    const x = priceChartPointerX(canvas, event);
+    if (!Number.isFinite(x)) return false;
+    return selectPriceChartIndex(chart, nearestPriceChartIndex(chart, { x }));
+  };
+  const releasePointerCapture = () => {
+    if (capturedPointerId === undefined || typeof canvas.releasePointerCapture !== 'function') return;
+    let isCaptured = true;
+    if (typeof canvas.hasPointerCapture === 'function') {
+      try {
+        isCaptured = canvas.hasPointerCapture(capturedPointerId);
+      } catch (_error) {
+        // If capture state cannot be queried, safely attempt release below.
+      }
+    }
+    if (isCaptured) {
+      try {
+        canvas.releasePointerCapture(capturedPointerId);
+      } catch (_error) {
+        // Pointer capture may already have been released by the browser.
+      }
+    }
+    capturedPointerId = undefined;
+  };
+  const stopDragging = event => {
+    if (!dragging || !matchesActivePointer(event)) return;
+    releasePointerCapture();
+    dragging = false;
+    activePointerId = undefined;
+    canvas.style.cursor = priorCursor;
+  };
+  const onPointerDown = event => {
+    if (dragging) return;
+    dragging = true;
+    activePointerId = event?.pointerId;
+    priorCursor = canvas.style.cursor;
+    canvas.style.cursor = 'ew-resize';
+    pointerState.suppressNextClick = true;
+    selectFromPointer(event);
+
+    if (activePointerId !== undefined && typeof canvas.setPointerCapture === 'function') {
+      try {
+        canvas.setPointerCapture(activePointerId);
+        capturedPointerId = activePointerId;
+      } catch (_error) {
+        capturedPointerId = undefined;
+      }
+    }
+  };
+  const onPointerMove = event => {
+    if (!dragging || !matchesActivePointer(event)) return;
+    selectFromPointer(event);
+  };
+  const onPointerCancel = event => {
+    if (dragging && matchesActivePointer(event)) pointerState.suppressNextClick = false;
+    stopDragging(event);
+  };
+
+  canvas.addEventListener('pointerdown', onPointerDown);
+  canvas.addEventListener('pointermove', onPointerMove);
+  canvas.addEventListener('pointerup', stopDragging);
+  canvas.addEventListener('pointercancel', onPointerCancel);
+  PRICE_CHART_POINTER_STATES.set(chart, pointerState);
+
+  return () => {
+    if (dragging) stopDragging({ pointerId: activePointerId });
+    canvas.removeEventListener('pointerdown', onPointerDown);
+    canvas.removeEventListener('pointermove', onPointerMove);
+    canvas.removeEventListener('pointerup', stopDragging);
+    canvas.removeEventListener('pointercancel', onPointerCancel);
+    PRICE_CHART_POINTER_STATES.delete(chart);
+  };
+}
+
 function buildPriceChartConfig(detailData) {
   const ohlcv = detailData.ohlcv.slice(-PRICE_CHART_TRADING_DAYS);
   const labels = ohlcv.map(day => day.date);
@@ -230,6 +332,11 @@ function buildPriceChartConfig(detailData) {
       animation: { duration: 200 },
       interaction: { mode: 'index', axis: 'x', intersect: false },
       onClick: (event, _activeElements, chart) => {
+        const pointerState = PRICE_CHART_POINTER_STATES.get(chart);
+        if (pointerState?.suppressNextClick) {
+          pointerState.suppressNextClick = false;
+          return;
+        }
         selectPriceChartIndex(chart, nearestPriceChartIndex(chart, event));
       },
       plugins: {
@@ -293,7 +400,8 @@ const VWAP_CHART_TEST_API = Object.freeze({
   buildPriceChartConfig,
   buildDateSelectionAnnotation,
   nearestPriceChartIndex,
-  selectPriceChartIndex
+  selectPriceChartIndex,
+  attachPriceChartPointerDrag
 });
 if (typeof window !== 'undefined') {
   Object.defineProperty(window, 'VWAP_CHART_TEST_API', {
@@ -317,6 +425,7 @@ const MOMENTUM_COLUMNS = [
 const SORT_FIELDS = Object.fromEntries(MOMENTUM_COLUMNS.map(column => [column.key, column.get]));
 
 let priceChart = null;
+let detachPriceChartPointerDrag = null;
 let vpChart = null;
 let currentVpPeriod = '1d';
 let currentDetailName = null;
@@ -539,11 +648,13 @@ fetch('trend_data.json?v=' + DATA_VERSION, { cache: 'no-store' }).then(r => r.js
   }
 
   function renderPriceChart(detailData) {
+    if (detachPriceChartPointerDrag) detachPriceChartPointerDrag();
     if (priceChart) priceChart.destroy();
     priceChart = new Chart(
       document.getElementById('chart-price'),
       buildPriceChartConfig(detailData)
     );
+    detachPriceChartPointerDrag = attachPriceChartPointerDrag(priceChart);
   }
 
   function renderVpChart(detailData, period) {

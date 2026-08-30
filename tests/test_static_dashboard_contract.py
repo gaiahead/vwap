@@ -485,6 +485,141 @@ console.log(JSON.stringify(result));
     }
 
 
+def test_price_chart_pointer_drag_selects_edges_and_cleans_up_pointer_state():
+    node_script = r"""
+const fs = require('fs');
+const vm = require('vm');
+const source = fs.readFileSync('app.js', 'utf8').split('\nfetch(')[0];
+const context = { window: {} };
+vm.createContext(context);
+vm.runInContext(source, context);
+const api = context.window.VWAP_CHART_TEST_API;
+const labels = ['first', 'second', 'third', 'last'];
+
+function makeCanvas() {
+  const listeners = new Map();
+  const captured = new Set();
+  const captureCalls = [];
+  const releaseCalls = [];
+  return {
+    style: {cursor: 'crosshair'},
+    addEventListener: (type, listener) => listeners.set(type, listener),
+    removeEventListener: (type, listener) => {
+      if (listeners.get(type) === listener) listeners.delete(type);
+    },
+    getBoundingClientRect: () => ({left: 100}),
+    setPointerCapture: pointerId => {
+      captureCalls.push(pointerId);
+      captured.add(pointerId);
+    },
+    hasPointerCapture: pointerId => captured.has(pointerId),
+    releasePointerCapture: pointerId => {
+      releaseCalls.push(pointerId);
+      captured.delete(pointerId);
+    },
+    dispatch: (type, event) => listeners.get(type)?.(event),
+    captureCalls,
+    releaseCalls
+  };
+}
+
+function makeChart() {
+  const canvas = makeCanvas();
+  const config = api.buildPriceChartConfig({ohlcv: labels.map(date => ({date}))});
+  let updateCount = 0;
+  const chart = {
+    canvas,
+    data: config.data,
+    options: config.options,
+    scales: {x: {getValueForPixel: pixel => pixel / 100}},
+    getElementsAtEventForMode: () => [],
+    update: () => { updateCount += 1; }
+  };
+  api.attachPriceChartPointerDrag(chart);
+  return {chart, canvas, updateCount: () => updateCount};
+}
+
+const ended = makeChart();
+ended.canvas.dispatch('pointerdown', {pointerId: 7, offsetX: 0});
+const down = {
+  value: ended.chart.options.plugins.annotation.annotations.selectedDateLine.value,
+  cursor: ended.canvas.style.cursor,
+  captureCalls: [...ended.canvas.captureCalls]
+};
+ended.canvas.dispatch('pointermove', {pointerId: 7, offsetX: 999});
+const movedValue = ended.chart.options.plugins.annotation.annotations.selectedDateLine.value;
+ended.canvas.dispatch('pointerup', {pointerId: 7});
+const afterUp = {
+  cursor: ended.canvas.style.cursor,
+  releaseCalls: [...ended.canvas.releaseCalls]
+};
+ended.chart.options.onClick({x: 0}, [], ended.chart);
+const updatesAfterDuplicateClick = ended.updateCount();
+ended.canvas.dispatch('pointermove', {pointerId: 7, offsetX: 100});
+
+const cancelled = makeChart();
+cancelled.canvas.dispatch('pointerdown', {pointerId: 8, offsetX: 100});
+cancelled.canvas.dispatch('pointercancel', {pointerId: 8});
+const afterCancel = {
+  cursor: cancelled.canvas.style.cursor,
+  releaseCalls: [...cancelled.canvas.releaseCalls]
+};
+const cancelUpdates = cancelled.updateCount();
+cancelled.canvas.dispatch('pointermove', {pointerId: 8, offsetX: 300});
+
+const fallback = makeChart();
+fallback.canvas.dispatch('pointerdown', {pointerId: 9, clientX: 300});
+const clientXValue = fallback.chart.options.plugins.annotation.annotations.selectedDateLine.value;
+fallback.canvas.dispatch('pointerup', {pointerId: 9});
+
+const invalid = makeChart();
+invalid.canvas.dispatch('pointerdown', {pointerId: 10, offsetX: NaN, clientX: NaN});
+const invalidUpdates = invalid.updateCount();
+invalid.canvas.dispatch('pointercancel', {pointerId: 10});
+
+console.log(JSON.stringify({
+  down,
+  movedValue,
+  updatesAfterDuplicateClick,
+  updatesAfterUpMove: ended.updateCount(),
+  afterUp,
+  cancelUpdates,
+  updatesAfterCancelMove: cancelled.updateCount(),
+  afterCancel,
+  clientXValue,
+  invalidUpdates,
+  invalidAnnotationCount: Object.keys(
+    invalid.chart.options.plugins.annotation.annotations
+  ).length
+}));
+"""
+    completed = subprocess.run(
+        ["node", "-e", node_script],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert json.loads(completed.stdout) == {
+        "down": {
+            "value": "first",
+            "cursor": "ew-resize",
+            "captureCalls": [7],
+        },
+        "movedValue": "last",
+        "updatesAfterDuplicateClick": 2,
+        "updatesAfterUpMove": 2,
+        "afterUp": {"cursor": "crosshair", "releaseCalls": [7]},
+        "cancelUpdates": 1,
+        "updatesAfterCancelMove": 1,
+        "afterCancel": {"cursor": "crosshair", "releaseCalls": [8]},
+        "clientXValue": "third",
+        "invalidUpdates": 0,
+        "invalidAnnotationCount": 0,
+    }
+
+
 def test_cache_bust_version_is_consistent_everywhere():
     html = read("index.html")
     app = read("app.js")
