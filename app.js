@@ -123,30 +123,13 @@ function buildVpAnnotations(detailData, vp) {
   return annotations;
 }
 
-function buildDateSelectionAnnotation(labels, index) {
+function buildPriceChartDateSelection(labels, index) {
   if (!Array.isArray(labels) || !Number.isInteger(index) || index < 0 || index >= labels.length) {
     return null;
   }
   const selectedDate = labels[index];
   if (selectedDate === null || selectedDate === undefined || selectedDate === '') return null;
-  return {
-    type: 'line',
-    scaleID: 'x',
-    value: selectedDate,
-    borderColor: COLOR.blue,
-    borderWidth: 2,
-    borderDash: [4, 3],
-    drawTime: 'afterDatasetsDraw',
-    label: {
-      display: true,
-      content: '선택 날짜 ' + selectedDate,
-      color: '#1d4ed8',
-      backgroundColor: 'rgba(255,255,255,0.94)',
-      font: { size: 10, weight: 'bold' },
-      position: 'start',
-      padding: { x: 4, y: 2 }
-    }
-  };
+  return { index, date: selectedDate };
 }
 
 function nearestPriceChartIndex(chart, event) {
@@ -181,12 +164,75 @@ function nearestPriceChartIndex(chart, event) {
 }
 
 function selectPriceChartIndex(chart, index) {
-  const annotation = buildDateSelectionAnnotation(chart?.data?.labels, index);
-  const annotations = chart?.options?.plugins?.annotation?.annotations;
-  if (!annotation || !annotations) return false;
-  if (annotations.selectedDateLine?.value === annotation.value) return false;
-  annotations.selectedDateLine = annotation;
+  const selection = buildPriceChartDateSelection(chart?.data?.labels, index);
+  if (!selection) return false;
+  const currentSelection = chart.$priceChartDateSelection;
+  if (currentSelection?.index === selection.index && currentSelection?.date === selection.date) {
+    return false;
+  }
+  chart.$priceChartDateSelection = selection;
   return true;
+}
+
+function drawPriceChartDateSelection(chart) {
+  const currentSelection = chart?.$priceChartDateSelection;
+  const selection = buildPriceChartDateSelection(
+    chart?.data?.labels,
+    currentSelection?.index
+  );
+  if (!selection || selection.date !== currentSelection.date) return;
+
+  const xScale = chart?.scales?.x;
+  if (typeof xScale?.getPixelForValue !== 'function') return;
+  const selectedX = xScale.getPixelForValue(selection.index);
+  const { left, right, top, bottom } = chart?.chartArea || {};
+  if (![selectedX, left, right, top, bottom].every(Number.isFinite) || right <= left || bottom <= top) {
+    return;
+  }
+
+  const ctx = chart?.ctx;
+  if (!ctx || typeof ctx.save !== 'function' || typeof ctx.restore !== 'function') return;
+
+  const x = Math.min(right, Math.max(left, selectedX));
+  const label = '선택 날짜 ' + selection.date;
+  const horizontalPadding = 4;
+  const verticalPadding = 2;
+  const labelHeight = Math.min(bottom - top, 14 + verticalPadding * 2);
+  const labelGap = 6;
+
+  ctx.save();
+  try {
+    ctx.strokeStyle = COLOR.blue;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(x, top);
+    ctx.lineTo(x, bottom);
+    ctx.stroke();
+
+    ctx.font = 'bold 10px sans-serif';
+    ctx.textBaseline = 'top';
+    const measuredText = typeof ctx.measureText === 'function' ? ctx.measureText(label) : null;
+    const measuredWidth = Number.isFinite(measuredText?.width) ? measuredText.width : label.length * 10;
+    const availableWidth = right - left;
+    const labelWidth = Math.min(availableWidth, measuredWidth + horizontalPadding * 2);
+    let labelLeft = x + labelGap;
+    if (labelLeft + labelWidth > right) labelLeft = x - labelGap - labelWidth;
+    labelLeft = Math.min(right - labelWidth, Math.max(left, labelLeft));
+    const labelTop = Math.max(top, Math.min(bottom - labelHeight, top + 4));
+
+    ctx.fillStyle = 'rgba(255,255,255,0.94)';
+    ctx.fillRect(labelLeft, labelTop, labelWidth, labelHeight);
+    ctx.fillStyle = '#1d4ed8';
+    ctx.fillText(
+      label,
+      labelLeft + horizontalPadding,
+      labelTop + verticalPadding,
+      Math.max(0, labelWidth - horizontalPadding * 2)
+    );
+  } finally {
+    ctx.restore();
+  }
 }
 
 function buildPriceChartConfig(detailData) {
@@ -226,7 +272,8 @@ function buildPriceChartConfig(detailData) {
       if (!args?.inChartArea || !selectionEvents.has(event?.type)) return;
       const index = nearestPriceChartIndex(chart, event);
       if (selectPriceChartIndex(chart, index)) args.changed = true;
-    }
+    },
+    afterDatasetsDraw: chart => drawPriceChartDateSelection(chart)
   };
   return {
     type: 'line',
@@ -275,8 +322,7 @@ function buildPriceChartConfig(detailData) {
               return datasetLabel ? datasetLabel + ': ' + formattedPrice : formattedPrice;
             }
           }
-        },
-        annotation: { annotations: {} }
+        }
       },
       scales: {
         x: {
@@ -299,9 +345,10 @@ const VWAP_CHART_TEST_API = Object.freeze({
   buildVpAnnotations,
   formatPrice,
   buildPriceChartConfig,
-  buildDateSelectionAnnotation,
+  buildPriceChartDateSelection,
   nearestPriceChartIndex,
-  selectPriceChartIndex
+  selectPriceChartIndex,
+  drawPriceChartDateSelection
 });
 if (typeof window !== 'undefined') {
   Object.defineProperty(window, 'VWAP_CHART_TEST_API', {

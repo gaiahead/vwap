@@ -304,7 +304,7 @@ console.log(JSON.stringify({
     parsed: {y: 123456.5}
   }),
   rawValue: config.data.datasets[0].data[0],
-  annotationCount: Object.keys(config.options.plugins.annotation.annotations).length
+  hasPriceAnnotationOptions: Object.hasOwn(config.options.plugins, 'annotation')
 }));
 """
     completed = subprocess.run(
@@ -320,11 +320,11 @@ console.log(JSON.stringify({
         "yTick": "123,457",
         "tooltip": "1d: 123,457",
         "rawValue": 123456.5,
-        "annotationCount": 0,
+        "hasPriceAnnotationOptions": False,
     }
 
 
-def test_date_selection_turns_valid_index_into_x_annotation_and_rejects_invalid_input():
+def test_date_selection_stores_valid_index_and_date_on_chart_and_rejects_invalid_input():
     node_script = r"""
 const fs = require('fs');
 const vm = require('vm');
@@ -332,13 +332,12 @@ const source = fs.readFileSync('app.js', 'utf8').split('\nfetch(')[0];
 const context = { window: {} };
 vm.createContext(context);
 vm.runInContext(source, context);
-const build = context.window.VWAP_CHART_TEST_API.buildDateSelectionAnnotation;
 const api = context.window.VWAP_CHART_TEST_API;
+const build = api.buildPriceChartDateSelection;
 const labels = ['2026-08-27', '2026-08-28'];
 const config = api.buildPriceChartConfig({ohlcv: labels.map(date => ({date}))});
 const chart = {
-  data: config.data,
-  options: config.options
+  data: config.data
 };
 const selected = api.selectPriceChartIndex(chart, 1);
 const sameSelection = api.selectPriceChartIndex(chart, 1);
@@ -352,7 +351,8 @@ console.log(JSON.stringify({
   selected,
   sameSelection,
   invalidSelection,
-  persistedValue: chart.options.plugins.annotation.annotations.selectedDateLine.value
+  persistedSelection: chart.$priceChartDateSelection,
+  hasPriceAnnotationOptions: Object.hasOwn(config.options.plugins, 'annotation')
 }));
 """
     completed = subprocess.run(
@@ -364,11 +364,7 @@ console.log(JSON.stringify({
     )
     result = json.loads(completed.stdout)
 
-    assert result["valid"]["type"] == "line"
-    assert result["valid"]["scaleID"] == "x"
-    assert result["valid"]["value"] == "2026-08-28"
-    assert result["valid"]["label"]["display"] is True
-    assert result["valid"]["label"]["content"] == "선택 날짜 2026-08-28"
+    assert result["valid"] == {"index": 1, "date": "2026-08-28"}
     assert result["negative"] is None
     assert result["outOfRange"] is None
     assert result["fractional"] is None
@@ -376,7 +372,8 @@ console.log(JSON.stringify({
     assert result["selected"] is True
     assert result["sameSelection"] is False
     assert result["invalidSelection"] is False
-    assert result["persistedValue"] == "2026-08-28"
+    assert result["persistedSelection"] == {"index": 1, "date": "2026-08-28"}
+    assert result["hasPriceAnnotationOptions"] is False
 
 
 def test_nearest_price_chart_index_prefers_coordinates_and_bounds_fallback_results():
@@ -473,7 +470,7 @@ console.log(JSON.stringify(result));
     }
 
 
-def test_price_chart_local_plugin_selects_from_chart_events_and_persists_on_release():
+def test_price_chart_local_plugin_draws_selected_dates_and_persists_on_release():
     app = read("app.js")
     node_script = r"""
 const fs = require('fs');
@@ -490,13 +487,54 @@ const config = api.buildPriceChartConfig({
 const plugin = config.plugins.find(candidate => candidate.id === 'priceChartDateSelection');
 let updateCount = 0;
 const scalePixels = [];
+const selectedIndexes = [];
+const draws = [];
+const contextCalls = {save: 0, restore: 0};
+let path = null;
+const ctx = {
+  save() { contextCalls.save += 1; },
+  restore() { contextCalls.restore += 1; },
+  setLineDash(dash) { this.dash = [...dash]; },
+  beginPath() { path = {}; },
+  moveTo(x, y) { path.from = [x, y]; },
+  lineTo(x, y) { path.to = [x, y]; },
+  stroke() {
+    draws.push({
+      x: path.from[0],
+      top: path.from[1],
+      bottom: path.to[1],
+      strokeStyle: this.strokeStyle,
+      lineWidth: this.lineWidth,
+      dash: this.dash
+    });
+  },
+  measureText: () => ({width: 120}),
+  fillRect(left, top, width, height) {
+    Object.assign(draws[draws.length - 1], {
+      labelBackground: {left, top, right: left + width, bottom: top + height}
+    });
+  },
+  fillText(text, x, y, maxWidth) {
+    Object.assign(draws[draws.length - 1], {
+      label: {text, x, y, maxWidth, color: this.fillStyle}
+    });
+  }
+};
 const chart = {
   data: config.data,
   options: config.options,
-  scales: {x: {getValueForPixel: pixel => {
-    scalePixels.push(pixel);
-    return pixel / 100;
-  }}},
+  chartArea: {left: 10, right: 310, top: 20, bottom: 220},
+  ctx,
+  scales: {x: {
+    getValueForPixel: pixel => {
+      scalePixels.push(pixel);
+      return pixel / 100;
+    },
+    getPixelForValue: index => {
+      selectedIndexes.push(index);
+      return 10 + index * 100;
+    }
+  }},
   getElementsAtEventForMode: () => {
     throw new Error('normalized x coordinates should select the index');
   },
@@ -508,37 +546,55 @@ function dispatch(type, x, inChartArea = true) {
   plugin.afterEvent(chart, args);
   return {
     changed: args.changed,
-    value: chart.options.plugins.annotation.annotations.selectedDateLine?.value ?? null
+    selection: chart.$priceChartDateSelection
+      ? {...chart.$priceChartDateSelection}
+      : null
   };
 }
 
+plugin.afterDatasetsDraw(chart);
+const drawsWithoutSelection = draws.length;
 const first = dispatch('mousemove', -500);
+plugin.afterDatasetsDraw(chart);
 const sameFirst = dispatch('mousemove', -100);
-const interiorMove = dispatch('mousemove', 100);
-const interiorClick = dispatch('click', 200);
-const interiorTouch = dispatch('touchstart', 100);
+const nullDataDate = dispatch('click', 100);
+plugin.afterDatasetsDraw(chart);
+const mouseRelease = dispatch('mouseup', 0);
+plugin.afterDatasetsDraw(chart);
+const pointerRelease = dispatch('pointerup', 0);
+plugin.afterDatasetsDraw(chart);
+const interiorTouch = dispatch('touchstart', 200);
 const last = dispatch('touchmove', 999);
+plugin.afterDatasetsDraw(chart);
 const outside = dispatch('mousemove', 0, false);
 const unrelated = dispatch('mouseout', 0);
-const mouseRelease = dispatch('mouseup', 0);
-const pointerRelease = dispatch('pointerup', 0);
 
 console.log(JSON.stringify({
   pluginIds: config.plugins.map(candidate => candidate.id),
+  hasDrawHook: typeof plugin.afterDatasetsDraw === 'function',
   interaction: config.options.interaction,
+  hasTooltip: typeof config.options.plugins.tooltip.callbacks.label === 'function',
+  hasPriceAnnotationOptions: Object.hasOwn(config.options.plugins, 'annotation'),
   hasOnClick: Object.hasOwn(config.options, 'onClick'),
+  drawsWithoutSelection,
   first,
   sameFirst,
-  interiorMove,
-  interiorClick,
+  nullDataDate,
   interiorTouch,
   last,
   outside,
   unrelated,
   mouseRelease,
   pointerRelease,
-  persistedLabel: chart.options.plugins.annotation.annotations.selectedDateLine.label.content,
+  everyDatasetNullAtSelectedDate: config.data.datasets.every(dataset => dataset.data[1] === null),
+  draws,
+  labelsStayInsidePlot: draws.every(draw => (
+    draw.labelBackground.left >= chart.chartArea.left &&
+    draw.labelBackground.right <= chart.chartArea.right
+  )),
   scalePixels,
+  selectedIndexes,
+  contextCalls,
   updateCount
 }));
 """
@@ -552,20 +608,108 @@ console.log(JSON.stringify({
 
     assert json.loads(completed.stdout) == {
         "pluginIds": ["priceChartDateSelection"],
+        "hasDrawHook": True,
         "interaction": {"mode": "index", "axis": "x", "intersect": False},
+        "hasTooltip": True,
+        "hasPriceAnnotationOptions": False,
         "hasOnClick": False,
-        "first": {"changed": True, "value": "first"},
-        "sameFirst": {"changed": False, "value": "first"},
-        "interiorMove": {"changed": True, "value": "second"},
-        "interiorClick": {"changed": True, "value": "third"},
-        "interiorTouch": {"changed": True, "value": "second"},
-        "last": {"changed": True, "value": "last"},
-        "outside": {"changed": False, "value": "last"},
-        "unrelated": {"changed": False, "value": "last"},
-        "mouseRelease": {"changed": False, "value": "last"},
-        "pointerRelease": {"changed": False, "value": "last"},
-        "persistedLabel": "선택 날짜 last",
-        "scalePixels": [-500, -100, 100, 200, 100, 999],
+        "drawsWithoutSelection": 0,
+        "first": {"changed": True, "selection": {"index": 0, "date": "first"}},
+        "sameFirst": {"changed": False, "selection": {"index": 0, "date": "first"}},
+        "nullDataDate": {"changed": True, "selection": {"index": 1, "date": "second"}},
+        "interiorTouch": {"changed": True, "selection": {"index": 2, "date": "third"}},
+        "last": {"changed": True, "selection": {"index": 3, "date": "last"}},
+        "outside": {"changed": False, "selection": {"index": 3, "date": "last"}},
+        "unrelated": {"changed": False, "selection": {"index": 3, "date": "last"}},
+        "mouseRelease": {"changed": False, "selection": {"index": 1, "date": "second"}},
+        "pointerRelease": {"changed": False, "selection": {"index": 1, "date": "second"}},
+        "everyDatasetNullAtSelectedDate": True,
+        "draws": [
+            {
+                "x": 10,
+                "top": 20,
+                "bottom": 220,
+                "strokeStyle": "#2563eb",
+                "lineWidth": 2,
+                "dash": [4, 3],
+                "labelBackground": {"left": 16, "top": 24, "right": 144, "bottom": 42},
+                "label": {
+                    "text": "선택 날짜 first",
+                    "x": 20,
+                    "y": 26,
+                    "maxWidth": 120,
+                    "color": "#1d4ed8",
+                },
+            },
+            {
+                "x": 110,
+                "top": 20,
+                "bottom": 220,
+                "strokeStyle": "#2563eb",
+                "lineWidth": 2,
+                "dash": [4, 3],
+                "labelBackground": {"left": 116, "top": 24, "right": 244, "bottom": 42},
+                "label": {
+                    "text": "선택 날짜 second",
+                    "x": 120,
+                    "y": 26,
+                    "maxWidth": 120,
+                    "color": "#1d4ed8",
+                },
+            },
+            {
+                "x": 110,
+                "top": 20,
+                "bottom": 220,
+                "strokeStyle": "#2563eb",
+                "lineWidth": 2,
+                "dash": [4, 3],
+                "labelBackground": {"left": 116, "top": 24, "right": 244, "bottom": 42},
+                "label": {
+                    "text": "선택 날짜 second",
+                    "x": 120,
+                    "y": 26,
+                    "maxWidth": 120,
+                    "color": "#1d4ed8",
+                },
+            },
+            {
+                "x": 110,
+                "top": 20,
+                "bottom": 220,
+                "strokeStyle": "#2563eb",
+                "lineWidth": 2,
+                "dash": [4, 3],
+                "labelBackground": {"left": 116, "top": 24, "right": 244, "bottom": 42},
+                "label": {
+                    "text": "선택 날짜 second",
+                    "x": 120,
+                    "y": 26,
+                    "maxWidth": 120,
+                    "color": "#1d4ed8",
+                },
+            },
+            {
+                "x": 310,
+                "top": 20,
+                "bottom": 220,
+                "strokeStyle": "#2563eb",
+                "lineWidth": 2,
+                "dash": [4, 3],
+                "labelBackground": {"left": 176, "top": 24, "right": 304, "bottom": 42},
+                "label": {
+                    "text": "선택 날짜 last",
+                    "x": 180,
+                    "y": 26,
+                    "maxWidth": 120,
+                    "color": "#1d4ed8",
+                },
+            },
+        ],
+        "labelsStayInsidePlot": True,
+        "scalePixels": [-500, -100, 100, 200, 999],
+        "selectedIndexes": [0, 1, 1, 1, 3],
+        "contextCalls": {"save": 5, "restore": 5},
         "updateCount": 0,
     }
 
@@ -579,6 +723,8 @@ console.log(JSON.stringify({
         "pointerup",
         "pointercancel",
         "onClick:",
+        "selectedDateLine",
+        "buildDateSelectionAnnotation",
     ]:
         assert obsolete not in app
     assert "plugins: [dateSelectionPlugin]" in app
