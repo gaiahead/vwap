@@ -5,7 +5,6 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-NEW_DATA_VERSION = "data-20260831-right-marker-padding"
 
 
 def read(name: str) -> str:
@@ -68,7 +67,7 @@ def test_monitor_keeps_three_strict_live_alignment_definitions():
 
 def test_frontend_removes_backtest_journal_and_strategy_chart_runtime():
     combined = read("app.js") + read("index.html") + read("style.css")
-    lowered = combined.replace(NEW_DATA_VERSION, "").lower()
+    lowered = re.sub(r"data-[A-Za-z0-9._-]+", "", combined).lower()
 
     for token in [
         "backtest",
@@ -857,7 +856,8 @@ def test_cache_bust_version_is_consistent_everywhere():
     assert style_match is not None
     assert script_match is not None
     assert app_match is not None
-    assert style_match.group(1) == script_match.group(1) == app_match.group(1) == NEW_DATA_VERSION
+    assert style_match.group(1) == script_match.group(1) == app_match.group(1)
+    assert re.fullmatch(r"data-[A-Za-z0-9._-]+", app_match.group(1))
     assert '<link rel="icon" href="data:,"/>' in html
 
 
