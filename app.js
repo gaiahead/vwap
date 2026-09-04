@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260904-1600';
+const DATA_VERSION = 'data-20260904-2122';
 const PRICE_CHART_TRADING_DAYS = 120;
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
@@ -8,13 +8,13 @@ const COLOR = {
   muted: '#64748b',
   blue: '#2563eb'
 };
-const ALIGNMENT_1_5_20 = 'alignment_1_5_20';
-const ALIGNMENT_5_20_60 = 'alignment_5_20_60';
-const ALIGNMENT_20_60_120 = 'alignment_20_60_120';
+const ALIGNMENT_5_20 = 'alignment_5_20';
+const ALIGNMENT_20_60 = 'alignment_20_60';
+const ALIGNMENT_60_120 = 'alignment_60_120';
 const ALIGNMENT_OPTIONS = [
-  { key: ALIGNMENT_1_5_20 },
-  { key: ALIGNMENT_5_20_60 },
-  { key: ALIGNMENT_20_60_120 }
+  { key: ALIGNMENT_5_20 },
+  { key: ALIGNMENT_20_60 },
+  { key: ALIGNMENT_60_120 }
 ];
 const DEFAULT_SORT = { key: 'name', dir: 'asc' };
 const VP_PERIODS = ['1d', '5d', '20d', '60d', '120d'];
@@ -488,9 +488,9 @@ fetch('trend_data.json?v=' + DATA_VERSION, { cache: 'no-store' }).then(r => r.js
     updateSortHeaders();
     rows.forEach(({ name, strategy }) => {
       const ticker = data[name]?.ticker;
-      const latestShort = strategy.strategies?.[ALIGNMENT_1_5_20]?.latest || {};
-      const latestMedium = strategy.strategies?.[ALIGNMENT_5_20_60]?.latest || {};
-      const latestLong = strategy.strategies?.[ALIGNMENT_20_60_120]?.latest || {};
+      const latestShort = strategy.strategies?.[ALIGNMENT_5_20]?.latest || {};
+      const latestMedium = strategy.strategies?.[ALIGNMENT_20_60]?.latest || {};
+      const latestLong = strategy.strategies?.[ALIGNMENT_60_120]?.latest || {};
       const tr = document.createElement('tr');
       tr.className = 'momentum-row' + (name === currentDetailName ? ' detail-active' : '');
       tr.append(
