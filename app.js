@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260905-pairs6';
+const DATA_VERSION = 'data-20260905-score-number';
 const PRICE_CHART_TRADING_DAYS = 120;
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
@@ -448,12 +448,12 @@ fetch('trend_data.json?v=' + DATA_VERSION, { cache: 'no-store' }).then(r => r.js
 
   function createScoreCell(row) {
     const score = pairwiseScore(row);
-    const cell = createCell(score === null ? '–' : score + '/6', {
+    const cell = createCell(score === null ? '–' : String(score), {
       className: 'score-cell', weight: '900'
     });
     cell.title = score === null
       ? '데이터 부족: 여섯 비교가 모두 BUY 또는 SELL일 때 점수를 표시합니다.'
-      : '여섯 비교 중 BUY 수: ' + score + '/6 (BUY마다 1점)';
+      : '여섯 비교 중 BUY 수: ' + score + ' (BUY마다 1점)';
     return cell;
   }
 

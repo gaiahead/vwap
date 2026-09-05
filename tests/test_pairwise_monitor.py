@@ -186,10 +186,11 @@ def test_all_24_raw_permutations_and_all_equal_render_unweighted_scores(monitor)
     for name, states in expected.items():
         score = states.count("BUY")
         scores.append(score)
-        assert actual[name]["cells"] == [name, f"{score}/6", *states]
+        assert actual[name]["cells"] == [name, str(score), *states]
+        assert actual[name]["titles"][1] == f"여섯 비교 중 BUY 수: {score} (BUY마다 1점)"
         assert actual[name]["classes"][2:] == [f"signal-cell {state.lower()}" for state in states]
     assert set(scores) == set(range(7))
-    assert actual["Asset 24"]["cells"][1] == "0/6"
+    assert actual["Asset 24"]["cells"][1] == "0"
 
 
 def test_any_missing_pair_makes_score_unavailable_and_pair_wait(monitor):
@@ -234,7 +235,7 @@ def test_all_eight_headers_sort_both_directions_with_stable_score_ties(monitor):
                 if column == 0:
                     return row["cells"][0]
                 if column == 1:
-                    return int(row["cells"][1].split("/")[0])
+                    return int(row["cells"][1])
                 strategy = data[row["cells"][0]]["strategy_signal"].get("strategies", {}).get(KEYS[column - 2], {})
                 return (strategy.get("latest") or {}).get("signal") or ""
 
