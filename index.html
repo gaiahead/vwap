@@ -7,7 +7,7 @@
   <link rel="icon" href="data:,"/>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
-  <link rel="stylesheet" href="style.css?v=data-20260905-1600"/>
+  <link rel="stylesheet" href="style.css?v=data-20260905-pairs6"/>
 </head>
 <body>
 
@@ -18,14 +18,18 @@
 
 <div class="section-box momentum-monitor" id="momentum-section" style="display:none">
   <div class="panel-title">📐 VWAP 정배열 MONITOR</div>
-  <div class="momentum-monitor-sub">신호 1은 5d &gt; 20d, 신호 2는 20d &gt; 60d, 신호 3은 60d &gt; 120d입니다.</div>
+  <div class="momentum-monitor-sub">5·20·60·120 거래일 VWAP의 여섯 쌍을 비교합니다. 왼쪽 &gt; 오른쪽이면 BUY, 동일하거나 작으면 SELL입니다. BUY마다 1점, 최대 6점이며 데이터 부족은 WAIT, 하나라도 WAIT이면 점수는 –로 표시합니다.</div>
   <div class="momentum-table-wrap"><table class="momentum-table">
     <thead>
       <tr>
         <th data-sort="name">종목</th>
-        <th data-sort="signal_1">신호 1</th>
-        <th data-sort="signal_2">신호 2</th>
-        <th data-sort="signal_3">신호 3</th>
+        <th data-sort="score">점수</th>
+        <th data-sort="signal_1">5&gt;20</th>
+        <th data-sort="signal_2">5&gt;60</th>
+        <th data-sort="signal_3">5&gt;120</th>
+        <th data-sort="signal_4">20&gt;60</th>
+        <th data-sort="signal_5">20&gt;120</th>
+        <th data-sort="signal_6">60&gt;120</th>
       </tr>
     </thead>
     <tbody id="momentum-body"></tbody>
@@ -43,6 +47,6 @@
   <div id="detail-content"></div>
 </div>
 
-<script src="app.js?v=data-20260905-1600"></script>
+<script src="app.js?v=data-20260905-pairs6"></script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-const DATA_VERSION = 'data-20260905-1600';
+const DATA_VERSION = 'data-20260905-pairs6';
 const PRICE_CHART_TRADING_DAYS = 120;
 const GRID = '#e2e8f0';
 const TICK = '#64748b';
@@ -9,12 +9,18 @@ const COLOR = {
   blue: '#2563eb'
 };
 const ALIGNMENT_5_20 = 'alignment_5_20';
+const ALIGNMENT_5_60 = 'alignment_5_60';
+const ALIGNMENT_5_120 = 'alignment_5_120';
 const ALIGNMENT_20_60 = 'alignment_20_60';
+const ALIGNMENT_20_120 = 'alignment_20_120';
 const ALIGNMENT_60_120 = 'alignment_60_120';
 const ALIGNMENT_OPTIONS = [
-  { key: ALIGNMENT_5_20 },
-  { key: ALIGNMENT_20_60 },
-  { key: ALIGNMENT_60_120 }
+  { key: ALIGNMENT_5_20, label: '5>20' },
+  { key: ALIGNMENT_5_60, label: '5>60' },
+  { key: ALIGNMENT_5_120, label: '5>120' },
+  { key: ALIGNMENT_20_60, label: '20>60' },
+  { key: ALIGNMENT_20_120, label: '20>120' },
+  { key: ALIGNMENT_60_120, label: '60>120' }
 ];
 const DEFAULT_SORT = { key: 'name', dir: 'asc' };
 const VP_PERIODS = ['1d', '5d', '20d', '60d', '120d'];
@@ -384,12 +390,21 @@ if (typeof window !== 'undefined') {
 
 const ALIGNMENT_SIGNAL_COLUMNS = ALIGNMENT_OPTIONS.map((option, index) => ({
   key: `signal_${index + 1}`,
-  label: `신호 ${index + 1}`,
+  label: option.label,
   type: 'text',
   get: row => row.strategy.strategies?.[option.key]?.latest?.signal
 }));
+
+function pairwiseScore(row) {
+  // Generator signals use raw precision; serialized VWAP values are rounded.
+  const signals = ALIGNMENT_SIGNAL_COLUMNS.map(column => column.get(row));
+  if (signals.some(signal => signal !== 'BUY' && signal !== 'SELL')) return null;
+  return signals.filter(signal => signal === 'BUY').length;
+}
+
 const MOMENTUM_COLUMNS = [
   { key: 'name', label: '종목', type: 'text', get: row => row.name },
+  { key: 'score', label: '점수', type: 'number', get: pairwiseScore },
   ...ALIGNMENT_SIGNAL_COLUMNS
 ];
 const SORT_FIELDS = Object.fromEntries(MOMENTUM_COLUMNS.map(column => [column.key, column.get]));
@@ -428,7 +443,18 @@ fetch('trend_data.json?v=' + DATA_VERSION, { cache: 'no-store' }).then(r => r.js
   function createSignalCell(signal) {
     if (signal === 'BUY') return createCell('BUY', { className: 'signal-cell buy', color: COLOR.positive, weight: '900' });
     if (signal === 'SELL') return createCell('SELL', { className: 'signal-cell sell', color: COLOR.negative, weight: '900' });
-    return createCell('–', { className: 'signal-cell wait', color: COLOR.muted, weight: '800' });
+    return createCell('WAIT', { className: 'signal-cell wait', color: COLOR.muted, weight: '800' });
+  }
+
+  function createScoreCell(row) {
+    const score = pairwiseScore(row);
+    const cell = createCell(score === null ? '–' : score + '/6', {
+      className: 'score-cell', weight: '900'
+    });
+    cell.title = score === null
+      ? '데이터 부족: 여섯 비교가 모두 BUY 또는 SELL일 때 점수를 표시합니다.'
+      : '여섯 비교 중 BUY 수: ' + score + '/6 (BUY마다 1점)';
+    return cell;
   }
 
   function setLoading(message) {
@@ -442,6 +468,15 @@ fetch('trend_data.json?v=' + DATA_VERSION, { cache: 'no-store' }).then(r => r.js
   function compareRows(a, b) {
     const getter = SORT_FIELDS[sortState.key] || SORT_FIELDS.name;
     const direction = sortState.dir === 'asc' ? 1 : -1;
+    if (sortState.key === 'score') {
+      const left = getter(a);
+      const right = getter(b);
+      // Missing scores stay last regardless of the selected direction.
+      if (left === null && right !== null) return 1;
+      if (right === null && left !== null) return -1;
+      if (left !== right) return (left - right) * direction;
+      return a.name.localeCompare(b.name, 'ko-KR');
+    }
     const comparison = String(getter(a) ?? '').localeCompare(
       String(getter(b) ?? ''),
       'ko-KR',
@@ -466,7 +501,7 @@ fetch('trend_data.json?v=' + DATA_VERSION, { cache: 'no-store' }).then(r => r.js
       const key = th.dataset.sort;
       sortState = sortState.key === key
         ? { key, dir: sortState.dir === 'asc' ? 'desc' : 'asc' }
-        : { key, dir: 'asc' };
+        : { key, dir: key === 'score' ? 'desc' : 'asc' };
       renderMomentum();
     });
     th.addEventListener('keydown', event => {
@@ -488,16 +523,13 @@ fetch('trend_data.json?v=' + DATA_VERSION, { cache: 'no-store' }).then(r => r.js
     updateSortHeaders();
     rows.forEach(({ name, strategy }) => {
       const ticker = data[name]?.ticker;
-      const latestShort = strategy.strategies?.[ALIGNMENT_5_20]?.latest || {};
-      const latestMedium = strategy.strategies?.[ALIGNMENT_20_60]?.latest || {};
-      const latestLong = strategy.strategies?.[ALIGNMENT_60_120]?.latest || {};
+      const row = { name, strategy };
       const tr = document.createElement('tr');
       tr.className = 'momentum-row' + (name === currentDetailName ? ' detail-active' : '');
       tr.append(
         createCell(name),
-        createSignalCell(latestShort.signal),
-        createSignalCell(latestMedium.signal),
-        createSignalCell(latestLong.signal)
+        createScoreCell(row),
+        ...ALIGNMENT_SIGNAL_COLUMNS.map(column => createSignalCell(column.get(row)))
       );
       tr.addEventListener('click', () => {
         if (!ticker) return;

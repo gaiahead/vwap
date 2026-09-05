@@ -12,11 +12,8 @@ import pytest
 import gen_trend_data as gen
 
 
-ALIGNMENT_KEYS = {
-    "alignment_5_20",
-    "alignment_20_60",
-    "alignment_60_120",
-}
+ALIGNMENT_PAIRS = [(5, 20), (5, 60), (5, 120), (20, 60), (20, 120), (60, 120)]
+ALIGNMENT_KEYS = {f"alignment_{left}_{right}" for left, right in ALIGNMENT_PAIRS}
 LATEST_KEYS = {
     "date",
     "vwap1",
@@ -83,28 +80,22 @@ def test_storage_frame_keeps_480_rows_for_vwap240_warmup_and_visibility():
     assert math.isclose(work["vwap_240d"].iloc[-1], source_proxy.iloc[-240:].mean())
 
 
-def test_current_signal_schema_has_exact_three_alignments_and_latest_snapshot_only():
+def test_current_signal_schema_has_exact_six_alignments_and_latest_snapshot_only():
     signal = gen.build_strategy_signal(make_ohlcv(range(100, 521)))
 
     assert set(signal) == {"available", "strategies"}
     assert signal["available"] is True
     assert set(signal["strategies"]) == ALIGNMENT_KEYS
+    assert list(signal["strategies"]) == [
+        f"alignment_{left}_{right}" for left, right in ALIGNMENT_PAIRS
+    ]
     expected_definitions = {
-        gen.ALIGNMENT_5_20: {
-            "label": "5 > 20",
-            "rule": "VWAP5 > VWAP20",
-            "windows": [5, 20],
-        },
-        gen.ALIGNMENT_20_60: {
-            "label": "20 > 60",
-            "rule": "VWAP20 > VWAP60",
-            "windows": [20, 60],
-        },
-        gen.ALIGNMENT_60_120: {
-            "label": "60 > 120",
-            "rule": "VWAP60 > VWAP120",
-            "windows": [60, 120],
-        },
+        f"alignment_{left}_{right}": {
+            "label": f"{left} > {right}",
+            "rule": f"VWAP{left} > VWAP{right}",
+            "windows": [left, right],
+        }
+        for left, right in ALIGNMENT_PAIRS
     }
     for key, payload in signal["strategies"].items():
         assert set(payload) == {"label", "rule", "windows", "latest"}
@@ -145,7 +136,10 @@ def test_newer_assets_evaluate_only_signals_with_complete_window_history():
     assert all(latest["vwap60"] is not None for latest in latest_by_key.values())
     assert all(latest["vwap120"] is None for latest in latest_by_key.values())
     assert latest_by_key[gen.ALIGNMENT_5_20]["signal"] == "BUY"
+    assert latest_by_key[gen.ALIGNMENT_5_60]["signal"] == "BUY"
     assert latest_by_key[gen.ALIGNMENT_20_60]["signal"] == "BUY"
+    assert latest_by_key[gen.ALIGNMENT_5_120]["signal"] == "WAIT"
+    assert latest_by_key[gen.ALIGNMENT_20_120]["signal"] == "WAIT"
     assert latest_by_key[gen.ALIGNMENT_60_120]["signal"] == "WAIT"
     assert latest_by_key[gen.ALIGNMENT_60_120]["alignment"] == "N/A"
 
@@ -223,6 +217,7 @@ def test_asset_outputs_keep_registry_detail_parity_and_live_only_schema():
     assert set(detail) == {"name", "ticker", "ohlcv", "volume_profile", "strategy_signal"}
     assert trend["ticker"] == detail["ticker"] == "TEST"
     assert trend["strategy_signal"] == detail["strategy_signal"]
+    assert set(trend["strategy_signal"]["strategies"]) == ALIGNMENT_KEYS
     assert not (walk_keys(trend) & RETIRED_SCHEMA_KEYS)
     assert not (walk_keys(detail) & RETIRED_SCHEMA_KEYS)
     assert gen.WINDOWS == [5, 20, 60, 120, 240]
@@ -450,3 +445,32 @@ def test_krx_today_patch_allows_confirmed_after_close_naver_row(monkeypatch):
     assert patched.iloc[-1]["close"] == 119560.0
     assert patched.attrs["krx_today_patched"] is True
     assert patched.attrs["krx_today_source"] == "naver_siseJson"
+
+
+@pytest.mark.parametrize("left,right", ALIGNMENT_PAIRS)
+@pytest.mark.parametrize("left_value,right_value,expected", [
+    (100.000002, 100.000001, "BUY"),
+    (100.000001, 100.000002, "SELL"),
+    (100.0, 100.0, "SELL"),
+    (None, 100.0, "WAIT"),
+    (100.0, None, "WAIT"),
+    (float("nan"), 100.0, "WAIT"),
+])
+def test_each_pair_depends_only_on_its_raw_values(left, right, left_value, right_value, expected):
+    # Every unrelated window is absent; rounded values cannot determine this signal.
+    work = pd.DataFrame(
+        {f"vwap_{left}d": [left_value], f"vwap_{right}d": [right_value]},
+        index=pd.to_datetime(["2026-09-04"]),
+    )
+    latest = gen.build_latest_alignment_snapshot(work, f"alignment_{left}_{right}")
+    assert latest["signal"] == expected
+    assert set(latest) == LATEST_KEYS
+    if expected != "WAIT":
+        assert latest[f"vwap{left}"] == latest[f"vwap{right}"] == 100.0
+
+
+def test_empty_history_keeps_all_six_pairs_wait():
+    signal = gen.build_strategy_signal(make_ohlcv([]))
+    assert set(signal["strategies"]) == ALIGNMENT_KEYS
+    assert signal["available"] is False
+    assert all(item["latest"]["signal"] == "WAIT" for item in signal["strategies"].values())

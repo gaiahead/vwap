@@ -1,4 +1,5 @@
 import json
+from html import unescape
 import re
 import subprocess
 from pathlib import Path
@@ -17,13 +18,13 @@ def test_monitor_has_exact_live_signal_columns_and_name_sort():
     headers = re.findall(r'<th data-sort="[^"]+">([^<]+)</th>', html)
     sort_keys = re.findall(r'<th data-sort="([^"]+)">', html)
 
-    assert headers == ["종목", "신호 1", "신호 2", "신호 3"]
-    assert sort_keys == ["name", "signal_1", "signal_2", "signal_3"]
+    assert list(map(unescape, headers)) == ["종목", "점수", "5>20", "5>60", "5>120", "20>60", "20>120", "60>120"]
+    assert sort_keys == ["name", "score", *[f"signal_{index}" for index in range(1, 7)]]
     assert "const DEFAULT_SORT = { key: 'name', dir: 'asc' };" in app
     assert "const ALIGNMENT_SIGNAL_COLUMNS = ALIGNMENT_OPTIONS.map" in app
     assert "strategies?.[option.key]?.latest?.signal" in app
     assert "key: `signal_${index + 1}`" in app
-    assert "label: `신호 ${index + 1}`" in app
+    assert "label: option.label" in app
 
     combined = html + app
     for token in [
@@ -37,7 +38,7 @@ def test_monitor_has_exact_live_signal_columns_and_name_sort():
         assert token not in combined
 
 
-def test_monitor_keeps_three_strict_pairwise_live_signal_definitions():
+def test_monitor_keeps_six_strict_pairwise_live_signal_definitions():
     html = read("index.html")
     app = read("app.js")
     explanation = re.search(
@@ -46,14 +47,15 @@ def test_monitor_keeps_three_strict_pairwise_live_signal_definitions():
     )
 
     assert explanation is not None
-    assert explanation.group(1) == (
-        "신호 1은 5d &gt; 20d, "
-        "신호 2는 20d &gt; 60d, "
-        "신호 3은 60d &gt; 120d입니다."
-    )
+    copy = unescape(explanation.group(1))
+    for text in ["BUY", "SELL", "WAIT", "1점", "6점", "데이터 부족", "동일"]:
+        assert text in copy
     assert "평가 첫날" not in html
     assert "다음 거래일" not in html
     assert "const ALIGNMENT_5_20 = 'alignment_5_20';" in app
+    assert "const ALIGNMENT_5_60 = 'alignment_5_60';" in app
+    assert "const ALIGNMENT_5_120 = 'alignment_5_120';" in app
+    assert "const ALIGNMENT_20_120 = 'alignment_20_120';" in app
     assert "const ALIGNMENT_20_60 = 'alignment_20_60';" in app
     assert "const ALIGNMENT_60_120 = 'alignment_60_120';" in app
     for obsolete_windows in (
@@ -882,3 +884,13 @@ def test_obsolete_dashboard_features_are_not_reintroduced():
         "drawdown",
     ]:
         assert token not in combined
+
+
+def test_eight_column_table_keeps_readable_width_and_internal_overflow():
+    css = read("style.css")
+    table = re.search(r"\.momentum-table\{([^}]+)\}", css).group(1)
+    wrap = re.search(r"\.momentum-table-wrap\{([^}]+)\}", css).group(1)
+    assert int(re.search(r"min-width:(\d+)px", table).group(1)) >= 710
+    assert "overflow:auto" in wrap or "overflow-x:auto" in wrap
+    assert ".momentum-table th:not(:first-child)" in css
+    assert ".momentum-table td:not(:first-child)" in css

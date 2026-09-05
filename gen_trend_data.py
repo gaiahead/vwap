@@ -229,7 +229,10 @@ def date_key(value: Any) -> str:
 
 
 ALIGNMENT_5_20 = "alignment_5_20"
+ALIGNMENT_5_60 = "alignment_5_60"
+ALIGNMENT_5_120 = "alignment_5_120"
 ALIGNMENT_20_60 = "alignment_20_60"
+ALIGNMENT_20_120 = "alignment_20_120"
 ALIGNMENT_60_120 = "alignment_60_120"
 ALIGNMENT_STRATEGIES: dict[str, dict[str, Any]] = {
     ALIGNMENT_5_20: {
@@ -237,10 +240,25 @@ ALIGNMENT_STRATEGIES: dict[str, dict[str, Any]] = {
         "rule": "VWAP5 > VWAP20",
         "windows": (5, 20),
     },
+    ALIGNMENT_5_60: {
+        "label": "5 > 60",
+        "rule": "VWAP5 > VWAP60",
+        "windows": (5, 60),
+    },
+    ALIGNMENT_5_120: {
+        "label": "5 > 120",
+        "rule": "VWAP5 > VWAP120",
+        "windows": (5, 120),
+    },
     ALIGNMENT_20_60: {
         "label": "20 > 60",
         "rule": "VWAP20 > VWAP60",
         "windows": (20, 60),
+    },
+    ALIGNMENT_20_120: {
+        "label": "20 > 120",
+        "rule": "VWAP20 > VWAP120",
+        "windows": (20, 120),
     },
     ALIGNMENT_60_120: {
         "label": "60 > 120",
@@ -321,7 +339,7 @@ def build_latest_alignment_snapshot(
 
 
 def build_strategy_signal(df: pd.DataFrame) -> dict[str, Any]:
-    """세 가지 엄격한 VWAP 구간 비교의 최신 상태만 생성한다."""
+    """여섯 가지 엄격한 VWAP 구간 비교의 최신 상태만 생성한다."""
     work = prepare_storage_frame(df)
     strategies = {
         strategy_key: {
