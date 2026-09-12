@@ -1,0 +1,167 @@
+{
+  "_meta": {
+    "description": "Manually verified issuer snapshots. Missing entries are intentionally unavailable. See spec/03-data-pipeline.md."
+  },
+  "etfs": {
+    "069500.KS": {
+      "category": {
+        "value": "국내 주식, 대표지수",
+        "source_url": "https://www.samsungfund.com/upload/kodex/newsroom/20260416171916907.pdf#page=14",
+        "as_of": "2026-03-31"
+      },
+      "issuer": {
+        "value": "삼성자산운용",
+        "source_url": "https://www.samsungfund.com/upload/kodex/newsroom/20260416171916907.pdf#page=14",
+        "as_of": "2026-03-31"
+      },
+      "benchmark": {
+        "value": "KOSPI 200",
+        "source_url": "https://www.samsungfund.com/upload/kodex/newsroom/20260416171916907.pdf#page=14",
+        "as_of": "2026-03-31"
+      },
+      "total_expense_ratio_pct": {
+        "value": 0.15,
+        "source_url": "https://www.samsungfund.com/upload/kodex/newsroom/20260416171916907.pdf#page=14",
+        "as_of": "2026-03-31"
+      },
+      "holdings": {
+        "value": [
+          {
+            "name": "삼성전자",
+            "weight_pct": 31.7
+          },
+          {
+            "name": "SK하이닉스",
+            "weight_pct": 18.4
+          },
+          {
+            "name": "현대차",
+            "weight_pct": 2.5
+          },
+          {
+            "name": "SK스퀘어",
+            "weight_pct": 1.8
+          },
+          {
+            "name": "KB금융",
+            "weight_pct": 1.8
+          },
+          {
+            "name": "한화에어로스페이스",
+            "weight_pct": 1.6
+          },
+          {
+            "name": "두산에너빌리티",
+            "weight_pct": 1.6
+          },
+          {
+            "name": "신한지주",
+            "weight_pct": 1.4
+          },
+          {
+            "name": "기아",
+            "weight_pct": 1.4
+          },
+          {
+            "name": "셀트리온",
+            "weight_pct": 1.2
+          }
+        ],
+        "source_url": "https://www.samsungfund.com/upload/kodex/newsroom/20260416171916907.pdf#page=14",
+        "as_of": "2026-03-31"
+      },
+      "synthetic_total_expense_ratio_pct": {
+        "value": 0.1615,
+        "source_url": "https://www.samsungfund.com/upload/kodex/newsroom/20260416171916907.pdf#page=14",
+        "as_of": "2026-03-31",
+        "note": "직전 회계년도 기준. 총보수 포함; 증권거래비용 별도."
+      },
+      "trading_cost_pct": {
+        "value": 0.0283,
+        "source_url": "https://www.samsungfund.com/upload/kodex/newsroom/20260416171916907.pdf#page=14",
+        "as_of": "2026-03-31",
+        "note": "직전 회계년도 기준."
+      }
+    },
+    "379800.KS": {
+      "category": {
+        "value": "해외 주식, 대표지수",
+        "source_url": "https://www.samsungfund.com/upload/kodex/newsroom/20260416171916907.pdf#page=15",
+        "as_of": "2026-03-31"
+      },
+      "issuer": {
+        "value": "삼성자산운용",
+        "source_url": "https://www.samsungfund.com/upload/kodex/newsroom/20260416171916907.pdf#page=15",
+        "as_of": "2026-03-31"
+      },
+      "benchmark": {
+        "value": "S&P 500 Index",
+        "source_url": "https://www.samsungfund.com/upload/kodex/newsroom/20260416171916907.pdf#page=15",
+        "as_of": "2026-03-31"
+      },
+      "total_expense_ratio_pct": {
+        "value": 0.0062,
+        "source_url": "https://www.samsungfund.com/upload/kodex/newsroom/20260416171916907.pdf#page=15",
+        "as_of": "2026-03-31"
+      },
+      "holdings": {
+        "value": [
+          {
+            "name": "Nvidia",
+            "weight_pct": 7.5
+          },
+          {
+            "name": "Apple",
+            "weight_pct": 6.7
+          },
+          {
+            "name": "Microsoft",
+            "weight_pct": 4.9
+          },
+          {
+            "name": "Amazon",
+            "weight_pct": 3.6
+          },
+          {
+            "name": "Alphabet A",
+            "weight_pct": 2.9
+          },
+          {
+            "name": "Broadcom",
+            "weight_pct": 2.6
+          },
+          {
+            "name": "Alphabet C",
+            "weight_pct": 2.4
+          },
+          {
+            "name": "Meta Platforms",
+            "weight_pct": 2.1
+          },
+          {
+            "name": "Tesla Motors",
+            "weight_pct": 1.9
+          },
+          {
+            "name": "Berkshire Hathaway",
+            "weight_pct": 1.6
+          }
+        ],
+        "source_url": "https://www.samsungfund.com/upload/kodex/newsroom/20260416171916907.pdf#page=15",
+        "as_of": "2026-03-31"
+      },
+      "synthetic_total_expense_ratio_pct": {
+        "value": 0.0738,
+        "source_url": "https://www.samsungfund.com/upload/kodex/newsroom/20260416171916907.pdf#page=15",
+        "as_of": "2026-03-31",
+        "note": "직전 회계년도 기준. 총보수 포함; 증권거래비용 별도."
+      },
+      "trading_cost_pct": {
+        "value": 0.0345,
+        "source_url": "https://www.samsungfund.com/upload/kodex/newsroom/20260416171916907.pdf#page=15",
+        "as_of": "2026-03-31",
+        "note": "직전 회계년도 기준."
+      }
+    }
+  }
+}

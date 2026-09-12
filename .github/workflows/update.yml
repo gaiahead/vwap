@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    timeout-minutes: 15
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@v4
@@ -20,7 +20,7 @@ jobs:
           # cache: 'pip'  # requirements.txt 없으면 실패하므로 비활성화
 
       - name: Install dependencies
-        run: pip install yfinance pandas numpy scipy
+        run: pip install yfinance pandas numpy scipy requests
 
       - name: Generate trend data
         run: python gen_trend_data.py

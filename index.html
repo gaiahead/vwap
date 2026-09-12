@@ -3,50 +3,36 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>VWAP 추세 모니터</title>
+  <title>ETF 탐색, ETF Analyzer</title>
   <link rel="icon" href="data:,"/>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3"></script>
-  <link rel="stylesheet" href="style.css?v=data-20260912-1600"/>
+  <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="style.css?v=data-etf-20260912-v3"/>
+  <script defer src="app.js?v=data-etf-20260912-v3"></script>
 </head>
 <body>
-
-<header>
-  <h1>📊 VWAP 추세 모니터</h1>
-  <p>Volume Weighted Average Price · <span id="updated"></span></p>
-</header>
-
-<div class="section-box momentum-monitor" id="momentum-section" style="display:none">
-  <div class="panel-title">📐 VWAP 정배열 MONITOR</div>
-  <div class="momentum-monitor-sub">5·20·60·120 거래일 VWAP의 여섯 쌍을 비교합니다. 왼쪽 &gt; 오른쪽이면 BUY, 동일하거나 작으면 SELL입니다. BUY마다 1점, 최대 6점이며 데이터 부족은 WAIT, 하나라도 WAIT이면 점수는 –로 표시합니다.</div>
-  <div class="momentum-table-wrap"><table class="momentum-table">
-    <thead>
-      <tr>
-        <th data-sort="name">종목</th>
-        <th data-sort="score">점수</th>
-        <th data-sort="signal_1">5&gt;20</th>
-        <th data-sort="signal_2">5&gt;60</th>
-        <th data-sort="signal_3">5&gt;120</th>
-        <th data-sort="signal_4">20&gt;60</th>
-        <th data-sort="signal_5">20&gt;120</th>
-        <th data-sort="signal_6">60&gt;120</th>
-      </tr>
-    </thead>
-    <tbody id="momentum-body"></tbody>
-  </table></div>
-</div>
-
-<div class="detail-section" id="detail-section" style="display:none">
-  <div class="detail-header">
-    <div class="detail-title-wrap">
-      <h2 id="detail-title">Loading...</h2>
-      <div class="detail-symbol" id="detail-symbol"></div>
+<header><h1>ETF 탐색</h1><p>규모, 유동성, 비용과 보유자산을 한눈에, <span id="updated"></span></p></header>
+<main>
+  <section class="panel" aria-labelledby="discovery-title">
+    <h2 id="discovery-title">내게 맞는 ETF 찾기</h2>
+    <div class="filters">
+      <label class="search-label">통합 검색<input id="search" type="search" placeholder="ETF 이름, 티커, 분류, 운용사, 기초지수, 보유자산"/></label>
+      <label>분류<select id="category"><option value="">전체 분류</option></select></label>
+      <label>운용사<select id="issuer"><option value="">전체 운용사</option></select></label>
+      <label>20일 평균 거래량 최소, 주<input id="min-volume" type="number" min="0" step="1000" placeholder="제한 없음"/></label>
+      <label class="check"><input type="checkbox" id="has-fees"/>총보수 정보 있음</label>
+      <button id="reset">초기화</button>
     </div>
-    <button class="close-btn" id="detail-close">✕</button>
-  </div>
-  <div id="detail-content"></div>
-</div>
-
-<script src="app.js?v=data-20260912-1600"></script>
+    <p id="status" class="muted" role="status">ETF 목록을 불러오는 중…</p>
+    <p class="muted">미확인 값은 -로 표시합니다. 평균 거래대금은 최근 20거래일 종가 × 거래량의 평균 추정치입니다. 순자산은 Naver ETF 목록의 규모 기준이며, 비용 항목은 서로 포함될 수 있어 합산하지 않습니다.</p>
+    <p id="count" aria-live="polite"></p>
+    <div class="table-wrap" tabindex="0" role="region" aria-label="ETF 검색 결과, 가로로 스크롤 가능">
+      <table><caption class="sr-only">ETF 비교 정보. 열 제목 버튼으로 정렬하고 ETF 이름으로 상세 정보를 엽니다.</caption><thead><tr id="etf-head"></tr></thead><tbody id="etf-body"></tbody></table>
+    </div>
+  </section>
+  <section class="panel" id="detail-section" aria-labelledby="detail-title" hidden>
+    <div class="detail-header"><h2 id="detail-title" tabindex="-1"></h2><button id="detail-close" aria-label="ETF 상세 닫기">닫기 ×</button></div>
+    <div id="detail-content"></div>
+  </section>
+</main>
 </body>
 </html>

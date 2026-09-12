@@ -1,726 +1,178 @@
-const DATA_VERSION = 'data-20260912-1600';
-const PRICE_CHART_TRADING_DAYS = 120;
-const GRID = '#e2e8f0';
-const TICK = '#64748b';
-const COLOR = {
-  positive: '#16a34a',
-  negative: '#dc2626',
-  muted: '#64748b',
-  blue: '#2563eb'
-};
-const ALIGNMENT_5_20 = 'alignment_5_20';
-const ALIGNMENT_5_60 = 'alignment_5_60';
-const ALIGNMENT_5_120 = 'alignment_5_120';
-const ALIGNMENT_20_60 = 'alignment_20_60';
-const ALIGNMENT_20_120 = 'alignment_20_120';
-const ALIGNMENT_60_120 = 'alignment_60_120';
-const ALIGNMENT_OPTIONS = [
-  { key: ALIGNMENT_5_20, label: '5>20' },
-  { key: ALIGNMENT_5_60, label: '5>60' },
-  { key: ALIGNMENT_5_120, label: '5>120' },
-  { key: ALIGNMENT_20_60, label: '20>60' },
-  { key: ALIGNMENT_20_120, label: '20>120' },
-  { key: ALIGNMENT_60_120, label: '60>120' }
-];
-const DEFAULT_SORT = { key: 'name', dir: 'asc' };
-const VP_PERIODS = ['1d', '5d', '20d', '60d', '120d'];
-const VWAP_LINE_WIDTH = 2;
-const PRICE_CHART_EDGE_HIT_WIDTH = 12;
-const PRICE_CHART_SELECTION_MARKER_RADIUS = 4;
-const PRICE_LINE_DEFS = Object.freeze([
-  Object.freeze({ label: '1d', window: 1, color: '#eab308', dash: [], opacity: 0.66 }),
-  Object.freeze({ label: '5d', window: 5, color: '#dc2626', dash: [], opacity: 0.72 }),
-  Object.freeze({ label: '20d', window: 20, color: '#16a34a', dash: [], opacity: 0.90 }),
-  Object.freeze({ label: '60d', window: 60, color: '#2563eb', dash: [], opacity: 0.74 }),
-  Object.freeze({ label: '120d', window: 120, color: '#7c3aed', dash: [], opacity: 0.78 })
+'use strict';
+const DATA_VERSION = 'data-etf-20260912-v3';
+const LINES = Object.freeze([
+  { label: '1일', window: 1, color: '#eab308' },
+  { label: '20일', window: 20, color: '#dc2626' },
+  { label: '60일', window: 60, color: '#16a34a' },
+  { label: '240일', window: 240, color: '#2563eb' }
 ]);
-PRICE_LINE_DEFS.forEach(definition => Object.freeze(definition.dash));
-const PRICE_DATASET_ORDER = PRICE_LINE_DEFS.map(def => def.label);
-
-const VWAP_TREND_STYLE_FACTORS = Object.freeze({
-  rising: Object.freeze({ opacity: 1.12, width: 1 }),
-  flat: Object.freeze({ opacity: 1, width: 1 }),
-  falling: Object.freeze({ opacity: 1.12, width: 0.5 })
-});
-
-function hasFiniteVwapValue(value) {
-  return value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
-}
-
-function classifyVwapSegmentState(values, startIndex, endIndex) {
-  const startValue = values?.[startIndex];
-  const endValue = values?.[endIndex];
-  if (!hasFiniteVwapValue(startValue) || !hasFiniteVwapValue(endValue)) return 'flat';
-  const numericStart = Number(startValue);
-  const numericEnd = Number(endValue);
-  if (numericEnd > numericStart) return 'rising';
-  if (numericEnd < numericStart) return 'falling';
-  return 'flat';
-}
-
-function colorWithOpacity(hexColor, opacity) {
-  const hex = String(hexColor).replace('#', '');
-  const red = parseInt(hex.slice(0, 2), 16);
-  const green = parseInt(hex.slice(2, 4), 16);
-  const blue = parseInt(hex.slice(4, 6), 16);
-  return 'rgba(' + red + ', ' + green + ', ' + blue + ', ' + opacity + ')';
-}
-
-function getVwapTrendStyle(period, state = 'flat') {
-  const definition = PRICE_LINE_DEFS.find(def => def.window === Number(period));
-  if (!definition) return null;
-  const normalizedState = VWAP_TREND_STYLE_FACTORS[state] ? state : 'flat';
-  const factor = VWAP_TREND_STYLE_FACTORS[normalizedState];
-  const opacity = Math.min(1, Number((definition.opacity * factor.opacity).toFixed(3)));
-  return Object.freeze({
-    state: normalizedState,
-    baseColor: definition.color,
-    borderColor: colorWithOpacity(definition.color, opacity),
-    borderWidth: VWAP_LINE_WIDTH * factor.width,
-    opacity
-  });
-}
-
-function nearestProfileBucketIndex(buckets, price) {
-  if (!Array.isArray(buckets) || buckets.length === 0 || !hasFiniteVwapValue(price)) return -1;
-  const numericPrice = Number(price);
-  let nearestIndex = -1;
-  let nearestDistance = Infinity;
-  buckets.forEach((bucket, index) => {
-    if (!hasFiniteVwapValue(bucket?.price)) return;
-    const distance = Math.abs(Number(bucket.price) - numericPrice);
-    if (distance < nearestDistance) {
-      nearestIndex = index;
-      nearestDistance = distance;
-    }
-  });
-  return nearestIndex;
-}
-
-function formatPrice(price) {
-  if (!hasFiniteVwapValue(price)) return '–';
-  return Math.round(Number(price)).toLocaleString('ko-KR', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  });
-}
-
-function buildVpAnnotations(detailData, vp) {
-  const annotations = {};
-  const buckets = vp?.buckets || [];
-  const vwapIndex = nearestProfileBucketIndex(buckets, vp?.vwap);
-  if (vwapIndex >= 0) {
-    annotations.vwapLine = {
-      type: 'line',
-      scaleID: 'y',
-      value: vwapIndex,
-      borderColor: COLOR.blue,
-      borderWidth: 2,
-      label: {
-        display: true,
-        content: 'VWAP ' + formatPrice(vp.vwap),
-        color: '#1d4ed8',
-        backgroundColor: 'rgba(255,255,255,0.9)',
-        font: { size: 9 },
-        position: 'end',
-        padding: { x: 3, y: 1 }
-      }
-    };
-  }
-  return annotations;
-}
-
-function buildPriceChartDateSelection(labels, index) {
-  if (!Array.isArray(labels) || !Number.isInteger(index) || index < 0 || index >= labels.length) {
-    return null;
-  }
-  const selectedDate = labels[index];
-  if (selectedDate === null || selectedDate === undefined || selectedDate === '') return null;
-  return { index, date: selectedDate };
-}
-
-function nearestPriceChartIndex(chart, event) {
-  const labels = chart?.data?.labels;
-  if (!Array.isArray(labels) || labels.length === 0) return -1;
-  const { left, right, top, bottom } = chart?.chartArea || {};
-  const eventX = event?.x;
-  const eventY = event?.y;
-  if (![left, right, top, bottom, eventX, eventY].every(Number.isFinite)) return -1;
-  if (right <= left || bottom <= top || eventY < top || eventY > bottom) return -1;
-  if (eventX < left - PRICE_CHART_EDGE_HIT_WIDTH || eventX > right + PRICE_CHART_EDGE_HIT_WIDTH) {
-    return -1;
-  }
-
-  const lastIndex = labels.length - 1;
-  if (lastIndex === 0) return 0;
-  const chartAreaIndex = Math.round(((eventX - left) / (right - left)) * lastIndex);
-  return Math.min(lastIndex, Math.max(0, chartAreaIndex));
-}
-
-function selectPriceChartIndex(chart, index) {
-  const selection = buildPriceChartDateSelection(chart?.data?.labels, index);
-  if (!selection) return false;
-  const currentSelection = chart.$priceChartDateSelection;
-  if (currentSelection?.index === selection.index && currentSelection?.date === selection.date) {
-    return false;
-  }
-  chart.$priceChartDateSelection = selection;
-  return true;
-}
-
-function drawPriceChartTerminalGridline(chart) {
-  const { right, top, bottom } = chart?.chartArea || {};
-  if (![right, top, bottom].every(Number.isFinite) || bottom <= top) return;
-
-  const ctx = chart?.ctx;
-  if (!ctx || typeof ctx.save !== 'function' || typeof ctx.restore !== 'function') return;
-
-  ctx.save();
-  try {
-    ctx.strokeStyle = GRID;
-    ctx.lineWidth = 1;
-    ctx.setLineDash([]);
-    ctx.beginPath();
-    ctx.moveTo(right, top);
-    ctx.lineTo(right, bottom);
-    ctx.stroke();
-  } finally {
-    ctx.restore();
-  }
-}
-
-function drawPriceChartDateSelection(chart) {
-  const currentSelection = chart?.$priceChartDateSelection;
-  const selection = buildPriceChartDateSelection(
-    chart?.data?.labels,
-    currentSelection?.index
-  );
-  if (!selection || selection.date !== currentSelection.date) return;
-
-  const { left, right, top, bottom } = chart?.chartArea || {};
-  if (![left, right, top, bottom].every(Number.isFinite) || right <= left || bottom <= top) {
-    return;
-  }
-  const lastIndex = chart.data.labels.length - 1;
-  const selectedX = lastIndex === 0
-    ? (left + right) / 2
-    : left + ((right - left) * selection.index) / lastIndex;
-
-  const ctx = chart?.ctx;
-  if (!ctx || typeof ctx.save !== 'function' || typeof ctx.restore !== 'function') return;
-
-  ctx.save();
-  try {
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([]);
-    ctx.beginPath();
-    ctx.moveTo(selectedX, top);
-    ctx.lineTo(selectedX, bottom);
-    ctx.stroke();
-
-    const yScale = chart?.scales?.y;
-    if (typeof yScale?.getPixelForValue !== 'function') return;
-    chart.data.datasets.forEach((dataset, datasetIndex) => {
-      const isVisible = typeof chart.isDatasetVisible === 'function'
-        ? chart.isDatasetVisible(datasetIndex)
-        : dataset.hidden !== true;
-      const value = dataset.data?.[selection.index];
-      if (!isVisible || !hasFiniteVwapValue(value)) return;
-      const y = yScale.getPixelForValue(Number(value));
-      if (!Number.isFinite(y) || y < top || y > bottom) return;
-
-      ctx.fillStyle = dataset.borderColor;
-      ctx.beginPath();
-      ctx.arc(selectedX, y, PRICE_CHART_SELECTION_MARKER_RADIUS, 0, Math.PI * 2);
-      ctx.fill();
-    });
-  } finally {
-    ctx.restore();
-  }
-}
-
-function formatPriceChartDateTick(value) {
-  const labels = typeof this?.getLabels === 'function' ? this.getLabels() : [];
-  const labelIndex = Number(value);
-  if (Number.isInteger(labelIndex) && (
-    labelIndex === 0 || labelIndex === labels.length - 1
-  )) {
-    return '';
-  }
-  return typeof this?.getLabelForValue === 'function'
-    ? this.getLabelForValue(value)
-    : value;
-}
-
-function buildPriceChartConfig(detailData) {
-  const ohlcv = detailData.ohlcv.slice(-PRICE_CHART_TRADING_DAYS);
-  const labels = ohlcv.map(day => day.date);
-  const vwapLineDatasets = PRICE_LINE_DEFS.map((definition, index) => {
-    const values = ohlcv.map(day => day['vwap_' + definition.window + 'd'] ?? null);
-    const baseStyle = getVwapTrendStyle(definition.window, 'flat');
-    const segmentStyle = context => getVwapTrendStyle(
-      definition.window,
-      classifyVwapSegmentState(values, context.p0DataIndex, context.p1DataIndex)
-    );
-    return {
-      label: definition.label,
-      data: values,
-      borderColor: baseStyle.borderColor,
-      borderWidth: baseStyle.borderWidth,
-      borderDash: definition.dash,
-      segment: {
-        borderColor: context => segmentStyle(context).borderColor,
-        borderWidth: context => segmentStyle(context).borderWidth
-      },
-      pointStyle: 'line',
-      pointRadius: 0,
-      tension: 0.2,
-      spanGaps: false,
-      fill: false,
-      order: index + 1
-    };
-  });
-  const legendOrder = new Map(PRICE_DATASET_ORDER.map((label, index) => [label, index]));
-  const selectionEvents = new Set(['mousemove', 'click', 'touchstart', 'touchmove']);
-  const dateSelectionPlugin = {
-    id: 'priceChartDateSelection',
-    afterEvent: (chart, args) => {
-      const event = args?.event;
-      if (!selectionEvents.has(event?.type)) return;
-      const index = nearestPriceChartIndex(chart, event);
-      if (selectPriceChartIndex(chart, index)) args.changed = true;
-    },
-    beforeDatasetsDraw: chart => drawPriceChartTerminalGridline(chart),
-    afterDatasetsDraw: chart => drawPriceChartDateSelection(chart)
-  };
-  return {
-    type: 'line',
-    data: {
-      labels,
-      datasets: vwapLineDatasets
-    },
-    plugins: [dateSelectionPlugin],
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      animation: { duration: 200 },
-      interaction: { mode: 'index', axis: 'x', intersect: false },
-      layout: {
-        padding: { right: PRICE_CHART_SELECTION_MARKER_RADIUS + 0.5 }
-      },
-      plugins: {
-        legend: {
-          display: true,
-          labels: {
-            color: '#334155',
-            font: { size: 10 },
-            boxWidth: 28,
-            pointStyleWidth: 28,
-            padding: 10,
-            usePointStyle: true,
-            generateLabels: chart => Chart.defaults.plugins.legend.labels.generateLabels(chart).map(item => {
-              const dataset = chart.data.datasets[item.datasetIndex] || {};
-              return {
-                ...item,
-                pointStyle: 'line',
-                rotation: 0,
-                lineDash: dataset.borderDash || [],
-                lineWidth: dataset.borderWidth || 1,
-                strokeStyle: dataset.borderColor,
-                fillStyle: dataset.borderColor
-              };
-            }),
-            sort: (a, b) => (
-              (legendOrder.get(a.text) ?? 999) - (legendOrder.get(b.text) ?? 999)
-            )
-          }
-        },
-        tooltip: {
-          callbacks: {
-            label: context => {
-              const datasetLabel = context.dataset?.label;
-              const formattedPrice = formatPrice(context.parsed?.y);
-              return datasetLabel ? datasetLabel + ': ' + formattedPrice : formattedPrice;
-            }
-          }
-        }
-      },
-      scales: {
-        x: {
-          ticks: {
-            color: TICK,
-            font: { size: 9 },
-            maxTicksLimit: 12,
-            maxRotation: 0,
-            callback: formatPriceChartDateTick
-          },
-          grid: { color: GRID }
-        },
-        y: {
-          ticks: { color: TICK, font: { size: 10 }, callback: formatPrice },
-          grid: { color: GRID }
-        }
-      }
-    }
-  };
-}
-
-const VWAP_CHART_TEST_API = Object.freeze({
-  lineDefinitions: PRICE_LINE_DEFS,
-  classifyVwapSegmentState,
-  getVwapTrendStyle,
-  buildVpAnnotations,
-  formatPrice,
-  buildPriceChartConfig,
-  buildPriceChartDateSelection,
-  nearestPriceChartIndex,
-  selectPriceChartIndex,
-  drawPriceChartTerminalGridline,
-  drawPriceChartDateSelection
-});
-if (typeof window !== 'undefined') {
-  Object.defineProperty(window, 'VWAP_CHART_TEST_API', {
-    value: VWAP_CHART_TEST_API,
-    writable: false,
-    configurable: false,
-    enumerable: true
-  });
-}
-
-const ALIGNMENT_SIGNAL_COLUMNS = ALIGNMENT_OPTIONS.map((option, index) => ({
-  key: `signal_${index + 1}`,
-  label: option.label,
-  type: 'text',
-  get: row => row.strategy.strategies?.[option.key]?.latest?.signal
-}));
-
-function pairwiseScore(row) {
-  // Generator signals use raw precision; serialized VWAP values are rounded.
-  const signals = ALIGNMENT_SIGNAL_COLUMNS.map(column => column.get(row));
-  if (signals.some(signal => signal !== 'BUY' && signal !== 'SELL')) return null;
-  return signals.filter(signal => signal === 'BUY').length;
-}
-
-const MOMENTUM_COLUMNS = [
-  { key: 'name', label: '종목', type: 'text', get: row => row.name },
-  { key: 'score', label: '점수', type: 'number', get: pairwiseScore },
-  ...ALIGNMENT_SIGNAL_COLUMNS
+const COLUMNS = [
+  ['name','ETF 이름 / 티커'], ['category','분류'], ['issuer','운용사'],
+  ['aum_krw','순자산, 억원'], ['avg_trading_value_20d_krw','20일 평균 거래대금, 억원 (추정)'],
+  ['avg_volume_20d','20일 평균 거래량, 주'], ['total_expense_ratio_pct','총보수, %/년'],
+  ['actual_total_cost_pct','실부담비용, %/년'], ['other_cost_pct','기타비용, %/년'],
+  ['synthetic_total_expense_ratio_pct','합성총보수, %/년'], ['trading_cost_pct','증권거래비용, %/년'],
+  ['holdings_summary','주요 보유자산'], ['top10_weight_pct','상위 10 비중, %'],
+  ['premium_discount_pct','괴리율, %']
 ];
-const SORT_FIELDS = Object.fromEntries(MOMENTUM_COLUMNS.map(column => [column.key, column.get]));
+function format(value, digits=2) {
+  return value === null || value === undefined || value === '' || (typeof value === 'number' && !Number.isFinite(value))
+    ? '-' : typeof value === 'number' ? value.toLocaleString('ko-KR',{maximumFractionDigits:digits}) : String(value);
+}
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function selectEtfs(etfs, {query='',category='',issuer='',sort='name',dir='asc',hasFees=false,minVolume=0}={}) {
+  const terms=query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+  return etfs.filter(e=> {
+    const text=[e.name,e.ticker,e.category,e.issuer,e.benchmark,e.exposure,e.holdings_text].filter(Boolean).join(' ').toLocaleLowerCase();
+    return terms.every(t=>text.includes(t)) && (!category || (category==='__missing' ? !e.category : e.category===category)) &&
+      (!issuer || (issuer==='__missing' ? !e.issuer : e.issuer===issuer)) && (!hasFees || e.total_expense_ratio_pct!=null) &&
+      (!(Number(minVolume)>0) || (e.avg_volume_20d!=null && e.avg_volume_20d>=Number(minVolume)));
+  }).sort((a,b)=> {
+    const av=a[sort],bv=b[sort];
+    if(av==null || bv==null) return av==null && bv==null ? a.name.localeCompare(b.name,'ko') : av==null ? 1 : -1;
+    const comparison=typeof av==='number' && typeof bv==='number' ? av-bv : String(av).localeCompare(String(bv),'ko');
+    return comparison*(dir==='asc'?1:-1) || a.name.localeCompare(b.name,'ko');
+  });
+}
+function sliceRange(rows, years=1) {
+  if(!rows.length) return [];
+  const end=new Date(rows.at(-1).date+'T00:00:00Z');
+  const month=end.getUTCMonth();
+  end.setUTCFullYear(end.getUTCFullYear()-years);
+  if(end.getUTCMonth()!==month) end.setUTCDate(0);
+  const cutoff=end.toISOString().slice(0,10);
+  return rows.filter(row=>row.date>=cutoff);
+}
+function segmentWidth(values, start, end) {
+  return Number.isFinite(values[start]) && Number.isFinite(values[end]) && values[end]<values[start] ? 1 : 2;
+}
+function chartData(rows) {
+  return {labels:rows.map(r=>r.date),datasets:LINES.map(line=> {
+    const data=rows.map(r=>r[`vwap_${line.window}d`]);
+    return {label:line.label,data,borderColor:line.color,backgroundColor:line.color,
+      borderWidth:2,pointRadius:0,pointHitRadius:8,spanGaps:false,tension:0,
+      segment:{borderWidth:ctx=>segmentWidth(data,ctx.p0DataIndex,ctx.p1DataIndex)}};
+  })};
+}
+function updateRange(chart, rows, years) {
+  chart.data=chartData(sliceRange(rows,years));
+  chart.update();
+}
+if(typeof module!=='undefined') module.exports={LINES,format,selectEtfs,sliceRange,segmentWidth,updateRange,chartData};
 
-let priceChart = null;
-let vpChart = null;
-let currentVpPeriod = '1d';
-let currentDetailName = null;
-const detailCache = {};
-
-fetch('trend_data.json?v=' + DATA_VERSION, { cache: 'no-store' }).then(r => r.json()).then(data => {
-  const allNames = Object.keys(data).filter(key => key !== '_meta');
-  const view = {
-    updated: document.getElementById('updated'),
-    momentumSection: document.getElementById('momentum-section'),
-    momentumBody: document.getElementById('momentum-body'),
-    detailSection: document.getElementById('detail-section'),
-    detailContent: document.getElementById('detail-content'),
-    detailTitle: document.getElementById('detail-title'),
-    detailSymbol: document.getElementById('detail-symbol'),
-    detailClose: document.getElementById('detail-close')
+if(typeof document!=='undefined') {
+  let etfs=[], selected=null, priceChart=null, profileChart=null, requestId=0;
+  let sort='name',dir='asc';
+  const cache=new Map();
+  const el=id=>document.getElementById(id);
+  const sourceLink=source=> {
+    if(!source) return '-';
+    const text=`기준 ${format(source.as_of)}${source.retrieved_at ? ', 수집 '+source.retrieved_at : ''}${source.note ? ', '+source.note : ''}`;
+    return /^https:\/\//.test(source.url || '') ? `<a href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(text)}</a>` : escapeHtml(text);
   };
-  let sortState = { ...DEFAULT_SORT };
-
-  view.updated.textContent = (data._meta?.updated_at || '') + ' 기준';
-
-  function createCell(text, { className, color, weight } = {}) {
-    const td = document.createElement('td');
-    td.textContent = text;
-    if (className) td.className = className;
-    if (color) td.style.color = color;
-    if (weight) td.style.fontWeight = weight;
-    return td;
+  function cellValue(e,key) {
+    const value=e[key];
+    return format(value!=null && ['aum_krw','avg_trading_value_20d_krw'].includes(key) ? value/1e8 : value, key.includes('cost') || key.includes('expense') ? 4 : 2);
   }
-
-  function createSignalCell(signal) {
-    if (signal === 'BUY') return createCell('BUY', { className: 'signal-cell buy', color: COLOR.positive, weight: '900' });
-    if (signal === 'SELL') return createCell('SELL', { className: 'signal-cell sell', color: COLOR.negative, weight: '900' });
-    return createCell('WAIT', { className: 'signal-cell wait', color: COLOR.muted, weight: '800' });
-  }
-
-  function createScoreCell(row) {
-    const score = pairwiseScore(row);
-    const cell = createCell(score === null ? '–' : String(score), {
-      className: 'score-cell', weight: '900'
-    });
-    cell.title = score === null
-      ? '데이터 부족: 여섯 비교가 모두 BUY 또는 SELL일 때 점수를 표시합니다.'
-      : '여섯 비교 중 BUY 수: ' + score + ' (BUY마다 1점)';
-    return cell;
-  }
-
-  function setLoading(message) {
-    view.detailContent.replaceChildren();
-    const loading = document.createElement('div');
-    loading.className = 'loading';
-    loading.textContent = message;
-    view.detailContent.appendChild(loading);
-  }
-
-  function compareRows(a, b) {
-    const getter = SORT_FIELDS[sortState.key] || SORT_FIELDS.name;
-    const direction = sortState.dir === 'asc' ? 1 : -1;
-    if (sortState.key === 'score') {
-      const left = getter(a);
-      const right = getter(b);
-      // Missing scores stay last regardless of the selected direction.
-      if (left === null && right !== null) return 1;
-      if (right === null && left !== null) return -1;
-      if (left !== right) return (left - right) * direction;
-      return a.name.localeCompare(b.name, 'ko-KR');
-    }
-    const comparison = String(getter(a) ?? '').localeCompare(
-      String(getter(b) ?? ''),
-      'ko-KR',
-      { numeric: true }
-    );
-    if (comparison !== 0) return comparison * direction;
-    return a.name.localeCompare(b.name, 'ko-KR');
-  }
-
-  function updateSortHeaders() {
-    document.querySelectorAll('.momentum-table th[data-sort]').forEach(th => {
-      const active = th.dataset.sort === sortState.key;
-      th.classList.toggle('sort-active', active);
-      th.dataset.sortDir = active ? sortState.dir : '';
-      th.setAttribute('aria-sort', active ? (sortState.dir === 'asc' ? 'ascending' : 'descending') : 'none');
+  function renderTable() {
+    const rows=selectEtfs(etfs,{query:el('search').value,category:el('category').value,issuer:el('issuer').value,
+      hasFees:el('has-fees').checked,minVolume:el('min-volume').value,sort,dir});
+    el('count').textContent=`${rows.length} / ${etfs.length} ETFs`;
+    el('etf-body').innerHTML=rows.map(e=>`<tr${e.ticker===selected?' class="selected"':''}>`+COLUMNS.map(([key])=>
+      key==='name' ? `<td><button class="etf-link" data-ticker="${escapeHtml(e.ticker)}">${escapeHtml(e.name)}</button><small>${escapeHtml(e.ticker)}, 기준 ${escapeHtml(format(e.history_source.as_of))}</small></td>` :
+      `<td>${escapeHtml(cellValue(e,key))}</td>`).join('')+'</tr>').join('') || `<tr><td colspan="${COLUMNS.length}">검색 결과가 없습니다.</td></tr>`;
+    document.querySelectorAll('th[data-sort]').forEach(th=> {
+      th.setAttribute('aria-sort',th.dataset.sort===sort ? dir==='asc'?'ascending':'descending':'none');
     });
   }
-
-  document.querySelectorAll('.momentum-table th[data-sort]').forEach(th => {
-    th.tabIndex = 0;
-    th.addEventListener('click', () => {
-      const key = th.dataset.sort;
-      sortState = sortState.key === key
-        ? { key, dir: sortState.dir === 'asc' ? 'desc' : 'asc' }
-        : { key, dir: key === 'score' ? 'desc' : 'asc' };
-      renderMomentum();
-    });
-    th.addEventListener('keydown', event => {
-      if (event.key !== 'Enter' && event.key !== ' ') return;
-      event.preventDefault();
-      th.click();
-    });
-  });
-
-  function renderMomentum() {
-    const rows = allNames
-      .map(name => ({ name, strategy: data[name]?.strategy_signal }))
-      .filter(row => row.strategy?.available)
-      .sort(compareRows);
-    view.momentumSection.style.display = rows.length ? '' : 'none';
-    view.momentumBody.replaceChildren();
-    if (!rows.length) return;
-
-    updateSortHeaders();
-    rows.forEach(({ name, strategy }) => {
-      const ticker = data[name]?.ticker;
-      const row = { name, strategy };
-      const tr = document.createElement('tr');
-      tr.className = 'momentum-row' + (name === currentDetailName ? ' detail-active' : '');
-      tr.append(
-        createCell(name),
-        createScoreCell(row),
-        ...ALIGNMENT_SIGNAL_COLUMNS.map(column => createSignalCell(column.get(row)))
-      );
-      tr.addEventListener('click', () => {
-        if (!ticker) return;
-        currentVpPeriod = '1d';
-        location.hash = encodeURIComponent(ticker);
-        fetchDetail(ticker, name);
-      });
-      view.momentumBody.appendChild(tr);
-    });
+  function destroyCharts() {
+    priceChart?.destroy(); profileChart?.destroy(); priceChart=null; profileChart=null;
   }
-
-  function getDetailDisplayName(ticker, name, detailData = null) {
-    return detailData?.name || name || ticker;
-  }
-
-  function setDetailHeader(ticker, name, detailData = null) {
-    const displayName = getDetailDisplayName(ticker, name, detailData);
-    view.detailTitle.textContent = displayName;
-    view.detailSymbol.textContent = ticker && ticker !== displayName ? ticker : '';
-  }
-
-  view.detailClose.addEventListener('click', () => {
-    view.detailSection.style.display = 'none';
-    currentDetailName = null;
-    location.hash = '';
-    renderMomentum();
-  });
-
-  async function fetchDetail(ticker, name) {
-    view.detailSection.style.display = '';
-    currentDetailName = name;
-    renderMomentum();
-
-    if (detailCache[ticker]) {
-      if (!document.getElementById('chart-price') || !document.getElementById('chart-vp')) {
-        renderDetailPanels();
-        initVpTabs();
-      }
-      renderDetail(detailCache[ticker], ticker, name);
-      return;
-    }
-
-    setLoading('Loading...');
-    setDetailHeader(ticker, name);
+  async function showDetail(ticker) {
+    const id=++requestId; selected=ticker; destroyCharts(); renderTable();
+    el('detail-section').hidden=false; el('detail-title').textContent=etfs.find(e=>e.ticker===ticker).name;
+    el('detail-content').textContent='ETF 상세 정보를 불러오는 중…';
     try {
-      const response = await fetch(
-        'detail_data/' + encodeURIComponent(ticker) + '.json?v=' + DATA_VERSION,
-        { cache: 'no-store' }
-      );
-      if (!response.ok) throw new Error('not found');
-      const detail = await response.json();
-      detailCache[ticker] = detail;
-      renderDetailPanels();
-      initVpTabs();
-      renderDetail(detail, ticker, name);
-    } catch {
-      setLoading('Data not available');
-    }
-  }
-
-  function createChartPanel(title, canvasId) {
-    const panel = document.createElement('div');
-    panel.className = 'panel-box';
-    const chartWrap = document.createElement('div');
-    chartWrap.className = 'chart-wrap';
-    const canvas = document.createElement('canvas');
-    canvas.id = canvasId;
-    chartWrap.appendChild(canvas);
-    if (title) {
-      const heading = document.createElement('div');
-      heading.className = 'panel-title';
-      heading.textContent = title;
-      panel.appendChild(heading);
-    }
-    panel.appendChild(chartWrap);
-    return panel;
-  }
-
-  function renderDetailPanels() {
-    const pricePanel = createChartPanel('', 'chart-price');
-    const vpPanel = createChartPanel('Volume Profile', 'chart-vp');
-    vpPanel.classList.add('volume-profile-panel');
-
-    const tabs = document.createElement('div');
-    tabs.className = 'vp-tabs';
-    tabs.id = 'vp-tabs';
-    VP_PERIODS.forEach(period => {
-      const button = document.createElement('button');
-      button.type = 'button';
-      button.className = 'vp-tab' + (period === currentVpPeriod ? ' active' : '');
-      button.dataset.period = period;
-      button.textContent = period;
-      tabs.appendChild(button);
-    });
-    vpPanel.insertBefore(tabs, vpPanel.querySelector('.chart-wrap'));
-    view.detailContent.replaceChildren(pricePanel, vpPanel);
-  }
-
-  function initVpTabs() {
-    const tabs = document.getElementById('vp-tabs');
-    if (!tabs) return;
-    tabs.addEventListener('click', event => {
-      if (!event.target.matches('.vp-tab')) return;
-      currentVpPeriod = event.target.dataset.period;
-      document.querySelectorAll('.vp-tab').forEach(button => button.classList.remove('active'));
-      event.target.classList.add('active');
-      const ticker = data[currentDetailName]?.ticker;
-      if (ticker && detailCache[ticker]) renderVpChart(detailCache[ticker], currentVpPeriod);
-    });
-  }
-
-  function renderDetail(detailData, ticker = detailData.ticker, name = detailData.name) {
-    setDetailHeader(ticker, name, detailData);
-    renderPriceChart(detailData);
-    renderVpChart(detailData, currentVpPeriod);
-    view.detailSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-
-  function renderPriceChart(detailData) {
-    if (priceChart) priceChart.destroy();
-    priceChart = new Chart(
-      document.getElementById('chart-price'),
-      buildPriceChartConfig(detailData)
-    );
-  }
-
-  function renderVpChart(detailData, period) {
-    const vp = detailData.volume_profile[period];
-    if (!vp) {
-      if (vpChart) vpChart.destroy();
-      vpChart = null;
-      return;
-    }
-
-    const buckets = vp.buckets;
-    const labels = buckets.map(bucket => formatPrice(bucket.price));
-    const volumes = buckets.map(bucket => bucket.volume);
-    const annotations = buildVpAnnotations(detailData, vp);
-
-    const config = {
-      type: 'bar',
-      data: {
-        labels,
-        datasets: [{
-          label: 'Volume',
-          data: volumes,
-          backgroundColor: volumes.map((_, index) => (
-            buckets[index].price >= vp.vwap
-              ? 'rgba(34,197,94,0.35)'
-              : 'rgba(239,68,68,0.32)'
-          )),
-          borderColor: volumes.map((_, index) => (
-            buckets[index].price >= vp.vwap ? '#16a34a' : '#dc2626'
-          )),
-          borderWidth: 1
-        }]
-      },
-      options: {
-        indexAxis: 'y',
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: { duration: 200 },
-        plugins: {
-          legend: { display: false },
-          annotation: { annotations }
-        },
-        scales: {
-          x: {
-            ticks: { color: TICK, font: { size: 9 } },
-            grid: { color: GRID }
-          },
-          y: {
-            reverse: true,
-            ticks: { color: TICK, font: { size: 8 } },
-            grid: { color: GRID }
-          }
-        }
+      let detail=cache.get(ticker);
+      if(!detail) {
+        const response=await fetch(`detail_data/${encodeURIComponent(ticker)}.json?v=${DATA_VERSION}`);
+        if(!response.ok) throw new Error('상세 데이터를 불러올 수 없습니다.');
+        detail=await response.json(); cache.set(ticker,detail);
       }
-    };
-
-    if (vpChart) vpChart.destroy();
-    vpChart = new Chart(document.getElementById('chart-vp'), config);
+      if(id!==requestId) return;
+      renderDetail(detail);
+      el('detail-section').scrollIntoView({behavior:'smooth',block:'start'});
+      el('detail-title').focus({preventScroll:true});
+    } catch(error) { if(id===requestId) el('detail-content').textContent=error.message; }
   }
-
-  renderMomentum();
-
-  function handleHash() {
-    const hash = decodeURIComponent(location.hash.slice(1));
-    if (!hash) return;
-    const matched = allNames.find(name => data[name]?.ticker === hash);
-    if (matched) fetchDetail(hash, matched);
+  function renderDetail(detail) {
+    const f=detail.facts, meta=detail._meta;
+    const fields=[...COLUMNS.slice(1),['benchmark','기초지수'],['exposure','투자대상']];
+    const sourceFor=key=> f.sources[key] || (['aum_krw','premium_discount_pct'].includes(key)?f.sources.market:
+      key.startsWith('avg_')?f.sources.liquidity:['holdings_summary','top10_weight_pct'].includes(key)?f.sources.holdings:null);
+    el('detail-content').innerHTML=`<p class="muted">${escapeHtml(detail.ticker)}, 가격 기준 ${escapeHtml(format(meta.as_of))}, ${meta.rows} 거래일, ${sourceLink(meta)}</p>
+      ${meta.complete_history===false?'<p class="notice">캐시 데이터: 이전 이력이 누락될 수 있습니다. 전체 이력 다운로드가 필요합니다.</p>':''}
+      <div class="facts">${fields.map(([key,label])=>`<div><dt>${label}</dt><dd>${escapeHtml(cellValue(f,key))}</dd><small>${sourceLink(sourceFor(key))}</small></div>`).join('')}</div>
+      <h3>주요 보유자산</h3><p class="muted">${sourceLink(f.sources.holdings)}</p>
+      <div class="holdings">${f.holdings.length?'<ol>'+f.holdings.slice().sort((a,b)=>(b.weight_pct??-1)-(a.weight_pct??-1)).slice(0,10).map(h=>`<li>${escapeHtml(h.name)} <strong>${escapeHtml(format(h.weight_pct))}${h.weight_pct!=null?'%':''}</strong></li>`).join('')+'</ol>':'-'}</div>
+      <h3>VWAP 가격 차트</h3><div id="range-controls" class="controls" role="group" aria-label="차트 범위">${[1,5,10].map(y=>`<button data-years="${y}" aria-pressed="${y===1}">${y}년</button>`).join('')}</div>
+      <p id="chart-dates" class="muted" aria-live="polite"></p><div class="chart-wrap"><canvas id="price-chart" role="img" aria-label="ETF VWAP 가격 차트"></canvas></div>
+      <p class="muted">일봉 대표가격 (고가 + 저가 + 종가) / 3의 거래량 가중평균입니다. 기간별 준비구간과 거래량이 없는 구간은 비어 있습니다.</p>
+      <h3>Volume Profile</h3><p class="muted">최근 거래일 기준 일봉에서 추정한 가격대별 거래량입니다.</p>
+      <div id="vp-controls" class="controls" role="group" aria-label="Volume Profile 기간">${LINES.map(l=>`<button data-period="${l.window}" aria-pressed="${l.window===1}">${l.label}</button>`).join('')}</div>
+      <p id="vp-status" class="muted"></p><div class="chart-wrap profile"><canvas id="profile-chart" role="img" aria-label="가격대별 추정 거래량"></canvas></div>`;
+    function dates(years) {
+      const rows=sliceRange(detail.ohlcv,years);
+      el('chart-dates').textContent=rows.length?`${rows[0].date} ~ ${rows.at(-1).date}, ${rows.length} 거래일`:'가격 데이터가 없습니다.';
+    }
+    dates(1);
+    if(typeof Chart==='undefined') { el('chart-dates').textContent+=' 차트 라이브러리를 불러오지 못했습니다.'; return; }
+    priceChart=new Chart(el('price-chart'),{type:'line',data:chartData(sliceRange(detail.ohlcv,1)),options:{responsive:true,maintainAspectRatio:false,animation:false,
+      interaction:{mode:'index',axis:'x',intersect:false},scales:{x:{ticks:{maxTicksLimit:8}},y:{ticks:{callback:value=>format(value)}}}}});
+    el('range-controls').addEventListener('click',event=> {
+      const button=event.target.closest('[data-years]'); if(!button) return;
+      const years=Number(button.dataset.years); updateRange(priceChart,detail.ohlcv,years); dates(years);
+      el('range-controls').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));
+    });
+    function profile(period) {
+      profileChart?.destroy(); profileChart=null;
+      const p=detail.volume_profile[`${period}d`];
+      el('vp-status').textContent=p?'':'해당 기간의 데이터가 부족합니다.';
+      if(!p) return;
+      profileChart=new Chart(el('profile-chart'),{type:'bar',data:{labels:p.buckets.map(b=>format(b.price)),datasets:[{label:'추정 거래량',data:p.buckets.map(b=>b.volume),backgroundColor:LINES.find(l=>l.window===period).color}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}}}});
+    }
+    profile(1);
+    el('vp-controls').addEventListener('click',event=> {
+      const b=event.target.closest('[data-period]'); if(!b) return;
+      profile(Number(b.dataset.period)); el('vp-controls').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));
+    });
   }
-  handleHash();
-});
+  el('etf-head').innerHTML=COLUMNS.map(([key,label])=>`<th data-sort="${key}" scope="col" aria-sort="none"><button>${label} ↕</button></th>`).join('');
+  el('etf-head').addEventListener('click',event=> {
+    const th=event.target.closest('th[data-sort]'); if(!th) return;
+    dir=sort===th.dataset.sort && dir==='asc'?'desc':'asc'; sort=th.dataset.sort; renderTable();
+  });
+  el('etf-body').addEventListener('click',event=> {
+    const b=event.target.closest('[data-ticker]'); if(b) showDetail(b.dataset.ticker);
+  });
+  ['search','category','issuer','has-fees','min-volume'].forEach(id=>el(id).addEventListener('input',renderTable));
+  el('reset').addEventListener('click',()=> { ['search','category','issuer','min-volume'].forEach(id=>el(id).value=''); el('has-fees').checked=false;renderTable(); });
+  el('detail-close').addEventListener('click',()=> {
+    const previous=selected; ++requestId; selected=null; destroyCharts(); el('detail-section').hidden=true; renderTable();
+    document.querySelector(`[data-ticker="${previous}"]`)?.focus();
+  });
+  fetch(`trend_data.json?v=${DATA_VERSION}`).then(response=> {if(!response.ok) throw new Error('ETF 목록을 불러올 수 없습니다.');return response.json();}).then(data=> {
+    etfs=data.etfs;
+    el('updated').textContent=`생성 ${data._meta.updated_at}`;
+    el('status').textContent=`시장 정보: ${data._meta.market_status==='available'?'수집됨':'미수집'}, 전체 이력 미확인 ${data._meta.incomplete_history_count} ETFs`;
+    ['category','issuer'].forEach(key=> {
+      [...new Set(etfs.map(e=>e[key]).filter(Boolean))].sort().forEach(value=> {
+        const option=document.createElement('option'); option.value=value; option.textContent=value; el(key).append(option);
+      });
+      const missing=document.createElement('option');missing.value='__missing';missing.textContent='정보 없음';el(key).append(missing);
+    });
+    renderTable();
+  }).catch(error=> {el('status').textContent=error.message;});
+}
