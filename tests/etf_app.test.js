@@ -19,6 +19,8 @@ for(const dir of ['asc','desc']) {
  assert.equal(sorted[0].name,dir==='asc'?'Beta':'Alpha');
 }
 assert.equal(api.format(null),'-');
+assert.equal(api.cellValue({avg_volume_20d:1234.56},'avg_volume_20d'),'1,235');
+assert.equal(api.cellValue({avg_trading_value_20d_krw:123456789.0},'avg_trading_value_20d_krw'),'1');
 assert.equal(api.selectEtfs([{name:'Liquid',avg_volume_20d:1000},{name:'Thin',avg_volume_20d:5},{name:'Missing'}],{minVolume:100}).length,1);
 assert.equal(api.segmentWidth([1,1.0001],0,1),2);
 assert.equal(api.segmentWidth([1.0001,1],0,1),1);

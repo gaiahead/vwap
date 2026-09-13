@@ -1,5 +1,5 @@
 'use strict';
-const DATA_VERSION = 'data-etf-20260913-v4';
+const DATA_VERSION = 'data-etf-20260913-v5';
 const LINES = Object.freeze([
   { label: '1일', window: 1, color: '#eab308' },
   { label: '20일', window: 20, color: '#dc2626' },
@@ -7,13 +7,20 @@ const LINES = Object.freeze([
   { label: '240일', window: 240, color: '#2563eb' }
 ]);
 const COLUMNS = [
-  ['name','ETF 이름 / 티커'], ['category','분류'], ['issuer','운용사'],
+  ['name','ETF 이름 / 티커'], ['category','분류'],
   ['aum_krw','순자산, 억원'], ['avg_trading_value_20d_krw','20일 평균 거래대금, 억원 (추정)'],
   ['avg_volume_20d','20일 평균 거래량, 주']
 ];
 function format(value, digits=2) {
   return value === null || value === undefined || value === '' || (typeof value === 'number' && !Number.isFinite(value))
     ? '-' : typeof value === 'number' ? value.toLocaleString('ko-KR',{maximumFractionDigits:digits}) : String(value);
+}
+function cellValue(e,key) {
+  const value=e[key];
+  const scaled=value!=null && ['aum_krw','avg_trading_value_20d_krw'].includes(key) ? value/1e8 : value;
+  const digits=['avg_trading_value_20d_krw','avg_volume_20d'].includes(key) ? 0 :
+    key.includes('cost') || key.includes('expense') ? 4 : 2;
+  return format(scaled,digits);
 }
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -56,7 +63,7 @@ function updateRange(chart, rows, years) {
   chart.data=chartData(sliceRange(rows,years));
   chart.update();
 }
-if(typeof module!=='undefined') module.exports={COLUMNS,LINES,format,selectEtfs,sliceRange,segmentWidth,updateRange,chartData};
+if(typeof module!=='undefined') module.exports={COLUMNS,LINES,format,cellValue,selectEtfs,sliceRange,segmentWidth,updateRange,chartData};
 
 if(typeof document!=='undefined') {
   let etfs=[], selected=null, priceChart=null, profileChart=null, requestId=0;
@@ -68,10 +75,7 @@ if(typeof document!=='undefined') {
     const text=`기준 ${format(source.as_of)}${source.retrieved_at ? ', 수집 '+source.retrieved_at : ''}${source.note ? ', '+source.note : ''}`;
     return /^https:\/\//.test(source.url || '') ? `<a href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(text)}</a>` : escapeHtml(text);
   };
-  function cellValue(e,key) {
-    const value=e[key];
-    return format(value!=null && ['aum_krw','avg_trading_value_20d_krw'].includes(key) ? value/1e8 : value, key.includes('cost') || key.includes('expense') ? 4 : 2);
-  }
+
   function renderTable() {
     const rows=selectEtfs(etfs,{query:el('search').value,category:el('category').value,issuer:el('issuer').value,
       minVolume:el('min-volume').value,sort,dir});
@@ -105,7 +109,7 @@ if(typeof document!=='undefined') {
   }
   function renderDetail(detail) {
     const f=detail.facts, meta=detail._meta;
-    const fields=[...COLUMNS.slice(1),['benchmark','기초지수'],['exposure','투자대상']];
+    const fields=[COLUMNS[1],['issuer','운용사'],...COLUMNS.slice(2),['benchmark','기초지수'],['exposure','투자대상']];
     const sourceFor=key=> f.sources[key] || (['aum_krw','premium_discount_pct'].includes(key)?f.sources.market:
       key.startsWith('avg_')?f.sources.liquidity:['holdings_summary','top10_weight_pct'].includes(key)?f.sources.holdings:null);
     el('detail-content').innerHTML=`<p class="muted">${escapeHtml(detail.ticker)}, 가격 기준 ${escapeHtml(format(meta.as_of))}, ${meta.rows} 거래일, ${sourceLink(meta)}</p>

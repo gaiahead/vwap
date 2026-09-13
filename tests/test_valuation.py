@@ -9,7 +9,7 @@ def test_ui_contract():
     app = Path('app.js').read_text()
     columns = app.split('const COLUMNS = [')[1].split('];')[0]
     assert columns.rstrip().endswith("['avg_volume_20d','20일 평균 거래량, 주']")
-    assert all(x not in columns for x in ['cost', 'expense', 'premium', 'holdings', 'top10'])
+    assert all(x not in columns for x in ['issuer', 'cost', 'expense', 'premium', 'holdings', 'top10'])
     assert 'has-fees' not in Path('index.html').read_text() + app
     assert "type: 'logarithmic'" in app
     assert '로그 스케일' in app

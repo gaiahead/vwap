@@ -63,6 +63,7 @@ const click=(id,target)=>nodes.get(id).listeners.click({target});
   const price=charts.find(c=>c.canvas.id==='price-chart');
   assert.equal(price.config.options.scales.y.type,'logarithmic');
   assert.ok(nodes.get('detail-content').innerHTML.includes('보유자산 분석'));
+  assert.ok(nodes.get('detail-content').innerHTML.includes('운용사'));
   const controls=nodes.get('range-controls');
   assert.deepEqual(controls.children.map(b=>b.dataset.years),['1','5','10']);
   assert.deepEqual(controls.children.map(b=>b.attrs['aria-pressed']),['true','false','false']);
