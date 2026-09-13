@@ -1,5 +1,5 @@
 'use strict';
-const DATA_VERSION = 'data-etf-20260913-v8';
+const DATA_VERSION = 'data-etf-20260913-v9';
 const LINES = Object.freeze([
   { label: '1일', window: 1, color: '#eab308' },
   { label: '20일', window: 20, color: '#dc2626' },
@@ -78,8 +78,8 @@ const selectedDateLine={
   id:'selected-date-line',
   afterDatasetsDraw(chart) {
     if(!Number.isInteger(chart.$selectedIndex)) return;
-    const x=chart.scales.x.getPixelForValue(chart.$selectedIndex);
-    const {top,bottom}=chart.chartArea;
+    const {left,right,top,bottom}=chart.chartArea;
+    const x=Math.max(left+0.75,Math.min(right-0.75,chart.scales.x.getPixelForValue(chart.$selectedIndex)));
     chart.ctx.save(); chart.ctx.beginPath(); chart.ctx.moveTo(x,top); chart.ctx.lineTo(x,bottom);
     chart.ctx.lineWidth=1.5; chart.ctx.strokeStyle='#111827'; chart.ctx.stroke(); chart.ctx.restore();
   }
@@ -93,7 +93,7 @@ function updateRange(chart, rows, years) {
 if(typeof module!=='undefined') module.exports={COLUMNS,LINES,format,cellValue,selectEtfs,sliceRange,segmentWidth,updateRange,chartData,xTickLabel,xTickIndexes,selectedValues};
 
 if(typeof document!=='undefined') {
-  let etfs=[], selected=null, priceChart=null, requestId=0;
+  let etfs=[], selected=null, priceChart=null, requestId=0, cleanupChartInteractions=null;
   let sort='name',dir='asc';
   const cache=new Map();
   const el=id=>document.getElementById(id);
@@ -111,6 +111,7 @@ if(typeof document!=='undefined') {
     });
   }
   function destroyCharts() {
+    cleanupChartInteractions?.(); cleanupChartInteractions=null;
     priceChart?.destroy(); priceChart=null;
   }
   async function showDetail(ticker) {
@@ -165,22 +166,53 @@ if(typeof document!=='undefined') {
       interaction:{mode:'index',axis:'x',intersect:false},plugins:{tooltip:{enabled:false}},
       scales:{x:{afterBuildTicks:axis=> { const maxTicks=axis.chart.width<600?3:8; axis.ticks=xTickIndexes(axis.chart.data.labels.length,maxTicks).map(value=>({value})); },ticks:{autoSkip:false,callback:xTickLabel,maxRotation:0}},y:{type: 'logarithmic',ticks:{callback:value=>format(value)}}}}});
     priceChart.$rows=initialRows;
+    const chart=priceChart, canvas=chart.canvas, controls=el('range-controls');
+    let activePointer=null;
     const selectChartClientX=clientX=> {
-      const rect=priceChart.canvas.getBoundingClientRect();
-      const pixel=(clientX-rect.left)*(priceChart.width/rect.width);
-      selectChartIndex(priceChart,Math.round(priceChart.scales.x.getValueForPixel(pixel)));
+      const rect=canvas.getBoundingClientRect();
+      if(!chart.$rows.length || rect.width<=0) return;
+      const pixel=(clientX-rect.left)*(chart.width/rect.width);
+      const index=Math.round(chart.scales.x.getValueForPixel(pixel));
+      if(!Number.isFinite(index)) return;
+      selectChartIndex(chart,Math.max(0,Math.min(chart.$rows.length-1,index)));
     };
-    priceChart.canvas.addEventListener('click',event=>selectChartClientX(event.clientX));
-    priceChart.canvas.addEventListener('touchend',event=> {
-      const touch=event.changedTouches?.[0]; if(!touch) return;
-      selectChartClientX(touch.clientX);
-    },{passive:true});
-    el('range-controls').addEventListener('click',event=> {
+    const cancelDrag=()=> {
+      const pointer=activePointer;
+      activePointer=null;
+      if(pointer!==null && canvas.hasPointerCapture(pointer)) canvas.releasePointerCapture(pointer);
+    };
+    const handlers={
+      pointerdown:event=> {
+        if(activePointer!==null || event.isPrimary===false || event.button!==0) return;
+        activePointer=event.pointerId;
+        canvas.setPointerCapture(activePointer);
+        selectChartClientX(event.clientX);
+      },
+      pointermove:event=> {
+        if(event.pointerId===activePointer) selectChartClientX(event.clientX);
+      },
+      pointerup:event=> {
+        if(event.pointerId!==activePointer) return;
+        selectChartClientX(event.clientX);
+        cancelDrag();
+      },
+      pointercancel:event=> { if(event.pointerId===activePointer) cancelDrag(); },
+      lostpointercapture:event=> { if(event.pointerId===activePointer) cancelDrag(); }
+    };
+    Object.entries(handlers).forEach(([type,handler])=>canvas.addEventListener(type,handler));
+    const changeRange=event=> {
       const button=event.target.closest('[data-years]'); if(!button) return;
-      const years=Number(button.dataset.years); updateRange(priceChart,detail.ohlcv,years); dates(years);
+      cancelDrag();
+      const years=Number(button.dataset.years); updateRange(chart,detail.ohlcv,years); dates(years);
       el('chart-selection').textContent='차트에서 날짜를 선택하세요.';
-      el('range-controls').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));
-    });
+      controls.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));
+    };
+    controls.addEventListener('click',changeRange);
+    cleanupChartInteractions=()=> {
+      cancelDrag();
+      Object.entries(handlers).forEach(([type,handler])=>canvas.removeEventListener(type,handler));
+      controls.removeEventListener('click',changeRange);
+    };
   }
   el('etf-head').innerHTML=COLUMNS.map(([key,label])=>`<th data-sort="${key}" scope="col" aria-sort="none"><button>${label} ↕</button></th>`).join('');
   el('etf-head').addEventListener('click',event=> {
