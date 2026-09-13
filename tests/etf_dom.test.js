@@ -68,7 +68,7 @@ const click=(id,target)=>nodes.get(id).listeners.click({target});
   assert.equal(price.config.options.plugins.tooltip.enabled,false);
   assert.equal(price.config.options.scales.x.ticks.autoSkip,false);
   assert.ok(price.config.plugins.some(plugin=>plugin.id==='selected-date-line'));
-  price.config.options.onClick({},[],price);
+  nodes.get('price-chart').listeners.click({clientX:50});
   assert.equal(price.$selectedIndex,2);
   assert.equal(price.draws,1);
   assert.ok(nodes.get('chart-selection').innerHTML.includes('선택일'));

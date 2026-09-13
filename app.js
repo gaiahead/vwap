@@ -1,5 +1,5 @@
 'use strict';
-const DATA_VERSION = 'data-etf-20260913-v7';
+const DATA_VERSION = 'data-etf-20260913-v8';
 const LINES = Object.freeze([
   { label: '1일', window: 1, color: '#eab308' },
   { label: '20일', window: 20, color: '#dc2626' },
@@ -163,16 +163,17 @@ if(typeof document!=='undefined') {
     };
     priceChart=new Chart(el('price-chart'),{type:'line',data:chartData(initialRows),plugins:[selectedDateLine],options:{responsive:true,maintainAspectRatio:false,animation:false,
       interaction:{mode:'index',axis:'x',intersect:false},plugins:{tooltip:{enabled:false}},
-      onClick:(event,_elements,chart)=> {
-        const points=chart.getElementsAtEventForMode(event,'index',{intersect:false},false); if(!points.length) return;
-        selectChartIndex(chart,points[0].index);
-      },scales:{x:{afterBuildTicks:axis=> { const maxTicks=axis.chart.width<600?3:8; axis.ticks=xTickIndexes(axis.chart.data.labels.length,maxTicks).map(value=>({value})); },ticks:{autoSkip:false,callback:xTickLabel,maxRotation:0}},y:{type: 'logarithmic',ticks:{callback:value=>format(value)}}}}});
+      scales:{x:{afterBuildTicks:axis=> { const maxTicks=axis.chart.width<600?3:8; axis.ticks=xTickIndexes(axis.chart.data.labels.length,maxTicks).map(value=>({value})); },ticks:{autoSkip:false,callback:xTickLabel,maxRotation:0}},y:{type: 'logarithmic',ticks:{callback:value=>format(value)}}}}});
     priceChart.$rows=initialRows;
+    const selectChartClientX=clientX=> {
+      const rect=priceChart.canvas.getBoundingClientRect();
+      const pixel=(clientX-rect.left)*(priceChart.width/rect.width);
+      selectChartIndex(priceChart,Math.round(priceChart.scales.x.getValueForPixel(pixel)));
+    };
+    priceChart.canvas.addEventListener('click',event=>selectChartClientX(event.clientX));
     priceChart.canvas.addEventListener('touchend',event=> {
       const touch=event.changedTouches?.[0]; if(!touch) return;
-      const rect=priceChart.canvas.getBoundingClientRect();
-      const pixel=(touch.clientX-rect.left)*(priceChart.width/rect.width);
-      selectChartIndex(priceChart,Math.round(priceChart.scales.x.getValueForPixel(pixel)));
+      selectChartClientX(touch.clientX);
     },{passive:true});
     el('range-controls').addEventListener('click',event=> {
       const button=event.target.closest('[data-years]'); if(!button) return;
