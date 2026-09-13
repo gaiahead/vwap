@@ -11,6 +11,7 @@ class Element {
   focus() { this.focused=true; }
   scrollIntoView() {}
   closest() { return this; }
+  getBoundingClientRect() { return {left:0,width:100}; }
   querySelectorAll() { return this.children; }
   set innerHTML(html) {
     this.html=html;this.children=[];
@@ -18,7 +19,7 @@ class Element {
     for(const match of html.matchAll(/<th data-sort="([^"]+)"[^>]*>/g)) {
       const th=new Element();th.dataset.sort=match[1];this.children.push(th);
     }
-    for(const [id,key] of [['range-controls','years'],['vp-controls','period']]) {
+    for(const [id,key] of [['range-controls','years']]) {
       if(!html.includes(`id="${id}"`)) continue;
       const group=nodes.get(id);
       for(const match of html.matchAll(new RegExp(`<button data-${key}="([^"]+)" aria-pressed="([^"]+)"`,'g'))) {
@@ -34,8 +35,10 @@ const document={getElementById:id=>nodes.get(id),createElement:()=>new Element()
 const trend=JSON.parse(fs.readFileSync('trend_data.json'));
 const requests=[];const charts=[];
 class Chart {
-  constructor(canvas,config) { this.canvas=canvas;this.config=config;this.data=config.data;this.updates=0;charts.push(this); }
+  constructor(canvas,config) { this.canvas=canvas;this.config=config;this.data=config.data;this.updates=0;this.width=100;this.scales={x:{getValueForPixel:()=>2}};charts.push(this); }
   update() { this.updates++; }
+  draw() { this.draws=(this.draws||0)+1; }
+  getElementsAtEventForMode() { return [{index:2}]; }
   destroy() { this.destroyed=true; }
 }
 const fetch=async url=> {
@@ -62,6 +65,17 @@ const click=(id,target)=>nodes.get(id).listeners.click({target});
   assert.equal(nodes.get('detail-title').focused,true);
   const price=charts.find(c=>c.canvas.id==='price-chart');
   assert.equal(price.config.options.scales.y.type,'logarithmic');
+  assert.equal(price.config.options.plugins.tooltip.enabled,false);
+  assert.equal(price.config.options.scales.x.ticks.autoSkip,false);
+  assert.ok(price.config.plugins.some(plugin=>plugin.id==='selected-date-line'));
+  price.config.options.onClick({},[],price);
+  assert.equal(price.$selectedIndex,2);
+  assert.equal(price.draws,1);
+  assert.ok(nodes.get('chart-selection').innerHTML.includes('선택일'));
+  price.$selectedIndex=null;
+  nodes.get('price-chart').listeners.touchend({changedTouches:[{clientX:50}]});
+  assert.equal(price.$selectedIndex,2);
+  assert.ok(nodes.get('chart-selection').innerHTML.includes('선택일'));
   assert.ok(nodes.get('detail-content').innerHTML.includes('보유자산 분석'));
   assert.ok(nodes.get('detail-content').innerHTML.includes('운용사'));
   const controls=nodes.get('range-controls');

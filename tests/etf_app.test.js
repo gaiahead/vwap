@@ -36,3 +36,11 @@ assert.equal(updates,2);
 console.log('ETF search/filter/sort, calendar ranges, chart updates and colors passed');
 
 assert.deepEqual(api.chartData([-2,0,null,Infinity,NaN,3].map(v=>({vwap_1d:v}))).datasets[0].data,[null,null,null,null,null,3]);
+const ticks=Array.from({length:244},(_,i)=>({value:i}));
+assert.equal(api.xTickLabel.call({getLabelForValue:i=>`D${i}`},243,243,ticks),'D243');
+assert.equal(api.xTickLabel.call({getLabelForValue:i=>`D${i}`},242,242,ticks),'');
+assert.deepEqual(api.selectedValues([{date:'2026-09-11',vwap_1d:1234.6,vwap_20d:1100.4}],0),
+  {date:'2026-09-11',values:[['1일','1,235','#eab308'],['20일','1,100','#dc2626'],['60일','-','#16a34a'],['240일','-','#2563eb']]});
+assert.deepEqual(api.xTickIndexes(244),[0,35,69,104,139,174,208,243]);
+assert.deepEqual(api.xTickIndexes(244,3),[0,122,243]);
+assert.deepEqual(api.xTickIndexes(1),[0]);

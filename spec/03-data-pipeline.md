@@ -10,7 +10,7 @@ Without `--end`, use today's Korean calendar date. yfinance receives an explicit
 
 Preserve the Naver same-day KRX patch: after 15:30 KST, fetch the target day's row using the bounded siseJson request and overwrite/append it, including when Yahoo already supplied the same date. Do not patch unconfirmed intraday data. Patch source/date survive in detail metadata and the list's `history_source`. Naver failure leaves the Yahoo snapshot intact.
 
-Calculate rolling VWAP for [1, 20, 60, 240] using `(high + low + close) / 3`, weighted by volume. Require the full window; VWAP240 has exactly 239 warmup rows. Zero-volume windows are null. Profile buckets are a normal-distribution approximation of daily volume, not observed intraday trades. Its VWAP uses the exact same rolling formula.
+Calculate rolling VWAP for [1, 20, 60, 240] using `(high + low + close) / 3`, weighted by volume. Require the full window; VWAP240 has exactly 239 warmup rows. Zero-volume windows are null. Volume Profile and its bucket approximation are not generated.
 
 ## Market source
 
@@ -43,7 +43,7 @@ To maintain facts: obtain the latest issuer report or a verified documented feed
 
 ## Artifacts and failure handling
 
-`trend_data.json` contains run `_meta` and compact ETF list facts/search text/sources; never OHLCV, profile buckets or strategies. `detail_data/<ticker>.json` contains full available OHLCV, facts/holdings, profiles and `_meta`, identical to that ETF's list `history_source`. All generated JSON comes from this script with `allow_nan=False`; serialization occurs before opening output files. Unregistered detail files are removed by the generator.
+`trend_data.json` contains run `_meta` and compact ETF list facts/search text/sources; never OHLCV, profile buckets or strategies. `detail_data/<ticker>.json` contains full available OHLCV, facts/holdings and `_meta`, identical to that ETF's list `history_source`. All generated JSON comes from this script with `allow_nan=False`; serialization occurs before opening output files. Unregistered detail files are removed by the generator.
 
 Default download failures stop before replacing artifacts. `--allow-cache` explicitly permits cached fallback after a live failure; `--offline` regenerates from cached OHLCV without network. Both mark histories incomplete and preserve their real dates. Missing caches still produce ETF rows with null metrics and empty detail history. These modes cannot recover old truncated data and do not fulfill a full-history backfill.
 
@@ -69,6 +69,8 @@ Foreign ISINs use the holding name to query `https://stock.naver.com/api/autocom
 Foreign Naver failures produce null values and a warning without automatic Yahoo search or yfinance valuation fallback. Responses with neither valid PER nor PBR also count as failures. Failed results are not saved, so a new online run retries them; successful cache entries remain intact.
 
 Each metric uses `sum(w) / sum(w / ratio)` across positive valid values, retaining original ETF weights. `facts.valuation.per` and `.pbr` contain value, valid_count, top10_count, covered_weight_pct, top10_weight_pct, basis and as_of. Coverage is percentage points of the entire ETF, not a percentage of the top-ten subset. As-of is the holdings date; individual sources retain valuation periods and retrieval timestamps. Missing multiples stay null; fewer than ten stocks use the actual denominator.
+
+The UI presents PBR before PER and hides collection, source, period and basis details while retaining them in generated JSON for auditability.
 
 Valuation records younger than seven days are reusable online. Each ISIN is requested at most once per run, including failures. An online valuation failure produces null for that stock, without interrupting prices or silently using an expired value. Successful old cache entries remain available for explicit offline use. Holdings failures use a cached snapshot or the reviewed input, retaining its real date and marking failure/cache provenance in sources. Reviewed fallback snapshots are saved to the holdings cache. Empty successful portfolios are distinct from failed API calls.
 

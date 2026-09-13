@@ -13,6 +13,12 @@ def test_ui_contract():
     assert 'has-fees' not in Path('index.html').read_text() + app
     assert "type: 'logarithmic'" in app
     assert '로그 스케일' in app
+    assert "['pbr','per']" in app
+    assert "['per','pbr']" not in app
+    valuation_markup = app.split('<h3>보유자산 분석</h3>', 1)[1].split('<h3>VWAP 가격 차트', 1)[0]
+    assert 'basis' not in valuation_markup
+    assert 'period' not in valuation_markup
+    assert 'sourceLink' not in valuation_markup
 
 
 def test_normalize_direct_stocks():

@@ -1,5 +1,5 @@
 'use strict';
-const DATA_VERSION = 'data-etf-20260913-v5';
+const DATA_VERSION = 'data-etf-20260913-v7';
 const LINES = Object.freeze([
   { label: '1일', window: 1, color: '#eab308' },
   { label: '20일', window: 20, color: '#dc2626' },
@@ -59,36 +59,59 @@ function chartData(rows) {
       segment:{borderWidth:ctx=>segmentWidth(data,ctx.p0DataIndex,ctx.p1DataIndex)}};
   })};
 }
+function xTickLabel(value,index,ticks) {
+  const last=ticks.length-1;
+  const step=Math.max(1,Math.ceil(last/7));
+  return index===0 || index===last || index%step===0 ? this.getLabelForValue(value) : '';
+}
+function xTickIndexes(length,maxTicks=8) {
+  if(length<=0) return [];
+  if(length<=maxTicks) return Array.from({length},(_,index)=>index);
+  return [...new Set(Array.from({length:maxTicks},(_,index)=>Math.round(index*(length-1)/(maxTicks-1))))];
+}
+function selectedValues(rows,index) {
+  const row=rows[index];
+  if(!row) return null;
+  return {date:row.date,values:LINES.map(line=>[line.label,format(row[`vwap_${line.window}d`],0),line.color])};
+}
+const selectedDateLine={
+  id:'selected-date-line',
+  afterDatasetsDraw(chart) {
+    if(!Number.isInteger(chart.$selectedIndex)) return;
+    const x=chart.scales.x.getPixelForValue(chart.$selectedIndex);
+    const {top,bottom}=chart.chartArea;
+    chart.ctx.save(); chart.ctx.beginPath(); chart.ctx.moveTo(x,top); chart.ctx.lineTo(x,bottom);
+    chart.ctx.lineWidth=1.5; chart.ctx.strokeStyle='#111827'; chart.ctx.stroke(); chart.ctx.restore();
+  }
+};
 function updateRange(chart, rows, years) {
-  chart.data=chartData(sliceRange(rows,years));
+  chart.$rows=sliceRange(rows,years);
+  chart.$selectedIndex=null;
+  chart.data=chartData(chart.$rows);
   chart.update();
 }
-if(typeof module!=='undefined') module.exports={COLUMNS,LINES,format,cellValue,selectEtfs,sliceRange,segmentWidth,updateRange,chartData};
+if(typeof module!=='undefined') module.exports={COLUMNS,LINES,format,cellValue,selectEtfs,sliceRange,segmentWidth,updateRange,chartData,xTickLabel,xTickIndexes,selectedValues};
 
 if(typeof document!=='undefined') {
-  let etfs=[], selected=null, priceChart=null, profileChart=null, requestId=0;
+  let etfs=[], selected=null, priceChart=null, requestId=0;
   let sort='name',dir='asc';
   const cache=new Map();
   const el=id=>document.getElementById(id);
-  const sourceLink=source=> {
-    if(!source) return '-';
-    const text=`기준 ${format(source.as_of)}${source.retrieved_at ? ', 수집 '+source.retrieved_at : ''}${source.note ? ', '+source.note : ''}`;
-    return /^https:\/\//.test(source.url || '') ? `<a href="${escapeHtml(source.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(text)}</a>` : escapeHtml(text);
-  };
+
 
   function renderTable() {
     const rows=selectEtfs(etfs,{query:el('search').value,category:el('category').value,issuer:el('issuer').value,
       minVolume:el('min-volume').value,sort,dir});
     el('count').textContent=`${rows.length} / ${etfs.length} ETFs`;
     el('etf-body').innerHTML=rows.map(e=>`<tr${e.ticker===selected?' class="selected"':''}>`+COLUMNS.map(([key])=>
-      key==='name' ? `<td><button class="etf-link" data-ticker="${escapeHtml(e.ticker)}">${escapeHtml(e.name)}</button><small>${escapeHtml(e.ticker)}, 기준 ${escapeHtml(format(e.history_source.as_of))}</small></td>` :
+      key==='name' ? `<td><button class="etf-link" data-ticker="${escapeHtml(e.ticker)}">${escapeHtml(e.name)}</button><small>${escapeHtml(e.ticker)}</small></td>` :
       `<td>${escapeHtml(cellValue(e,key))}</td>`).join('')+'</tr>').join('') || `<tr><td colspan="${COLUMNS.length}">검색 결과가 없습니다.</td></tr>`;
     document.querySelectorAll('th[data-sort]').forEach(th=> {
       th.setAttribute('aria-sort',th.dataset.sort===sort ? dir==='asc'?'ascending':'descending':'none');
     });
   }
   function destroyCharts() {
-    priceChart?.destroy(); profileChart?.destroy(); priceChart=null; profileChart=null;
+    priceChart?.destroy(); priceChart=null;
   }
   async function showDetail(ticker) {
     const id=++requestId; selected=ticker; destroyCharts(); renderTable();
@@ -110,48 +133,52 @@ if(typeof document!=='undefined') {
   function renderDetail(detail) {
     const f=detail.facts, meta=detail._meta;
     const fields=[COLUMNS[1],['issuer','운용사'],...COLUMNS.slice(2),['benchmark','기초지수'],['exposure','투자대상']];
-    const sourceFor=key=> f.sources[key] || (['aum_krw','premium_discount_pct'].includes(key)?f.sources.market:
-      key.startsWith('avg_')?f.sources.liquidity:['holdings_summary','top10_weight_pct'].includes(key)?f.sources.holdings:null);
-    el('detail-content').innerHTML=`<p class="muted">${escapeHtml(detail.ticker)}, 가격 기준 ${escapeHtml(format(meta.as_of))}, ${meta.rows} 거래일, ${sourceLink(meta)}</p>
+    el('detail-content').innerHTML=`<p class="muted">${escapeHtml(detail.ticker)}, ${escapeHtml(format(meta.as_of))}, ${meta.rows} 거래일</p>
       ${meta.complete_history===false?'<p class="notice">캐시 데이터: 이전 이력이 누락될 수 있습니다. 전체 이력 다운로드가 필요합니다.</p>':''}
-      <div class="facts">${fields.map(([key,label])=>`<div><dt>${label}</dt><dd>${escapeHtml(cellValue(f,key))}</dd><small>${sourceLink(sourceFor(key))}</small></div>`).join('')}</div>
+      <div class="facts">${fields.map(([key,label])=>`<div><dt>${label}</dt><dd>${escapeHtml(cellValue(f,key))}</dd></div>`).join('')}</div>
       <h3>보유자산 분석</h3>
-      <p class="muted">상위 10개 직접 주식 기준이며 ETF 전체 밸류에이션과 다를 수 있습니다. 유효한 양수 값의 보유비중을 재정규화한 가중 조화평균입니다. 비중은 ETF 전체 대비이며, 기준일은 보유자산 기준입니다.</p>
-      <div class="facts">${['per','pbr'].map(key=> {
+      <p class="muted">상위 10개 직접 주식의 보유비중 가중 조화평균입니다. 0 이하와 미확인 값은 제외합니다.</p>
+      <div class="facts valuation">${['pbr','per'].map(key=> {
         const v=f.valuation?.[key];
-        return `<div><dt>상위 10개 기준 ${key.toUpperCase()}</dt><dd>${escapeHtml(format(v?.value))} <small>유효 ${v?.valid_count??0}/${v?.top10_count??0}, 비중 ${format(v?.covered_weight_pct)}%</small></dd><small>${escapeHtml((v?.basis??[]).join(', ') || '-')}</small></div>`;
-      }).join('')}</div><p class="muted">${sourceLink(f.sources.holdings)}</p>
-      <div class="holdings">${f.holdings.length?'<ol>'+f.holdings.map(h=>`<li>${escapeHtml(h.name)} (${escapeHtml(format(h.symbol || h.ticker))}) <strong>${escapeHtml(format(h.weight_pct))}%</strong>, PER ${format(h.per?.value)}, PBR ${format(h.pbr?.value)}<small>PER ${escapeHtml(h.per?.basis || '-')} ${escapeHtml(h.per?.period || '')}, PBR ${escapeHtml(h.pbr?.basis || '-')} ${escapeHtml(h.pbr?.period || '')}, ${sourceLink(h.source)}</small></li>`).join('')+'</ol>':'-'}</div>
+        return `<div><dt>${key.toUpperCase()}</dt><dd>${escapeHtml(format(v?.value))}</dd><small>유효 ${v?.valid_count??0}/${v?.top10_count??0}</small></div>`;
+      }).join('')}</div>
+      <div class="holdings">${f.holdings.length?'<ol>'+f.holdings.map(h=>`<li>${escapeHtml(h.name)} (${escapeHtml(format(h.symbol || h.ticker))}) <strong>${escapeHtml(format(h.weight_pct))}%</strong>, PBR ${format(h.pbr?.value)}, PER ${format(h.per?.value)}</li>`).join('')+'</ol>':'-'}</div>
       <h3>VWAP 가격 차트, 로그 스케일</h3><div id="range-controls" class="controls" role="group" aria-label="차트 범위">${[1,5,10].map(y=>`<button data-years="${y}" aria-pressed="${y===1}">${y}년</button>`).join('')}</div>
       <p id="chart-dates" class="muted" aria-live="polite"></p><div class="chart-wrap"><canvas id="price-chart" role="img" aria-label="ETF VWAP 가격 차트"></canvas></div>
-      <p class="muted">일봉 대표가격 (고가 + 저가 + 종가) / 3의 거래량 가중평균입니다. 기간별 준비구간과 거래량이 없는 구간은 비어 있습니다.</p>
-      <h3>Volume Profile</h3><p class="muted">최근 거래일 기준 일봉에서 추정한 가격대별 거래량입니다.</p>
-      <div id="vp-controls" class="controls" role="group" aria-label="Volume Profile 기간">${LINES.map(l=>`<button data-period="${l.window}" aria-pressed="${l.window===1}">${l.label}</button>`).join('')}</div>
-      <p id="vp-status" class="muted"></p><div class="chart-wrap profile"><canvas id="profile-chart" role="img" aria-label="가격대별 추정 거래량"></canvas></div>`;
+      <div id="chart-selection" class="chart-selection" aria-live="polite">차트에서 날짜를 선택하세요.</div>
+      <p class="muted">일봉 대표가격 (고가 + 저가 + 종가) / 3의 거래량 가중평균입니다. 기간별 준비구간과 거래량이 없는 구간은 비어 있습니다.</p>`;
     function dates(years) {
       const rows=sliceRange(detail.ohlcv,years);
       el('chart-dates').textContent=rows.length?`${rows[0].date} ~ ${rows.at(-1).date}, ${rows.length} 거래일`:'가격 데이터가 없습니다.';
     }
     dates(1);
     if(typeof Chart==='undefined') { el('chart-dates').textContent+=' 차트 라이브러리를 불러오지 못했습니다.'; return; }
-    priceChart=new Chart(el('price-chart'),{type:'line',data:chartData(sliceRange(detail.ohlcv,1)),options:{responsive:true,maintainAspectRatio:false,animation:false,
-      interaction:{mode:'index',axis:'x',intersect:false},scales:{x:{ticks:{maxTicksLimit:8}},y:{type: 'logarithmic',ticks:{callback:value=>format(value)}}}}});
+    const initialRows=sliceRange(detail.ohlcv,1);
+    const selectChartIndex=(chart,index)=> {
+      if(!Number.isInteger(index) || index<0 || index>=chart.$rows.length) return;
+      chart.$selectedIndex=index;
+      const selection=selectedValues(chart.$rows,index);
+      el('chart-selection').innerHTML=`<strong>선택일 ${escapeHtml(selection.date)}</strong>${selection.values.map(([label,value,color])=>`<span><i style="background:${color}"></i>${label} ${escapeHtml(value)}원</span>`).join('')}`;
+      chart.draw();
+    };
+    priceChart=new Chart(el('price-chart'),{type:'line',data:chartData(initialRows),plugins:[selectedDateLine],options:{responsive:true,maintainAspectRatio:false,animation:false,
+      interaction:{mode:'index',axis:'x',intersect:false},plugins:{tooltip:{enabled:false}},
+      onClick:(event,_elements,chart)=> {
+        const points=chart.getElementsAtEventForMode(event,'index',{intersect:false},false); if(!points.length) return;
+        selectChartIndex(chart,points[0].index);
+      },scales:{x:{afterBuildTicks:axis=> { const maxTicks=axis.chart.width<600?3:8; axis.ticks=xTickIndexes(axis.chart.data.labels.length,maxTicks).map(value=>({value})); },ticks:{autoSkip:false,callback:xTickLabel,maxRotation:0}},y:{type: 'logarithmic',ticks:{callback:value=>format(value)}}}}});
+    priceChart.$rows=initialRows;
+    priceChart.canvas.addEventListener('touchend',event=> {
+      const touch=event.changedTouches?.[0]; if(!touch) return;
+      const rect=priceChart.canvas.getBoundingClientRect();
+      const pixel=(touch.clientX-rect.left)*(priceChart.width/rect.width);
+      selectChartIndex(priceChart,Math.round(priceChart.scales.x.getValueForPixel(pixel)));
+    },{passive:true});
     el('range-controls').addEventListener('click',event=> {
       const button=event.target.closest('[data-years]'); if(!button) return;
       const years=Number(button.dataset.years); updateRange(priceChart,detail.ohlcv,years); dates(years);
+      el('chart-selection').textContent='차트에서 날짜를 선택하세요.';
       el('range-controls').querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed',String(b===button)));
-    });
-    function profile(period) {
-      profileChart?.destroy(); profileChart=null;
-      const p=detail.volume_profile[`${period}d`];
-      el('vp-status').textContent=p?'':'해당 기간의 데이터가 부족합니다.';
-      if(!p) return;
-      profileChart=new Chart(el('profile-chart'),{type:'bar',data:{labels:p.buckets.map(b=>format(b.price)),datasets:[{label:'추정 거래량',data:p.buckets.map(b=>b.volume),backgroundColor:LINES.find(l=>l.window===period).color}]},options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}}}});
-    }
-    profile(1);
-    el('vp-controls').addEventListener('click',event=> {
-      const b=event.target.closest('[data-period]'); if(!b) return;
-      profile(Number(b.dataset.period)); el('vp-controls').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',String(x===b)));
     });
   }
   el('etf-head').innerHTML=COLUMNS.map(([key,label])=>`<th data-sort="${key}" scope="col" aria-sort="none"><button>${label} ↕</button></th>`).join('');
@@ -170,8 +197,7 @@ if(typeof document!=='undefined') {
   });
   fetch(`trend_data.json?v=${DATA_VERSION}`).then(response=> {if(!response.ok) throw new Error('ETF 목록을 불러올 수 없습니다.');return response.json();}).then(data=> {
     etfs=data.etfs;
-    el('updated').textContent=`생성 ${data._meta.updated_at}`;
-    el('status').textContent=`시장 정보: ${data._meta.market_status==='available'?'수집됨':'미수집'}, 전체 이력 미확인 ${data._meta.incomplete_history_count} ETFs`;
+    el('status').textContent=data._meta.incomplete_history_count ? `전체 이력 확인 필요 ${data._meta.incomplete_history_count} ETFs` : '';
     ['category','issuer'].forEach(key=> {
       [...new Set(etfs.map(e=>e[key]).filter(Boolean))].sort().forEach(value=> {
         const option=document.createElement('option'); option.value=value; option.textContent=value; el(key).append(option);

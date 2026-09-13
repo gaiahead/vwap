@@ -12,7 +12,6 @@ import numpy as np
 import pandas as pd
 import requests
 import yfinance as yf
-from scipy.stats import norm
 
 ASSETS: list[tuple[str, str]] = [
     ('TIGER 토탈월드스탁액티브', '0060H0.KS'),
@@ -73,8 +72,6 @@ ASSETS: list[tuple[str, str]] = [
 ]
 
 WINDOWS: list[int] = [1, 20, 60, 240]
-VOLUME_PROFILE_WINDOWS = WINDOWS
-N_BUCKETS = 20
 KST = timezone(timedelta(hours=9))
 KRX_TODAY_PATCH_AFTER = time(15, 30)
 DETAIL_DIR = "detail_data"
@@ -147,39 +144,6 @@ def prepare_storage_frame(df):
         source[f"vwap_{window}d"] = compute_proxy_vwap_series(source, window)
     return source
 
-
-def compute_vwap_with_profile(
-    df_window: pd.DataFrame,
-) -> tuple[float | None, list[dict[str, float]]]:
-    """정확한 대표가격 VWAP와 정규분포 기반 프로필 버킷 배열을 반환."""
-    exact_vwap = compute_proxy_vwap_series(df_window, len(df_window))[-1]
-    lo = float(df_window["low"].min())
-    hi = float(df_window["high"].max())
-    if hi == lo:
-        mid = float(df_window["close"].mean())
-        return exact_vwap, [{"price": mid, "volume": 0.0} for _ in range(N_BUCKETS)]
-
-    bsize = (hi - lo) / N_BUCKETS
-    bucket_prices = np.array([lo + (b + 0.5) * bsize for b in range(N_BUCKETS)])
-    bvol = np.zeros(N_BUCKETS)
-
-    for _, r in df_window.iterrows():
-        mu = (float(r["high"]) + float(r["low"]) + float(r["close"])) / 3
-        sigma = (float(r["high"]) - float(r["low"])) / 4
-        if sigma == 0:
-            idx = min(N_BUCKETS - 1, int((mu - lo) / bsize))
-            bvol[idx] += float(r["volume"])
-            continue
-        weights = norm.pdf(bucket_prices, mu, sigma)
-        total_w = weights.sum()
-        if total_w > 0:
-            bvol += float(r["volume"]) * (weights / total_w)
-
-    buckets = [
-        {"price": round(float(bucket_prices[i]), 4), "volume": round(float(bvol[i]), 2)}
-        for i in range(N_BUCKETS)
-    ]
-    return exact_vwap, buckets
 
 def typical_price_series(df: pd.DataFrame) -> pd.Series:
     """일봉 OHLC의 대표가격 `(high + low + close) / 3`."""
@@ -423,11 +387,6 @@ def build_asset_outputs(name, ticker, df, market=None, as_of=None, optional=None
     for dt, row in work.iterrows():
         rows.append({"date": date_key(dt), **{key: safe_round(row[key]) for key in OHLCV_COLUMNS},
                      **{f"vwap_{w}d": safe_round(row[f"vwap_{w}d"]) for w in WINDOWS}})
-    profiles = {}
-    for period in WINDOWS:
-        if len(work) >= period:
-            vwap, buckets = compute_vwap_with_profile(work.tail(period))
-            profiles[f"{period}d"] = {"vwap": safe_round(vwap), "buckets": buckets}
     meta = {"url": f"https://finance.yahoo.com/quote/{ticker}/history/",
             "as_of": date_key(df.index[-1]) if len(df) else None,
             "first_date": date_key(df.index[0]) if len(df) else None,
@@ -435,8 +394,7 @@ def build_asset_outputs(name, ticker, df, market=None, as_of=None, optional=None
     brief = {"name": name, "ticker": ticker, **{k: v for k, v in facts.items() if k != "holdings"},
              "holdings_text": " ".join(str(h.get("name", "")) + " " + str(h.get("ticker", "")) for h in facts["holdings"]),
              "history_source": meta}
-    detail = {"name": name, "ticker": ticker, "facts": facts, "ohlcv": rows,
-              "volume_profile": profiles, "_meta": meta}
+    detail = {"name": name, "ticker": ticker, "facts": facts, "ohlcv": rows, "_meta": meta}
     return brief, detail
 
 

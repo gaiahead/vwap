@@ -58,7 +58,7 @@ def test_schema():
     assert 'strategy_signal' not in brief and 'strategy_signal' not in detail
     assert 'ohlcv' not in brief and 'holdings' not in brief
     assert len(detail['ohlcv'])==800
-    assert set(detail['volume_profile'])=={'1d','20d','60d','240d'}
+    assert 'volume_profile' not in detail
     json.dumps(detail,allow_nan=False)
 
 def test_generated_parity():
@@ -72,8 +72,7 @@ def test_generated_parity():
         rows=detail['ohlcv']
         if rows:
             assert rows[0]['date']>=trend['_meta']['history_start']
-            for p,profile in detail['volume_profile'].items():
-                assert profile['vwap']==pytest.approx(rows[-1][f'vwap_{p}'],abs=.0001)
+            assert rows[-1]['vwap_1d'] is not None
         assert not {'strategy_signal','strategies'} & detail.keys()
 
 def test_js_behavior():
@@ -85,6 +84,15 @@ def test_active_contract():
     for word in ['BUY','SELL','WAIT','종목','alignment_','vwap_5d','vwap_120d']:
         assert word not in html+app
     assert 'aria-live' in html
+    assert 'Volume Profile' not in html+app
+    assert 'volume_profile' not in app
+    assert "['pbr','per']" in app
+    assert 'id="chart-selection"' in app
+    assert 'selected-date-line' in app
+    assert 'autoSkip:false' in app
+    assert 'tooltip:{enabled:false}' in app
+    assert '시장 정보:' not in app
+    assert '생성 ${' not in html+app
     import re
     assert re.search(r'style.css\?v=([^"\']+)',html)[1] == re.search(r"DATA_VERSION = '([^']+)'",app)[1]
 
@@ -107,7 +115,7 @@ def test_market_invalid_numbers_and_zero_volume():
     brief,detail=gen.build_asset_outputs('ETF','069500.KS',data,{'nav':0,'nowVal':100,'marketSum':'garbage'})
     assert brief['aum_krw'] is None and brief['premium_discount_pct'] is None
     assert all(row['vwap_240d'] is None for row in detail['ohlcv'])
-    assert detail['volume_profile']['240d']['vwap'] is None
+    assert 'volume_profile' not in detail
     json.dumps(detail,allow_nan=False)
 
 
