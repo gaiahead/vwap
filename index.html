@@ -6,11 +6,11 @@
   <title>ETF 탐색, ETF Analyzer</title>
   <link rel="icon" href="data:,"/>
   <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js"></script>
-  <link rel="stylesheet" href="style.css?v=data-etf-20260912-v3"/>
-  <script defer src="app.js?v=data-etf-20260912-v3"></script>
+  <link rel="stylesheet" href="style.css?v=data-etf-20260913-v4"/>
+  <script defer src="app.js?v=data-etf-20260913-v4"></script>
 </head>
 <body>
-<header><h1>ETF 탐색</h1><p>규모, 유동성, 비용과 보유자산을 한눈에, <span id="updated"></span></p></header>
+<header><h1>ETF 탐색</h1><p>규모, 유동성과 보유자산을 한눈에, <span id="updated"></span></p></header>
 <main>
   <section class="panel" aria-labelledby="discovery-title">
     <h2 id="discovery-title">내게 맞는 ETF 찾기</h2>
@@ -19,11 +19,10 @@
       <label>분류<select id="category"><option value="">전체 분류</option></select></label>
       <label>운용사<select id="issuer"><option value="">전체 운용사</option></select></label>
       <label>20일 평균 거래량 최소, 주<input id="min-volume" type="number" min="0" step="1000" placeholder="제한 없음"/></label>
-      <label class="check"><input type="checkbox" id="has-fees"/>총보수 정보 있음</label>
       <button id="reset">초기화</button>
     </div>
     <p id="status" class="muted" role="status">ETF 목록을 불러오는 중…</p>
-    <p class="muted">미확인 값은 -로 표시합니다. 평균 거래대금은 최근 20거래일 종가 × 거래량의 평균 추정치입니다. 순자산은 Naver ETF 목록의 규모 기준이며, 비용 항목은 서로 포함될 수 있어 합산하지 않습니다.</p>
+    <p class="muted">미확인 값은 -로 표시합니다. 평균 거래대금은 최근 20거래일 종가 × 거래량의 평균 추정치입니다. 순자산은 Naver ETF 목록의 규모 기준입니다.</p>
     <p id="count" aria-live="polite"></p>
     <div class="table-wrap" tabindex="0" role="region" aria-label="ETF 검색 결과, 가로로 스크롤 가능">
       <table><caption class="sr-only">ETF 비교 정보. 열 제목 버튼으로 정렬하고 ETF 이름으로 상세 정보를 엽니다.</caption><thead><tr id="etf-head"></tr></thead><tbody id="etf-body"></tbody></table>

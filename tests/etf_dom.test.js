@@ -28,13 +28,13 @@ class Element {
   }
   get innerHTML() { return this.html; }
 }
-for(const id of ['search','category','issuer','has-fees','min-volume','count','etf-head','etf-body','reset','detail-close','detail-section','detail-content','detail-title','updated','status']) nodes.set(id,new Element(id));
+for(const id of ['search','category','issuer','min-volume','count','etf-head','etf-body','reset','detail-close','detail-section','detail-content','detail-title','updated','status']) nodes.set(id,new Element(id));
 const document={getElementById:id=>nodes.get(id),createElement:()=>new Element(),
   querySelectorAll:()=>nodes.get('etf-head').children,querySelector:()=>null};
 const trend=JSON.parse(fs.readFileSync('trend_data.json'));
 const requests=[];const charts=[];
 class Chart {
-  constructor(canvas,config) { this.canvas=canvas;this.data=config.data;this.updates=0;charts.push(this); }
+  constructor(canvas,config) { this.canvas=canvas;this.config=config;this.data=config.data;this.updates=0;charts.push(this); }
   update() { this.updates++; }
   destroy() { this.destroyed=true; }
 }
@@ -49,7 +49,7 @@ const click=(id,target)=>nodes.get(id).listeners.click({target});
   await flush();await flush();
   assert.equal(nodes.get('count').textContent,'55 / 55 ETFs');
   nodes.get('search').value='Nvidia';nodes.get('search').listeners.input();
-  assert.equal(nodes.get('count').textContent,'1 / 55 ETFs');
+  assert.equal(nodes.get('count').textContent,`${trend.etfs.filter(e=>(e.holdings_text||'').toLowerCase().includes('nvidia')).length} / 55 ETFs`);
   click('reset');
   const sortHeader=nodes.get('etf-head').children.find(th=>th.dataset.sort==='avg_volume_20d');
   click('etf-head',sortHeader);
@@ -61,6 +61,8 @@ const click=(id,target)=>nodes.get(id).listeners.click({target});
   assert.equal(nodes.get('detail-section').hidden,false);
   assert.equal(nodes.get('detail-title').focused,true);
   const price=charts.find(c=>c.canvas.id==='price-chart');
+  assert.equal(price.config.options.scales.y.type,'logarithmic');
+  assert.ok(nodes.get('detail-content').innerHTML.includes('보유자산 분석'));
   const controls=nodes.get('range-controls');
   assert.deepEqual(controls.children.map(b=>b.dataset.years),['1','5','10']);
   assert.deepEqual(controls.children.map(b=>b.attrs['aria-pressed']),['true','false','false']);

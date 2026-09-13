@@ -32,3 +32,5 @@ assert.equal(chart.data.labels.length,6);
 assert.equal(chart.data.datasets.length,4);
 assert.equal(updates,2);
 console.log('ETF search/filter/sort, calendar ranges, chart updates and colors passed');
+
+assert.deepEqual(api.chartData([-2,0,null,Infinity,NaN,3].map(v=>({vwap_1d:v}))).datasets[0].data,[null,null,null,null,null,3]);
