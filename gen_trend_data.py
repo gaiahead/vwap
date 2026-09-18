@@ -421,8 +421,7 @@ def cached_history(ticker, end_date):
 
 # Public K-ETF browser bundle eee787d0b8d7120b.js, not a private credential.
 KETF_TOKEN = 'd3558a5223371268350260f727d5c8a6066df92f3ca5180f39ce667494a0f2a3'
-CACHE_FILE = 'valuation_cache.json'
-CACHE_DAYS = 7
+CACHE_FILE = 'holdings_cache.json'
 
 
 def positive(value):
@@ -456,174 +455,24 @@ def normalize_holdings(payload):
             'holdings': sorted(holdings, key=lambda h: h['weight_pct'], reverse=True)[:10]}
 
 
-def empty_ratio():
-    return {'value': None, 'basis': None, 'period': None, 'is_consensus': None}
-
-
-def parse_naver_valuation(payload):
-    info = payload['financeInfo']
-    periods = sorted(info['trTitleList'],
-                     key=lambda p: (p.get('isConsensus') == 'Y', str(p['key'])), reverse=True)
-    result = {key: empty_ratio() for key in ('per', 'pbr')}
-    for metric in result:
-        row = next((r for r in info['rowList'] if re.match(r'^' + metric + r'(?:\b|\()', str(r.get('title', '')), re.I)), None)
-        if row is None:
-            continue
-        for period in periods:
-            cell = row.get('columns', {}).get(str(period['key']), {})
-            value = positive(cell.get('value') if isinstance(cell, dict) else cell)
-            if value is not None:
-                consensus = period.get('isConsensus') == 'Y'
-                result[metric] = {'value': value, 'period': period.get('title') or str(period['key']),
-                                  'basis': 'consensus' if consensus else 'actual', 'is_consensus': consensus}
-                break
-    return result
-
-
-def parse_naver_foreign_valuation(payload):
-    def period_date(period):
-        # Sort by the displayed date, never by symbolic keys such as last12month.
-        for field in ('title', 'key'):
-            match = re.search(r'((?:19|20)\d{2})[./-]?(\d{2})(?:[./-]?(\d{2}))?',
-                              str(period.get(field, '')))
-            if match:
-                return tuple(int(part or 0) for part in match.groups())
-        return (0, 0, 0)
-
-    periods = sorted(payload['trTitleList'], key=period_date, reverse=True)
-    result = {key: empty_ratio() for key in ('per', 'pbr')}
-    for metric in result:
-        row = next((r for r in payload['rowList'] if r.get('title') == metric.upper()), None)
-        if row is None:
-            continue
-        for period in periods:
-            if period_date(period) == (0, 0, 0):
-                continue
-            cell = row.get('columns', {}).get(str(period['key']), {})
-            value = positive(cell.get('value') if isinstance(cell, dict) else cell)
-            if value is not None:
-                result[metric] = {'value': value, 'basis': 'actual',
-                                  'period': period.get('title') or str(period['key']),
-                                  'is_consensus': False}
-                break
-    return result
-
-
-def select_naver_foreign_stock(payload, name, isin=None, isin_lookup=None):
-    candidates = [item for item in payload['result']['items']
-                  if item.get('category') == 'stock' and item.get('reutersCode')
-                  and item.get('nationCode') not in ('KOR', 'KR', 'Korea')
-                  and not item['reutersCode'].endswith(('.KS', '.KQ'))]
-    exact = [item for item in candidates if item.get('name') == name]
-    matches = exact or candidates
-    if len(matches) == 1:
-        return matches[0]
-    if isin and isin_lookup:
-        isin_matches = []
-        for item in matches:
-            try:
-                if isin_lookup(item).get('isinCode') == isin:
-                    isin_matches.append(item)
-            except Exception:
-                continue
-        if len(isin_matches) == 1:
-            return isin_matches[0]
-        country = {'US': 'USA', 'JP': 'JPN', 'CN': 'CHN', 'HK': 'HKG'}.get(isin[:2])
-        primary = [item for item in isin_matches if item.get('nationCode') == country]
-        if len(primary) == 1:
-            return primary[0]
-    raise ValueError(f'Ambiguous or missing foreign stock for {name}')
-
-
-def parse_yahoo_valuation(info):
-    result = {key: empty_ratio() for key in ('per', 'pbr')}
-    for field, basis in [('forwardPE', 'forward'), ('trailingPE', 'trailing')]:
-        value = positive(info.get(field))
-        if value is not None:
-            result['per'].update(value=value, basis=basis)
-            break
-    result['pbr'].update(value=positive(info.get('priceToBook')), basis='priceToBook')
-    return result
-
-
-def aggregate_multiple(holdings, metric, as_of):
-    valid = [(positive(h.get('weight_pct')), positive(h.get(metric, {}).get('value')), h.get(metric, {}).get('basis')) for h in holdings]
-    valid = [(w, v, b) for w, v, b in valid if w is not None and v is not None]
-    covered = sum(w for w, _, _ in valid)
-    return {'value': safe_round(covered / sum(w / v for w, v, _ in valid)) if valid else None,
-            'valid_count': len(valid), 'top10_count': len(holdings),
-            'covered_weight_pct': safe_round(covered),
-            'top10_weight_pct': safe_round(sum(positive(h.get('weight_pct')) or 0 for h in holdings)),
-            'basis': sorted({b for _, _, b in valid if b}), 'as_of': as_of}
-
-
 def fetch_json(url, **kwargs):
     response = requests.get(url, timeout=15, **kwargs)
     response.raise_for_status()
     return response.json()
 
 
-def fetch_valuation(isin, name=None):
-    if re.fullmatch(r'KR[0-9A-Z]{10}', isin) and re.fullmatch(r'[0-9A-Z]{6}', isin[3:9]):
-        symbol = isin[3:9]
-        url = f'https://m.stock.naver.com/api/stock/{symbol}/finance/annual'
-        result = parse_naver_valuation(fetch_json(url))
-    else:
-        if not name or name == '-':
-            raise ValueError(f'Missing holding name for {isin}')
-        search_url = 'https://stock.naver.com/api/autocomplete/search/autoComplete'
-        params = {'query': name, 'target': 'stock'}
-        search_payload = fetch_json(search_url, params=params)
-        def lookup_isin(item):
-            detail_url = f"https://stock.naver.com/api/foreign/{item['reutersCode']}/detail"
-            return fetch_json(detail_url, params={'codeType': 'ETF'})
-        quote = select_naver_foreign_stock(search_payload, name, isin, lookup_isin)
-        symbol = quote['reutersCode']
-        api_url = 'https://stock.naver.com/api/securityService/stock/finance/ratios/annual'
-        result = parse_naver_foreign_valuation(fetch_json(api_url, params={'reutersCode': symbol}))
-        if all(result[key]['value'] is None for key in ('per', 'pbr')):
-            raise ValueError(f'No valid foreign PER/PBR for {name} ({symbol})')
-        url = f'https://stock.naver.com/worldstock/stock/{symbol}/total'
-        result['search_url'] = requests.Request('GET', search_url, params=params).prepare().url
-        result['api_url'] = requests.Request('GET', api_url, params={'reutersCode': symbol}).prepare().url
-    return {**result, 'symbol': symbol, 'url': url}
-
-
-class ValuationCollector:
+class HoldingsCollector:
     def __init__(self, offline=False, path=CACHE_FILE):
         self.offline, self.path = offline, Path(path)
         self.now = datetime.now(timezone.utc)
-        self.attempted = {}
-        self.cache = {'holdings': {}, 'stocks': {}}
+        self.cache = {'holdings': {}}
         if self.path.exists():
             try:
-                self.cache.update(json.loads(self.path.read_text(encoding='utf-8')))
+                payload = json.loads(self.path.read_text(encoding='utf-8'))
+                if isinstance(payload.get('holdings'), dict):
+                    self.cache['holdings'] = payload['holdings']
             except (ValueError, OSError) as error:
-                print(f'[WARN] Invalid valuation cache: {error}')
-
-    def fresh(self, record):
-        try:
-            age = self.now - datetime.fromisoformat(record['retrieved_at'])
-            return timedelta(0) <= age < timedelta(days=CACHE_DAYS)
-        except (KeyError, ValueError, TypeError):
-            return False
-
-    def stock(self, isin, name=None):
-        record = self.cache['stocks'].get(isin, {})
-        if isin in self.attempted:
-            return self.attempted[isin]
-        if self.offline or self.fresh(record):
-            return {**record, 'status': 'cached' if record else 'unavailable'}
-        try:
-            result = {**fetch_valuation(isin, name), 'retrieved_at': self.now.isoformat()}
-            self.cache['stocks'][isin] = result
-            self.attempted[isin] = {**result, 'status': 'live'}
-            return self.attempted[isin]
-        except Exception as error:
-            print(f'[WARN] Valuation {isin}: {error}')
-            # An online refresh failure must not silently use an old multiple.
-            self.attempted[isin] = {'status': 'failed', 'error': str(error)}
-            return self.attempted[isin]
+                print(f'[WARN] Invalid holdings cache: {error}')
 
     def enrich(self, ticker, facts):
         code = ticker.split('.')[0]
@@ -654,19 +503,13 @@ class ValuationCollector:
         source.update(status=status, error=error, k_etf_url=url)
         source['note'] = status + (', 보유자산 API 수집 실패' if error else '')
         facts['sources']['holdings'] = source
-        holdings = []
-        for raw in record['holdings']:
-            h = dict(raw)
-            valuation = self.stock(h['isin'], h.get('name')) if h.get('isin') else {'status': 'unavailable'}
-            h.update(symbol=valuation.get('symbol'), per=valuation.get('per', empty_ratio()),
-                     pbr=valuation.get('pbr', empty_ratio()), source=valuation)
-            holdings.append(h)
+        holdings = [dict(raw) for raw in record['holdings']]
         facts['holdings'] = holdings
         facts['holdings_summary'] = ', '.join(h['name'] for h in holdings[:3]) or None
         facts['top10_weight_pct'] = safe_round(
             sum(positive(h.get('weight_pct')) or 0 for h in holdings)
         ) if holdings else None
-        facts['valuation'] = {key: aggregate_multiple(holdings, key, record['as_of']) for key in ('per', 'pbr')}
+
 
     def save(self):
         write_json_file(self.path, self.cache)
@@ -685,7 +528,7 @@ def main():
     result = {"_meta": {"schema_version": 2, "updated_at": now, "end_date": args.end,
                        "history_start": history_start(args.end), "history_cap_years": 20,
                        "market_status": "available" if market else "unavailable"}, "etfs": []}
-    collector = ValuationCollector(offline=args.offline)
+    collector = HoldingsCollector(offline=args.offline)
     details = {}
     failed = []
     for name, ticker in ASSETS:

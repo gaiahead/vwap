@@ -86,7 +86,7 @@ def test_active_contract():
     assert 'aria-live' in html
     assert 'Volume Profile' not in html+app
     assert 'volume_profile' not in app
-    assert "['pbr','per']" in app
+    assert not __import__('re').search(r'\b(?:PBR|PER|pbr|per|valuation)\b', app)
     assert 'id="chart-selection"' in app
     assert 'selected-date-line' in app
     assert 'autoSkip:false' in app

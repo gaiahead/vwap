@@ -20,7 +20,7 @@ jobs:
           # cache: 'pip'  # requirements.txt 없으면 실패하므로 비활성화
 
       - name: Install dependencies
-        run: pip install yfinance pandas numpy scipy requests
+        run: pip install yfinance pandas numpy requests
 
       - name: Generate trend data
         run: python gen_trend_data.py
@@ -29,6 +29,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add trend_data.json detail_data/ valuation_cache.json
+          git add trend_data.json detail_data/ holdings_cache.json
           git diff --staged --quiet || git commit -m "data: auto update $(TZ='Asia/Seoul' date +'%Y-%m-%d %H:%M KST')"
           git push

@@ -1,5 +1,5 @@
 'use strict';
-const DATA_VERSION = 'data-20260918-1600';
+const DATA_VERSION = 'data-vwap-chart-first-v1';
 const LINES = Object.freeze([
   { label: '1일', window: 1, color: '#eab308' },
   { label: '20일', window: 20, color: '#dc2626' },
@@ -55,7 +55,7 @@ function chartData(rows) {
   return {labels:rows.map(r=>r.date),datasets:LINES.map(line=> {
     const data=rows.map(r=> { const value=r[`vwap_${line.window}d`]; return Number.isFinite(value) && value>0 ? value : null; });
     return {label:line.label,data,borderColor:line.color,backgroundColor:line.color,
-      borderWidth:2,pointRadius:0,pointHitRadius:8,spanGaps:false,tension:0,
+      borderWidth:2,pointRadius:0,pointHoverRadius:0,pointBorderWidth:0,pointHoverBorderWidth:0,pointHitRadius:8,spanGaps:false,tension:0,
       segment:{borderWidth:ctx=>segmentWidth(data,ctx.p0DataIndex,ctx.p1DataIndex)}};
   })};
 }
@@ -134,20 +134,15 @@ if(typeof document!=='undefined') {
   function renderDetail(detail) {
     const f=detail.facts, meta=detail._meta;
     const fields=[COLUMNS[1],['issuer','운용사'],...COLUMNS.slice(2),['benchmark','기초지수'],['exposure','투자대상']];
-    el('detail-content').innerHTML=`<p class="muted">${escapeHtml(detail.ticker)}, ${escapeHtml(format(meta.as_of))}, ${meta.rows} 거래일</p>
-      ${meta.complete_history===false?'<p class="notice">캐시 데이터: 이전 이력이 누락될 수 있습니다. 전체 이력 다운로드가 필요합니다.</p>':''}
-      <div class="facts">${fields.map(([key,label])=>`<div><dt>${label}</dt><dd>${escapeHtml(cellValue(f,key))}</dd></div>`).join('')}</div>
-      <h3>보유자산 분석</h3>
-      <p class="muted">상위 10개 직접 주식의 보유비중 가중 조화평균입니다. 0 이하와 미확인 값은 제외합니다.</p>
-      <div class="facts valuation">${['pbr','per'].map(key=> {
-        const v=f.valuation?.[key];
-        return `<div><dt>${key.toUpperCase()}</dt><dd>${escapeHtml(format(v?.value))}</dd><small>유효 ${v?.valid_count??0}/${v?.top10_count??0}</small></div>`;
-      }).join('')}</div>
-      <div class="holdings">${f.holdings.length?'<ol>'+f.holdings.map(h=>`<li>${escapeHtml(h.name)} (${escapeHtml(format(h.symbol || h.ticker))}) <strong>${escapeHtml(format(h.weight_pct))}%</strong>, PBR ${format(h.pbr?.value)}, PER ${format(h.per?.value)}</li>`).join('')+'</ol>':'-'}</div>
-      <h3>VWAP 가격 차트, 로그 스케일</h3><div id="range-controls" class="controls" role="group" aria-label="차트 범위">${[1,5,10].map(y=>`<button data-years="${y}" aria-pressed="${y===1}">${y}년</button>`).join('')}</div>
+    el('detail-content').innerHTML=`<h3>VWAP 가격 차트, 로그 스케일</h3><div id="range-controls" class="controls" role="group" aria-label="차트 범위">${[1,5,10].map(y=>`<button data-years="${y}" aria-pressed="${y===1}">${y}년</button>`).join('')}</div>
       <p id="chart-dates" class="muted" aria-live="polite"></p><div class="chart-wrap"><canvas id="price-chart" role="img" aria-label="ETF VWAP 가격 차트"></canvas></div>
       <div id="chart-selection" class="chart-selection" aria-live="polite">차트에서 날짜를 선택하세요.</div>
-      <p class="muted">일봉 대표가격 (고가 + 저가 + 종가) / 3의 거래량 가중평균입니다. 기간별 준비구간과 거래량이 없는 구간은 비어 있습니다.</p>`;
+      <p class="muted">일봉 대표가격 (고가 + 저가 + 종가) / 3의 거래량 가중평균입니다. 기간별 준비구간과 거래량이 없는 구간은 비어 있습니다.</p>
+      <p class="muted">${escapeHtml(detail.ticker)}, ${escapeHtml(format(meta.as_of))}, ${meta.rows} 거래일</p>
+      ${meta.complete_history===false?'<p class="notice">캐시 데이터: 이전 이력이 누락될 수 있습니다. 전체 이력 다운로드가 필요합니다.</p>':''}
+      <div class="facts">${fields.map(([key,label])=>`<div><dt>${label}</dt><dd>${escapeHtml(cellValue(f,key))}</dd></div>`).join('')}</div>
+      <h3>상위 10개 보유주식</h3>
+      <div class="holdings">${f.holdings.length?'<ol>'+f.holdings.map(h=>`<li>${escapeHtml(h.name)} <strong>${h.weight_pct==null?'-':escapeHtml(format(h.weight_pct))+'%'}</strong></li>`).join('')+'</ol>':'-'}</div>`;
     function dates(years) {
       const rows=sliceRange(detail.ohlcv,years);
       el('chart-dates').textContent=rows.length?`${rows[0].date} ~ ${rows.at(-1).date}, ${rows.length} 거래일`:'가격 데이터가 없습니다.';
