@@ -1,5 +1,5 @@
 'use strict';
-const DATA_VERSION = 'data-vwap-total-fee-v1';
+const DATA_VERSION = 'data-vwap-total-fee-table-v1';
 const LINES = Object.freeze([
   { label: '1일', window: 1, color: '#eab308' },
   { label: '20일', window: 20, color: '#dc2626' },
@@ -8,7 +8,8 @@ const LINES = Object.freeze([
 ]);
 const COLUMNS = [
   ['name','ETF 이름 / 티커'], ['category','분류'],
-  ['aum_krw','순자산, 억원'], ['avg_trading_value_20d_krw','20일 평균 거래대금, 억원 (추정)'],
+  ['aum_krw','순자산, 억원'], ['total_expense_ratio_pct','총보수, 연'],
+  ['avg_trading_value_20d_krw','20일 평균 거래대금, 억원 (추정)'],
   ['avg_volume_20d','20일 평균 거래량, 주']
 ];
 function format(value, digits=2) {
@@ -20,7 +21,8 @@ function cellValue(e,key) {
   const scaled=value!=null && ['aum_krw','avg_trading_value_20d_krw'].includes(key) ? value/1e8 : value;
   const digits=['avg_trading_value_20d_krw','avg_volume_20d'].includes(key) ? 0 :
     key.includes('cost') || key.includes('expense') ? 4 : 2;
-  return format(scaled,digits);
+  const rendered=format(scaled,digits);
+  return key==='total_expense_ratio_pct' && rendered!=='-' ? `${rendered}%` : rendered;
 }
 function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -133,14 +135,14 @@ if(typeof document!=='undefined') {
   }
   function renderDetail(detail) {
     const f=detail.facts, meta=detail._meta;
-    const fields=[COLUMNS[1],['issuer','운용사'],['total_expense_ratio_pct','총보수, 연'],...COLUMNS.slice(2),['benchmark','기초지수'],['exposure','투자대상']];
+    const fields=[COLUMNS[1],['issuer','운용사'],['total_expense_ratio_pct','총보수, 연'],...COLUMNS.slice(2).filter(([key])=>key!=='total_expense_ratio_pct'),['benchmark','기초지수'],['exposure','투자대상']];
     el('detail-content').innerHTML=`<h3>VWAP 가격 차트, 로그 스케일</h3><div id="range-controls" class="controls" role="group" aria-label="차트 범위">${[1,5,10].map(y=>`<button data-years="${y}" aria-pressed="${y===1}">${y}년</button>`).join('')}</div>
       <p id="chart-dates" class="muted" aria-live="polite"></p><div class="chart-wrap"><canvas id="price-chart" role="img" aria-label="ETF VWAP 가격 차트"></canvas></div>
       <div id="chart-selection" class="chart-selection" aria-live="polite">차트에서 날짜를 선택하세요.</div>
       <p class="muted">일봉 대표가격 (고가 + 저가 + 종가) / 3의 거래량 가중평균입니다. 기간별 준비구간과 거래량이 없는 구간은 비어 있습니다.</p>
       <p class="muted">${escapeHtml(detail.ticker)}, ${escapeHtml(format(meta.as_of))}, ${meta.rows} 거래일</p>
       ${meta.complete_history===false?'<p class="notice">캐시 데이터: 이전 이력이 누락될 수 있습니다. 전체 이력 다운로드가 필요합니다.</p>':''}
-      <div class="facts">${fields.map(([key,label])=>`<div><dt>${label}</dt><dd>${escapeHtml(cellValue(f,key))}${key==='total_expense_ratio_pct'&&f[key]!=null?'%':''}</dd></div>`).join('')}</div>
+      <div class="facts">${fields.map(([key,label])=>`<div><dt>${label}</dt><dd>${escapeHtml(cellValue(f,key))}</dd></div>`).join('')}</div>
       <p class="muted">상품에 표시된 연 총보수입니다. 기타 비용, 거래비용 및 세금 제외.</p>
       <h3>상위 10개 보유주식</h3>
       <div class="holdings">${f.holdings.length?'<ol>'+f.holdings.map(h=>`<li>${escapeHtml(h.name)} <strong>${h.weight_pct==null?'-':escapeHtml(format(h.weight_pct))+'%'}</strong></li>`).join('')+'</ol>':'-'}</div>`;

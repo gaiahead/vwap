@@ -19,8 +19,10 @@ def assert_no_valuation_keys(value):
 def test_ui_contract_chart_first_and_no_valuation():
     app = Path('app.js').read_text()
     columns = app.split('const COLUMNS = [')[1].split('];')[0]
+    assert "['total_expense_ratio_pct','총보수, 연']" in columns
+    assert columns.index("['aum_krw','순자산, 억원']") < columns.index("['total_expense_ratio_pct','총보수, 연']") < columns.index("['avg_trading_value_20d_krw','20일 평균 거래대금, 억원 (추정)']")
     assert columns.rstrip().endswith("['avg_volume_20d','20일 평균 거래량, 주']")
-    assert all(x not in columns for x in ['issuer', 'cost', 'expense', 'premium', 'holdings', 'top10'])
+    assert all(x not in columns for x in ['issuer', 'actual_total_cost', 'synthetic_total_expense', 'premium', 'holdings', 'top10'])
     assert 'has-fees' not in Path('index.html').read_text() + app
     assert "type: 'logarithmic'" in app
     assert '로그 스케일' in app
