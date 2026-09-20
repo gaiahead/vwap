@@ -30,16 +30,9 @@ Each market source records URL, retrieval timestamp and quote as-of separately. 
 
 `etf_facts.json` is a reviewed optional input, not generated output. Every populated sourced field needs `value`, `source_url` (HTTPS), and ISO `as_of`. Optional `note` preserves cost definitions. Unknown ETF tickers/fields, negative or nonfinite fees, invalid dates and invalid holdings weights fail validation. Sourced category, issuer and exposure values override the registry-derived discovery values.
 
-Supported fields: category, issuer, benchmark, exposure, total_expense_ratio_pct (issuer's annual 총보수), synthetic_total_expense_ratio_pct (합성총보수), trading_cost_pct (증권거래비용), actual_total_cost_pct (only explicitly disclosed comparable 실부담비용), other_cost_pct, and holdings (name, optional ticker, optional weight_pct). Percentages are percentage points: 0.15 means 0.15% annually. These overlapping cost figures must not be added blindly. The current snapshots leave actual/other costs null.
+Supported reviewed fields include category, issuer, benchmark, exposure, optional historical fee/cost snapshots and holdings. Percentages are percentage points: 0.15 means 0.15% annually. Overlapping cost figures must not be added blindly.
 
-Source investigation on 2026-09-12:
-
-- [Naver legacy detail](https://finance.naver.com/item/main.naver?code=069500) redirected to a client-rendered stock page without a reliably extractable fee/holdings table in the fetched response.
-- [Naver mobile integration API](https://m.stock.naver.com/api/stock/069500/integration) could not be verified in this environment; no assumed schema is shipped.
-- [Samsung product page](https://www.samsungfund.com/etf/product/view.do?id=2ETF01) yielded dynamic/variable content; a cross-issuer automatic parser was not established.
-- [Samsung's dated quarterly issuer PDF](https://www.samsungfund.com/upload/kodex/newsroom/20260416171916907.pdf), PDF pages 14–15, provides explicitly dated 2026-03-31 fee/holdings snapshots for KODEX 200 and KODEX 미국S&P500. Only those two verified snapshots are seeded. Facts remain dated March, not represented as September holdings. Publication URLs/page layouts are not stable discovery APIs, so automatic PDF scraping is not enabled.
-
-To maintain facts: obtain the latest issuer report or a verified documented feed, confirm the registered ticker and date, distinguish annual management fee from synthetic expense and trading costs, update the relevant field records and citation, then run generator and tests. Leave unsupported fields absent. Add fixture-backed provider parsers only when response structure, units and dates can be verified. The follow-up holdings collector below supersedes the manual-only holdings approach.
+The online collector requests K-ETF's `tax-fee` endpoint for every registered ETF and uses only `data.total_fee` as `total_expense_ratio_pct`. It does not ingest component fees, taxes, synthetic total expense, trading cost, other cost or actual total cost. The UI labels this value as the advertised annual total fee and explicitly excludes other costs, trading costs and taxes. `fees_cache.json` stores the last valid value, K-ETF page/API URLs and retrieval time. Transient 429/502/503/504 responses are retried up to three times; a failed live request uses the cache without changing its original retrieval time.
 
 ## Artifacts and failure handling
 
@@ -66,4 +59,4 @@ PBR and PER collection, stock-level valuation matching, ratio aggregation and va
 
 Holdings failures use a cached snapshot or the reviewed input, retaining its real date and marking failure/cache provenance in sources. Reviewed fallback snapshots are saved to the holdings cache. Empty successful portfolios are distinct from failed API calls.
 
-`--offline` never requests any network resource and uses the holdings cache along with cached OHLCV. A missing holdings cache produces no holdings. `--allow-cache` attempts online collection while allowing existing prices on download failure. GitHub Actions stages the holdings cache together with generated ETF data.
+`--offline` never requests any network resource and uses the holdings and fee caches along with cached OHLCV. Missing caches produce no holdings or current total fee unless a reviewed optional snapshot exists. `--allow-cache` attempts online collection while allowing existing prices on download failure. GitHub Actions stages both caches together with generated ETF data.

@@ -20,4 +20,4 @@ Pytest scratch files are kept in ignored repo-local `.test-tmp`. Tests fix the E
 
 Initial focused RED: eight failures against the old implementation. Additional malformed-cache coverage also observed RED before the fix. A minimal DOM boundary harness also executes production search, sort, detail/cache and range event handlers. It does not validate layout. Browser visual checks could not run because Chromium failed to launch in this sandbox; Node behavioral tests and source checks are not substitutes for screenshot inspection.
 
-Holdings coverage includes API normalization, direct-stock filtering, fallback behavior and offline network isolation. Strict validation includes `holdings_cache.json` and rejects valuation keys from generated artifacts.
+Holdings and advertised total-fee coverage includes API normalization, direct-stock filtering, fee parsing, cache fallback and offline network isolation. Strict validation includes `holdings_cache.json` and `fees_cache.json`, and rejects valuation keys from generated artifacts.

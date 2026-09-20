@@ -7,6 +7,7 @@ import os
 import re
 from pathlib import Path
 from datetime import date, datetime, time, timedelta, timezone
+from time import sleep
 from typing import Any, cast
 import numpy as np
 import pandas as pd
@@ -422,6 +423,7 @@ def cached_history(ticker, end_date):
 # Public K-ETF browser bundle eee787d0b8d7120b.js, not a private credential.
 KETF_TOKEN = 'd3558a5223371268350260f727d5c8a6066df92f3ca5180f39ce667494a0f2a3'
 CACHE_FILE = 'holdings_cache.json'
+FEE_CACHE_FILE = 'fees_cache.json'
 
 
 def positive(value):
@@ -455,17 +457,30 @@ def normalize_holdings(payload):
             'holdings': sorted(holdings, key=lambda h: h['weight_pct'], reverse=True)[:10]}
 
 
+def normalize_fee(payload):
+    value = payload.get('data', {}).get('total_fee') if isinstance(payload, dict) else None
+    fee = safe_round(value, 10)
+    if isinstance(value, bool) or fee is None or fee < 0:
+        raise ValueError('Invalid K-ETF total-fee response')
+    return fee
+
+
 def fetch_json(url, **kwargs):
-    response = requests.get(url, timeout=15, **kwargs)
-    response.raise_for_status()
-    return response.json()
+    for attempt in range(3):
+        response = requests.get(url, timeout=15, **kwargs)
+        if response.status_code not in {429, 502, 503, 504} or attempt == 2:
+            response.raise_for_status()
+            return response.json()
+        sleep(2 ** attempt)
+    raise AssertionError('unreachable')
 
 
-class HoldingsCollector:
-    def __init__(self, offline=False, path=CACHE_FILE):
-        self.offline, self.path = offline, Path(path)
+class EtfFactsCollector:
+    def __init__(self, offline=False, path=CACHE_FILE, fee_path=FEE_CACHE_FILE):
+        self.offline, self.path, self.fee_path = offline, Path(path), Path(fee_path)
         self.now = datetime.now(timezone.utc)
         self.cache = {'holdings': {}}
+        self.fee_cache = {'fees': {}}
         if self.path.exists():
             try:
                 payload = json.loads(self.path.read_text(encoding='utf-8'))
@@ -473,6 +488,13 @@ class HoldingsCollector:
                     self.cache['holdings'] = payload['holdings']
             except (ValueError, OSError) as error:
                 print(f'[WARN] Invalid holdings cache: {error}')
+        if self.fee_path.exists():
+            try:
+                payload = json.loads(self.fee_path.read_text(encoding='utf-8'))
+                if isinstance(payload.get('fees'), dict):
+                    self.fee_cache['fees'] = payload['fees']
+            except (ValueError, OSError) as error:
+                print(f'[WARN] Invalid fee cache: {error}')
 
     def enrich(self, ticker, facts):
         code = ticker.split('.')[0]
@@ -510,9 +532,31 @@ class HoldingsCollector:
             sum(positive(h.get('weight_pct')) or 0 for h in holdings)
         ) if holdings else None
 
+        fee_api_url = f'https://anchor.k-etf.com/api/instrument/tax-fee/?code={code}&lang=ko'
+        fee_record = self.fee_cache['fees'].get(code)
+        fee_status, fee_error = 'cached' if fee_record else 'unavailable', None
+        if not self.offline:
+            try:
+                fee_record = {'total_expense_ratio_pct': normalize_fee(fetch_json(
+                    fee_api_url, headers={'X-Internal-Api-Token': KETF_TOKEN})),
+                    'retrieved_at': self.now.isoformat(), 'url': url, 'api_url': fee_api_url}
+                self.fee_cache['fees'][code] = fee_record
+                fee_status = 'live'
+            except Exception as exc:
+                fee_error = str(exc)
+                print(f'[WARN] Total fee {code}: {exc}')
+                fee_status = 'cached_after_failure' if fee_record else 'failed'
+        if fee_record:
+            facts['total_expense_ratio_pct'] = fee_record['total_expense_ratio_pct']
+            fee_source = {k: v for k, v in fee_record.items() if k != 'total_expense_ratio_pct'}
+            fee_source.update(status=fee_status, error=fee_error, k_etf_url=url,
+                              note='상품에 표시된 연 총보수. 기타 비용, 거래비용 및 세금 제외.')
+            facts['sources']['total_expense_ratio_pct'] = fee_source
+
 
     def save(self):
         write_json_file(self.path, self.cache)
+        write_json_file(self.fee_path, self.fee_cache)
 
 
 def main():
@@ -528,7 +572,7 @@ def main():
     result = {"_meta": {"schema_version": 2, "updated_at": now, "end_date": args.end,
                        "history_start": history_start(args.end), "history_cap_years": 20,
                        "market_status": "available" if market else "unavailable"}, "etfs": []}
-    collector = HoldingsCollector(offline=args.offline)
+    collector = EtfFactsCollector(offline=args.offline)
     details = {}
     failed = []
     for name, ticker in ASSETS:
