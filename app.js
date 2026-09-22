@@ -1,5 +1,5 @@
 'use strict';
-const DATA_VERSION = 'data-20260920-1600';
+const DATA_VERSION = 'data-20260922-0913';
 const LINES = Object.freeze([
   { label: '1일', window: 1, color: '#eab308' },
   { label: '20일', window: 20, color: '#dc2626' },
